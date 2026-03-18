@@ -91,7 +91,7 @@ function computeMetrics(params: {
     };
   });
 
-  const salespersonMap = new Map<
+  const salespersonMap = new Map
     string,
     { salesperson: Salesperson; bookedVolume: number; closedVolume: number; closedGross: number }
   >();
@@ -154,6 +154,14 @@ export default async function AppDashboardPage() {
     throw new Error("Profile not found");
   }
 
+  // First fetch store IDs for this dealer group
+  const { data: stores } = await supabase
+    .from("stores")
+    .select("id")
+    .eq("dealer_group_id", profile.dealer_group_id);
+
+  const storeIds = (stores ?? []).map((s: { id: string }) => s.id);
+
   const [{ data: deals }, { data: departments }, { data: salespeople }, { data: dealSalespeople }, { data: calendarDays }] =
     await Promise.all([
       supabase
@@ -163,34 +171,18 @@ export default async function AppDashboardPage() {
       supabase
         .from("departments")
         .select("id,name,store_id")
-        .in(
-          "store_id",
-          supabase
-            .from("stores")
-            .select("id")
-            .eq("dealer_group_id", profile.dealer_group_id)
-        ),
+        .in("store_id", storeIds),
       supabase
         .from("salespeople")
         .select("id,first_name,last_name,store_id")
-        .in(
-          "store_id",
-          supabase
-            .from("stores")
-            .select("id")
-            .eq("dealer_group_id", profile.dealer_group_id)
-        ),
-      supabase.from("deal_salespeople").select("deal_id,salesperson_id,share_percent"),
+        .in("store_id", storeIds),
+      supabase
+        .from("deal_salespeople")
+        .select("deal_id,salesperson_id,share_percent"),
       supabase
         .from("store_calendar_days")
         .select("store_id,calendar_date,is_working_day")
-        .in(
-          "store_id",
-          supabase
-            .from("stores")
-            .select("id")
-            .eq("dealer_group_id", profile.dealer_group_id)
-        )
+        .in("store_id", storeIds)
     ]);
 
   const metrics = computeMetrics({
@@ -202,39 +194,16 @@ export default async function AppDashboardPage() {
   });
 
   const asCurrency = (value: number) =>
-    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(
-      value
-    );
+    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
 
   const summaryCards = [
-    {
-      label: "Booked Volume",
-      value: metrics.bookedVolume.toFixed(0)
-    },
-    {
-      label: "Closed Volume",
-      value: metrics.closedVolume.toFixed(0)
-    },
-    {
-      label: "Closed Gross",
-      value: asCurrency(metrics.closedGross)
-    },
-    {
-      label: "Booked Pace",
-      value: metrics.bookedPace != null ? metrics.bookedPace.toFixed(1) : "—"
-    },
-    {
-      label: "Closed Gross Pace",
-      value: metrics.closedGrossPace != null ? asCurrency(metrics.closedGrossPace) : "—"
-    },
-    {
-      label: "Working Days",
-      value: `${metrics.workingDaysCompleted} / ${metrics.totalWorkingDays}`
-    },
-    {
-      label: "Days Remaining",
-      value: `${metrics.daysRemaining}`
-    }
+    { label: "Booked Volume", value: metrics.bookedVolume.toFixed(0) },
+    { label: "Closed Volume", value: metrics.closedVolume.toFixed(0) },
+    { label: "Closed Gross", value: asCurrency(metrics.closedGross) },
+    { label: "Booked Pace", value: metrics.bookedPace != null ? metrics.bookedPace.toFixed(1) : "—" },
+    { label: "Closed Gross Pace", value: metrics.closedGrossPace != null ? asCurrency(metrics.closedGrossPace) : "—" },
+    { label: "Working Days", value: `${metrics.workingDaysCompleted} / ${metrics.totalWorkingDays}` },
+    { label: "Days Remaining", value: `${metrics.daysRemaining}` }
   ];
 
   return (
@@ -286,9 +255,7 @@ export default async function AppDashboardPage() {
                     <TableCell>{row.closedVolume.toFixed(0)}</TableCell>
                     <TableCell>{row.bookedPace != null ? row.bookedPace.toFixed(1) : "—"}</TableCell>
                     <TableCell>{asCurrency(row.closedGross)}</TableCell>
-                    <TableCell>
-                      {row.closedGrossPace != null ? asCurrency(row.closedGrossPace) : "—"}
-                    </TableCell>
+                    <TableCell>{row.closedGrossPace != null ? asCurrency(row.closedGrossPace) : "—"}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -327,4 +294,3 @@ export default async function AppDashboardPage() {
     </div>
   );
 }
-
