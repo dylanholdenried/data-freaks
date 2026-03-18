@@ -91,10 +91,7 @@ function computeMetrics(params: {
     };
   });
 
-  const salespersonMap = new Map
-    string,
-    { salesperson: Salesperson; bookedVolume: number; closedVolume: number; closedGross: number }
-  >();
+  const salespersonMap = new Map<string, { salesperson: Salesperson; bookedVolume: number; closedVolume: number; closedGross: number }>();
 
   for (const dsp of dealSalespeople) {
     const deal = mtdDeals.find((d) => d.id === dsp.deal_id);
@@ -154,7 +151,6 @@ export default async function AppDashboardPage() {
     throw new Error("Profile not found");
   }
 
-  // First fetch store IDs for this dealer group
   const { data: stores } = await supabase
     .from("stores")
     .select("id")
