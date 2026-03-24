@@ -48,6 +48,8 @@ export async function POST(req: Request) {
 
     // 2) Create pending profile (no dealer_group_id yet)
     const { error: profileError } = await supabase.from("profiles").insert({
+      // Supports legacy schema where profiles.id references auth.users.id
+      id: user.id,
       user_id: user.id,
       email: parsed.email,
       first_name: parsed.first_name,
