@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const supabase = createSupabaseServerClient();
@@ -15,7 +16,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   const { data: profile } = await supabase
     .from("profiles")
     .select("role, status")
-    .eq("user_id", session.user.id)
+    .or(profileMatchAuthUserId(session.user.id))
     .maybeSingle();
 
   if (!profile || profile.status !== "active" || profile.role !== "platform_admin") {

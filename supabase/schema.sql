@@ -93,7 +93,7 @@ language sql
 security definer
 set search_path = public
 as $$
-  select id from public.profiles where user_id = auth.uid();
+  select id from public.profiles where user_id = auth.uid() or id = auth.uid() limit 1;
 $$;
 
 create or replace function public.is_platform_admin()
@@ -104,7 +104,7 @@ set search_path = public
 as $$
   select exists (
     select 1 from public.profiles
-    where user_id = auth.uid()
+    where (user_id = auth.uid() or id = auth.uid())
       and role = 'platform_admin'
       and status = 'active'
   );
@@ -405,19 +405,23 @@ alter table public.deal_notes enable row level security;
 alter table public.audit_logs enable row level security;
 
 -- Profiles: users see only their profile; platform admins see all.
+-- Legacy: profiles.id may equal auth.users.id when user_id was not yet set.
 
+drop policy if exists "profiles_select_own_or_admin" on public.profiles;
 create policy "profiles_select_own_or_admin"
 on public.profiles
 for select
 using (
   is_platform_admin()
   or user_id = auth.uid()
+  or id = auth.uid()
 );
 
+drop policy if exists "profiles_update_self" on public.profiles;
 create policy "profiles_update_self"
 on public.profiles
 for update
-using (user_id = auth.uid());
+using (user_id = auth.uid() or id = auth.uid());
 
 -- Dealer groups: platform admins see all; members see their group.
 

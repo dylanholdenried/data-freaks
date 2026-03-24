@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -144,7 +145,7 @@ export default async function AppDashboardPage() {
   const { data: profile } = await supabase
     .from("profiles")
     .select("id,dealer_group_id,role")
-    .eq("user_id", userId)
+    .or(profileMatchAuthUserId(userId!))
     .maybeSingle();
 
   if (!profile) {

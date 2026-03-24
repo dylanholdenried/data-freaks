@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { Button } from "@/components/ui/button";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
@@ -16,7 +17,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const { data: profile } = await supabase
     .from("profiles")
     .select("first_name,last_name,role,status")
-    .eq("user_id", session.user.id)
+    .or(profileMatchAuthUserId(session.user.id))
     .maybeSingle();
 
   if (!profile || profile.status !== "active") {

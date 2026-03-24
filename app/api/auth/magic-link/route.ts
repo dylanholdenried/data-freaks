@@ -1,15 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseRouteHandlerClient } from "@/lib/supabase/route-handler";
 
 const schema = z.object({
   email: z.string().email()
 });
 
 export async function POST(req: Request) {
-  const supabase = createSupabaseServerClient();
-
   try {
+    const supabase = createSupabaseRouteHandlerClient();
     const body = await req.json();
     const parsed = schema.parse(body);
 
@@ -28,8 +27,12 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (err: any) {
-    console.error(err);
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    console.error("POST /api/auth/magic-link", err);
+    const message =
+      typeof err?.message === "string" && err?.message.includes("Missing NEXT_PUBLIC")
+        ? err.message
+        : err?.message ?? "Invalid request";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

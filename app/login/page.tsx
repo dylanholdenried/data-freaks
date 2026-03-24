@@ -30,12 +30,19 @@ export default function LoginPage() {
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? "Login failed");
+        throw new Error(body.error ?? `Login failed (${res.status})`);
       }
 
       window.location.href = "/app";
     } catch (err: any) {
       console.error(err);
+      const msg = String(err?.message ?? "");
+      if (msg === "Failed to fetch" || msg === "fetch failed" || msg.includes("NetworkError")) {
+        setError(
+          "Could not reach the server. If you’re on localhost, use the same URL/port as `npm run dev` (e.g. http://localhost:3001). Also confirm .env.local has your Supabase URL and anon key."
+        );
+        return;
+      }
       setError(err.message ?? "Something went wrong.");
     } finally {
       setSubmitting(false);
