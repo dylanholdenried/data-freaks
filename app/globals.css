@@ -7,6 +7,18 @@ body {
 }
 
 .card-shadow {
-  @apply shadow-card border border-border rounded-lg bg-card;
+  @apply shadow-card border border-border rounded-2xl bg-card;
+}
+
+.app-canvas {
+  @apply min-h-screen bg-[#f3f6fb];
+}
+
+.app-panel {
+  @apply rounded-2xl border border-[#e7ebf3] bg-white shadow-[0_10px_30px_rgba(15,23,42,0.06)];
+}
+
+.app-kicker {
+  @apply text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400;
 }
 
