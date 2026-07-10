@@ -65,7 +65,7 @@ export default async function EditDealPage({ params }: { params: { id: string } 
   const storeIds = Array.from(storeById.keys());
 
   // 2. Fetch the deal
-  const { data: dealData } = await supabase
+  const { data: dealData, error: dealFetchError } = await supabase
     .from("deals")
     .select(
       "id,store_id,department_id,stock_number,customer_last_name," +
@@ -77,12 +77,23 @@ export default async function EditDealPage({ params }: { params: { id: string } 
     .eq("id", params.id)
     .maybeSingle();
 
-  // Auth guard: deal must exist and belong to this user's group
-  if (!dealData || !storeIds.includes((dealData as DealRow).store_id)) {
+  // Auth guard: deal must exist and belong to this user's group.
+  // Split into two checks so TypeScript narrows dealData to non-null before
+  // the store_id access — avoids the GenericStringError cast overlap error in
+  // strict/production builds.
+  if (dealFetchError || !dealData) {
     notFound();
   }
 
-  const deal = dealData as DealRow;
+  // dealData is non-null here; cast via unknown because Supabase returns an
+  // untyped generic when no database type definitions are passed to the client.
+  const deal = dealData as unknown as DealRow;
+
+  // Second guard: deal must belong to this user's dealer group
+  if (!storeIds.includes(deal.store_id)) {
+    notFound();
+  }
+
   const storeName = storeById.get(deal.store_id) ?? "Unknown Store";
 
   // 3. All parallel data: dropdowns + dept name + salespeople + trades for close gate

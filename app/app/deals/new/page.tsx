@@ -3,7 +3,9 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import NewDealForm from "./NewDealForm";
 
-type Row = { id: string; name: string; store_id?: string };
+// Matches the prop types expected by NewDealForm
+type StoreRow = { id: string; name: string };
+type ItemRow = { id: string; name: string; store_id: string };
 
 export default async function NewDealPage() {
   const supabase = createSupabaseServerClient();
@@ -21,16 +23,17 @@ export default async function NewDealPage() {
     redirect("/app/dashboard");
   }
 
-  const { data: stores } = await supabase
+  const { data: storesData } = await supabase
     .from("stores")
     .select("id,name")
     .eq("dealer_group_id", profile.dealer_group_id)
     .order("name");
 
-  const storeIds = (stores ?? []).map((s: Row) => s.id);
+  const stores = (storesData ?? []) as unknown as StoreRow[];
+  const storeIds = stores.map((s) => s.id);
 
-  let departments: Row[] = [];
-  let salespeople: Row[] = [];
+  let departments: ItemRow[] = [];
+  let salespeople: ItemRow[] = [];
 
   if (storeIds.length > 0) {
     const [deptResult, spResult] = await Promise.all([
@@ -46,14 +49,14 @@ export default async function NewDealPage() {
         .eq("active", true)
         .order("name"),
     ]);
-    departments = deptResult.data ?? [];
-    salespeople = spResult.data ?? [];
+    departments = (deptResult.data ?? []) as unknown as ItemRow[];
+    salespeople = (spResult.data ?? []) as unknown as ItemRow[];
   }
 
   return (
     <NewDealForm
       userId={session!.user.id}
-      stores={stores ?? []}
+      stores={stores}
       departments={departments}
       salespeople={salespeople}
     />
