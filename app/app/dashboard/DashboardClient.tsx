@@ -14,6 +14,8 @@ type Deal = {
 type Department = { id: string; name: string; store_id: string };
 type CalendarDay = { date: string; is_working_day: boolean; store_id: string };
 type Goal = { department_id: string; volume_goal: number };
+type Salesperson = { id: string; name: string; store_id: string };
+type DealSalesperson = { deal_id: string; salesperson_id: string; share_percent: number };
 
 type Props = {
   stores: Store[];
@@ -21,6 +23,8 @@ type Props = {
   departments: Department[];
   calendarDays: CalendarDay[];
   goals: Goal[];
+  salespeople: Salesperson[];
+  dealSalespeople: DealSalesperson[];
   year: number;
   month: number;
 };
@@ -115,6 +119,11 @@ const fmt$ = (v: number) =>
     maximumFractionDigits: 0,
   }).format(v);
 
+// Fractional units: whole numbers show clean ("12"), fractions to 1 decimal ("12.5")
+function fmtUnits(v: number): string {
+  return v === Math.floor(v) ? String(Math.floor(v)) : v.toFixed(1);
+}
+
 // ── JSX render helpers ───────────────────────────────────────────────────────
 
 function VsGoalCell({ vsGoal }: { vsGoal: number | null }) {
@@ -145,12 +154,14 @@ export default function DashboardClient({
   departments,
   calendarDays,
   goals,
+  salespeople,
+  dealSalespeople,
   year,
   month,
 }: Props) {
   const [selectedStore, setSelectedStore] = useState<"both" | string>("both");
 
-  const { kpis, deptRows, totalsRow, monthLabel } = useMemo(() => {
+  const { kpis, deptRows, totalsRow, leaderboard, monthLabel } = useMemo(() => {
     const selectedStoreIds =
       selectedStore === "both" ? stores.map((s) => s.id) : [selectedStore];
 
@@ -249,6 +260,64 @@ export default function DashboardClient({
       ),
     };
 
+    // ── Salesperson leaderboard ──────────────────────────────────────────────
+    // Fractional credit: each person gets share_percent of units and gross.
+    // Scoped via scopedDealMap — only deals in the selected store(s) count.
+    const scopedDealMap = new Map(scopedDeals.map((d) => [d.id, d]));
+    const spAcc = new Map<
+      string,
+      { bookedUnits: number; closedUnits: number; totalGross: number }
+    >();
+
+    for (const ds of dealSalespeople) {
+      const deal = scopedDealMap.get(ds.deal_id);
+      if (!deal) continue;
+      const isBooked =
+        deal.status === "pending" ||
+        deal.status === "delivered" ||
+        deal.status === "closed";
+      if (!isBooked) continue;
+      const isClosed = deal.status === "closed";
+      const acc = spAcc.get(ds.salesperson_id) ?? {
+        bookedUnits: 0,
+        closedUnits: 0,
+        totalGross: 0,
+      };
+      acc.bookedUnits += ds.share_percent;
+      if (isClosed) {
+        acc.closedUnits += ds.share_percent;
+        acc.totalGross +=
+          ((deal.front_profit ?? 0) + (deal.back_profit ?? 0)) * ds.share_percent;
+      }
+      spAcc.set(ds.salesperson_id, acc);
+    }
+
+    const spById = new Map(salespeople.map((sp) => [sp.id, sp]));
+    const storeById = new Map(stores.map((s) => [s.id, s.name]));
+
+    const leaderboard = Array.from(spAcc.entries())
+      .map(([spId, acc]) => {
+        const sp = spById.get(spId);
+        return {
+          id: spId,
+          name: sp?.name ?? "Unknown",
+          storeName: storeById.get(sp?.store_id ?? "") ?? "",
+          bookedUnits: acc.bookedUnits,
+          closedUnits: acc.closedUnits,
+          totalGross: acc.totalGross,
+          avgGross: acc.closedUnits > 0 ? acc.totalGross / acc.closedUnits : null,
+        };
+      })
+      .filter((r) => r.bookedUnits > 0);
+
+    // Sort by total gross DESC; fall back to booked units when all gross is zero
+    const allGrossZero = leaderboard.every((r) => r.totalGross === 0);
+    leaderboard.sort((a, b) =>
+      allGrossZero
+        ? b.bookedUnits - a.bookedUnits
+        : b.totalGross - a.totalGross || b.bookedUnits - a.bookedUnits
+    );
+
     const monthLabel = new Date(year, month - 1, 1).toLocaleDateString("en-US", {
       month: "long",
       year: "numeric",
@@ -268,9 +337,10 @@ export default function DashboardClient({
       },
       deptRows,
       totalsRow,
+      leaderboard,
       monthLabel,
     };
-  }, [selectedStore, stores, deals, departments, calendarDays, goals, year, month]);
+  }, [selectedStore, stores, deals, departments, calendarDays, goals, salespeople, dealSalespeople, year, month]);
 
   const paceColor =
     kpis.paceProjection === null
@@ -280,6 +350,12 @@ export default function DashboardClient({
       : kpis.totalGoal > 0
       ? "text-red-400"
       : "text-white";
+
+  // Leaderboard grid — extra Store column only when viewing both stores
+  const showStore = selectedStore === "both";
+  const LB_GRID = showStore
+    ? "sm:grid-cols-[28px_1fr_100px_70px_70px_110px_100px] sm:gap-3"
+    : "sm:grid-cols-[28px_1fr_70px_70px_110px_100px] sm:gap-3";
 
   return (
     <div className="space-y-5">
@@ -532,6 +608,111 @@ export default function DashboardClient({
                 </span>
               </div>
             </>
+          )}
+        </div>
+      </section>
+
+      {/* Salesperson leaderboard */}
+      <section className="overflow-hidden rounded-2xl border border-[#e7ebf3] bg-white shadow-[0_10px_30px_rgba(15,23,42,0.06)]">
+        <div className="border-b border-[#edf1f7] bg-[#f8fafd] px-5 py-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+            Salesperson Leaderboard
+          </p>
+        </div>
+
+        {/* Column headers — desktop only */}
+        <div
+          className={`hidden border-b border-[#edf1f7] bg-[#f8fafd] px-5 py-2 sm:grid ${LB_GRID}`}
+        >
+          <span /> {/* rank */}
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Name
+          </span>
+          {showStore && (
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Store
+            </span>
+          )}
+          {["Booked", "Closed", "Total Gross", "Avg Gross"].map((h) => (
+            <span
+              key={h}
+              className="text-right text-xs font-semibold uppercase tracking-wide text-slate-400"
+            >
+              {h}
+            </span>
+          ))}
+        </div>
+
+        <div className="divide-y divide-[#edf1f7]">
+          {leaderboard.length === 0 ? (
+            <p className="px-5 py-8 text-center text-sm text-slate-400">
+              No deals logged this month.
+            </p>
+          ) : (
+            leaderboard.map((row, idx) => (
+              <div
+                key={row.id}
+                className={`px-5 py-3 sm:grid ${LB_GRID} sm:items-center`}
+              >
+                {/* Rank */}
+                <span
+                  className={`text-sm tabular-nums font-bold ${
+                    idx === 0 ? "text-amber-500" : "text-slate-300"
+                  }`}
+                >
+                  {idx + 1}
+                </span>
+
+                {/* Name — always visible */}
+                <span className="block text-sm font-medium text-slate-800">
+                  {row.name}
+                </span>
+
+                {/* Mobile summary — hidden on desktop */}
+                <div className="mt-0.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-400 sm:hidden">
+                  {showStore && <span>{row.storeName}</span>}
+                  <span>
+                    Booked{" "}
+                    <strong className="text-slate-700">
+                      {fmtUnits(row.bookedUnits)}
+                    </strong>
+                  </span>
+                  <span>
+                    Closed{" "}
+                    <strong className="text-slate-700">
+                      {fmtUnits(row.closedUnits)}
+                    </strong>
+                  </span>
+                  <span>
+                    Gross{" "}
+                    <strong className="text-slate-700">
+                      {row.totalGross > 0 ? fmt$(row.totalGross) : "—"}
+                    </strong>
+                  </span>
+                </div>
+
+                {/* Store — desktop, Both mode only */}
+                {showStore && (
+                  <span className="hidden text-sm text-slate-500 sm:block">
+                    {row.storeName}
+                  </span>
+                )}
+
+                {/* Desktop cells */}
+                <span className="hidden text-right text-sm tabular-nums text-slate-600 sm:block">
+                  {fmtUnits(row.bookedUnits)}
+                </span>
+                <span className="hidden text-right text-sm tabular-nums text-slate-600 sm:block">
+                  {fmtUnits(row.closedUnits)}
+                </span>
+                <span className="hidden text-right text-sm tabular-nums font-semibold text-slate-800 sm:block">
+                  {row.totalGross > 0 ? fmt$(row.totalGross) : "—"}
+                </span>
+                <span className="hidden text-right text-sm tabular-nums text-slate-500 sm:block">
+                  {row.avgGross !== null ? fmt$(row.avgGross) : "—"}
+                </span>
+              </div>
+            ))
           )}
         </div>
       </section>

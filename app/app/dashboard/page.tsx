@@ -15,6 +15,8 @@ type Deal = {
 type Department = { id: string; name: string; store_id: string };
 type CalendarDay = { date: string; is_working_day: boolean; store_id: string };
 type Goal = { department_id: string; volume_goal: number };
+type Salesperson = { id: string; name: string; store_id: string };
+type DealSalesperson = { deal_id: string; salesperson_id: string; share_percent: number };
 
 export default async function DashboardPage() {
   const supabase = createSupabaseServerClient();
@@ -58,14 +60,17 @@ export default async function DashboardPage() {
         departments={[]}
         calendarDays={[]}
         goals={[]}
+        salespeople={[]}
+        dealSalespeople={[]}
         year={year}
         month={month}
       />
     );
   }
 
-  // Parallel: deals, departments, calendar exceptions — all scoped to this month + user's stores
-  const [dealsRes, deptsRes, calRes] = await Promise.all([
+  // Parallel: deals, departments, calendar, salespeople (no active filter — inactive reps'
+  // historical deals must still resolve their name)
+  const [dealsRes, deptsRes, calRes, spRes] = await Promise.all([
     supabase
       .from("deals")
       .select("id,status,front_profit,back_profit,store_id,department_id")
@@ -83,24 +88,47 @@ export default async function DashboardPage() {
       .in("store_id", storeIds)
       .gte("date", firstOfMonth)
       .lte("date", lastOfMonth),
+    supabase
+      .from("salespeople")
+      .select("id,name,store_id")
+      .in("store_id", storeIds)
+      .order("name"),
   ]);
 
   const deals = (dealsRes.data ?? []) as unknown as Deal[];
   const departments = (deptsRes.data ?? []) as unknown as Department[];
   const calendarDays = (calRes.data ?? []) as unknown as CalendarDay[];
+  const salespeople = (spRes.data ?? []) as unknown as Salesperson[];
 
-  // Goals require department IDs — sequential after departments fetch
+  // Second parallel: goals (needs deptIds) + deal_salespeople (needs dealIds)
   const deptIds = departments.map((d) => d.id);
+  const dealIds = deals.map((d) => d.id);
+
   let goals: Goal[] = [];
-  if (deptIds.length > 0) {
-    const { data: goalsData } = await supabase
-      .from("department_goals")
-      .select("department_id,volume_goal")
-      .in("department_id", deptIds)
-      .eq("year", year)
-      .eq("month", month);
-    goals = (goalsData ?? []) as unknown as Goal[];
-  }
+  let dealSalespeople: DealSalesperson[] = [];
+
+  await Promise.all([
+    deptIds.length > 0
+      ? supabase
+          .from("department_goals")
+          .select("department_id,volume_goal")
+          .in("department_id", deptIds)
+          .eq("year", year)
+          .eq("month", month)
+          .then((res) => {
+            goals = (res.data ?? []) as unknown as Goal[];
+          })
+      : Promise.resolve(),
+    dealIds.length > 0
+      ? supabase
+          .from("deal_salespeople")
+          .select("deal_id,salesperson_id,share_percent")
+          .in("deal_id", dealIds)
+          .then((res) => {
+            dealSalespeople = (res.data ?? []) as unknown as DealSalesperson[];
+          })
+      : Promise.resolve(),
+  ]);
 
   return (
     <DashboardClient
@@ -109,6 +137,8 @@ export default async function DashboardPage() {
       departments={departments}
       calendarDays={calendarDays}
       goals={goals}
+      salespeople={salespeople}
+      dealSalespeople={dealSalespeople}
       year={year}
       month={month}
     />
