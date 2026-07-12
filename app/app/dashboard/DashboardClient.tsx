@@ -1,0 +1,412 @@
+"use client";
+
+import { useState, useMemo } from "react";
+
+type Store = { id: string; name: string };
+type Deal = {
+  id: string;
+  status: string;
+  front_profit: number | null;
+  back_profit: number | null;
+  store_id: string;
+  department_id: string;
+};
+type Department = { id: string; name: string; store_id: string };
+type CalendarDay = { date: string; is_working_day: boolean; store_id: string };
+type Goal = { department_id: string; volume_goal: number };
+
+type Props = {
+  stores: Store[];
+  deals: Deal[];
+  departments: Department[];
+  calendarDays: CalendarDay[];
+  goals: Goal[];
+  year: number;
+  month: number;
+};
+
+// Name-based accent so the correct color follows the store regardless of fetch order
+function storeAccent(name: string): string {
+  const n = name.toLowerCase();
+  if (n.includes("centralia")) return "#58B8E8";
+  if (n.includes("linn")) return "#F5C242";
+  return "#94a3b8";
+}
+
+// Returns current date/time in America/Chicago — handles CDT/CST automatically
+function getCentralTimeParts() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+  const get = (type: string) =>
+    parseInt(parts.find((p) => p.type === type)!.value, 10);
+  return {
+    year: get("year"),
+    month: get("month"), // 1-based
+    day: get("day"),
+    hour: get("hour"), // 0-23; Intl returns 24 for midnight, still >= 18, safe
+  };
+}
+
+// True if this date is a working day for this store.
+// Checks override map first; falls back to Mon–Sat (dow 1–6).
+function isWorkingDayForStore(
+  dow: number,
+  dateStr: string,
+  overrides: Map<string, boolean>
+): boolean {
+  if (overrides.has(dateStr)) return overrides.get(dateStr)!;
+  return dow >= 1 && dow <= 6;
+}
+
+// All working day strings (YYYY-MM-DD) in the month for the given stores.
+// A date is working if it's working for ANY selected store (union).
+function computeWorkingDays(
+  year: number,
+  month: number,
+  calendarDays: CalendarDay[],
+  selectedStoreIds: string[]
+): string[] {
+  const daysInMonth = new Date(year, month, 0).getDate();
+
+  const byStore = new Map<string, Map<string, boolean>>();
+  for (const sid of selectedStoreIds) byStore.set(sid, new Map());
+  for (const day of calendarDays) {
+    const m = byStore.get(day.store_id);
+    // .slice(0, 10) normalises any timezone-offset suffix Postgres might include
+    if (m) m.set(day.date.slice(0, 10), day.is_working_day);
+  }
+
+  const result: string[] = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    const dow = new Date(year, month - 1, d).getDay();
+    const working = selectedStoreIds.some((sid) =>
+      isWorkingDayForStore(dow, dateStr, byStore.get(sid) ?? new Map())
+    );
+    if (working) result.push(dateStr);
+  }
+  return result;
+}
+
+const fmt$ = (v: number) =>
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(v);
+
+export default function DashboardClient({
+  stores,
+  deals,
+  departments,
+  calendarDays,
+  goals,
+  year,
+  month,
+}: Props) {
+  const [selectedStore, setSelectedStore] = useState<"both" | string>("both");
+
+  const { kpis, deptRows, monthLabel } = useMemo(() => {
+    const selectedStoreIds =
+      selectedStore === "both" ? stores.map((s) => s.id) : [selectedStore];
+
+    // Deal scope
+    const scopedDeals = deals.filter((d) => selectedStoreIds.includes(d.store_id));
+    const bookedDeals = scopedDeals.filter(
+      (d) =>
+        d.status === "pending" || d.status === "delivered" || d.status === "closed"
+    );
+    const closedDeals = scopedDeals.filter((d) => d.status === "closed");
+    const bookedCount = bookedDeals.length;
+    const closedCount = closedDeals.length;
+
+    // Dept scope + goals
+    const scopedDepts = departments
+      .filter((d) => selectedStoreIds.includes(d.store_id))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const scopedDeptIds = new Set(scopedDepts.map((d) => d.id));
+    const goalMap = new Map(
+      goals
+        .filter((g) => scopedDeptIds.has(g.department_id))
+        .map((g) => [g.department_id, g.volume_goal])
+    );
+    const totalGoal = goals
+      .filter((g) => scopedDeptIds.has(g.department_id))
+      .reduce((s, g) => s + g.volume_goal, 0);
+
+    // Central time — determines today and the 6 PM cutoff
+    const ct = getCentralTimeParts();
+    const todayStr = `${ct.year}-${String(ct.month).padStart(2, "0")}-${String(ct.day).padStart(2, "0")}`;
+    const pastSixPM = ct.hour >= 18;
+
+    // Working days
+    const workingDays = computeWorkingDays(year, month, calendarDays, selectedStoreIds);
+    const totalWorkingDays = workingDays.length;
+    const completedWorkingDays = workingDays.filter(
+      (ds) => ds < todayStr || (ds === todayStr && pastSixPM)
+    ).length;
+    const remainingWorkingDays = totalWorkingDays - completedWorkingDays;
+
+
+    // Pace: null when no completed days yet (first day still in progress)
+    const paceProjection =
+      completedWorkingDays > 0
+        ? Math.round((bookedCount / completedWorkingDays) * totalWorkingDays)
+        : null;
+
+    // Gross
+    const totalGross = closedDeals.reduce(
+      (sum, d) => sum + (d.front_profit ?? 0) + (d.back_profit ?? 0),
+      0
+    );
+    const avgGross = closedCount > 0 ? totalGross / closedCount : null;
+
+    // Per-dept rows
+    const deptRows = scopedDepts.map((dept) => {
+      const dClosed = closedDeals.filter((d) => d.department_id === dept.id);
+      const front = dClosed.reduce((s, d) => s + (d.front_profit ?? 0), 0);
+      const back = dClosed.reduce((s, d) => s + (d.back_profit ?? 0), 0);
+      return {
+        id: dept.id,
+        name: dept.name,
+        booked: bookedDeals.filter((d) => d.department_id === dept.id).length,
+        closed: dClosed.length,
+        front: dClosed.length > 0 ? front : null,
+        back: dClosed.length > 0 ? back : null,
+        total: dClosed.length > 0 ? front + back : null,
+        goal: goalMap.get(dept.id) ?? null,
+      };
+    });
+
+    const monthLabel = new Date(year, month - 1, 1).toLocaleDateString("en-US", {
+      month: "long",
+      year: "numeric",
+    });
+
+    return {
+      kpis: {
+        bookedCount,
+        closedCount,
+        paceProjection,
+        totalGoal,
+        totalWorkingDays,
+        completedWorkingDays,
+        remainingWorkingDays,
+        totalGross: closedCount > 0 ? totalGross : null,
+        avgGross,
+      },
+      deptRows,
+      monthLabel,
+    };
+  }, [selectedStore, stores, deals, departments, calendarDays, goals, year, month]);
+
+  const paceColor =
+    kpis.paceProjection === null
+      ? "text-white"
+      : kpis.totalGoal > 0 && kpis.paceProjection >= kpis.totalGoal
+      ? "text-emerald-400"
+      : kpis.totalGoal > 0
+      ? "text-red-400"
+      : "text-white";
+
+  return (
+    <div className="space-y-5">
+      {/* Header + store filter */}
+      <section className="rounded-2xl bg-gradient-to-br from-[#071735] via-[#05142e] to-[#031127] p-5 text-white shadow-xl shadow-blue-900/30">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-blue-200/60">
+              Sales Command
+            </p>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight">{monthLabel}</h1>
+            <p className="mt-1 text-xs text-blue-100/50">
+              {kpis.completedWorkingDays} of {kpis.totalWorkingDays} working days complete
+              {kpis.remainingWorkingDays > 0
+                ? ` · ${kpis.remainingWorkingDays} remaining`
+                : " · Month complete"}
+            </p>
+          </div>
+          {stores.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1 rounded-xl bg-white/10 p-1">
+              <FilterPill
+                label="Both"
+                active={selectedStore === "both"}
+                accent={null}
+                onClick={() => setSelectedStore("both")}
+              />
+              {stores.map((store) => (
+                <FilterPill
+                  key={store.id}
+                  label={store.name}
+                  active={selectedStore === store.id}
+                  accent={storeAccent(store.name)}
+                  onClick={() => setSelectedStore(store.id)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* KPI tiles */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+        <KpiTile
+          kicker="Booked"
+          value={String(kpis.bookedCount)}
+          sub="pending · delivered · closed"
+        />
+        <KpiTile
+          kicker="Closed"
+          value={String(kpis.closedCount)}
+          sub="status = closed"
+        />
+        <KpiTile
+          kicker="Pace Projection"
+          value={kpis.paceProjection !== null ? String(kpis.paceProjection) : "—"}
+          sub={
+            kpis.paceProjection === null
+              ? "Calculating — first day in progress"
+              : kpis.totalGoal > 0
+              ? `of ${kpis.totalGoal} goal`
+              : "No goal set this month"
+          }
+          valueClass={paceColor}
+        />
+        <KpiTile
+          kicker="Working Days"
+          value={`${kpis.completedWorkingDays} / ${kpis.totalWorkingDays}`}
+          sub={`${kpis.remainingWorkingDays} days remaining`}
+        />
+        <KpiTile
+          kicker="Total Gross"
+          value={kpis.totalGross !== null ? fmt$(kpis.totalGross) : "—"}
+          sub={kpis.closedCount > 0 ? "all closed deals" : "no closed deals yet"}
+        />
+        <KpiTile
+          kicker="Avg Gross / Deal"
+          value={kpis.avgGross !== null ? fmt$(kpis.avgGross) : "—"}
+          sub={
+            kpis.closedCount > 0
+              ? `${kpis.closedCount} closed`
+              : "no closed deals yet"
+          }
+        />
+      </div>
+
+      {/* Gross by department */}
+      <section className="overflow-hidden rounded-2xl border border-[#e7ebf3] bg-white shadow-[0_10px_30px_rgba(15,23,42,0.06)]">
+        <div className="border-b border-[#edf1f7] bg-[#f8fafd] px-5 py-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+            Gross by Department
+          </p>
+        </div>
+        {/* Column headers — desktop only */}
+        <div className="hidden border-b border-[#edf1f7] bg-[#f8fafd] px-5 py-2 sm:grid sm:grid-cols-[2fr_72px_72px_110px_110px_120px_80px] sm:gap-4">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Department
+          </span>
+          {["Booked", "Closed", "Front", "Back", "Total", "Goal"].map((h) => (
+            <span
+              key={h}
+              className="text-right text-xs font-semibold uppercase tracking-wide text-slate-400"
+            >
+              {h}
+            </span>
+          ))}
+        </div>
+        <div className="divide-y divide-[#edf1f7]">
+          {deptRows.length === 0 ? (
+            <p className="px-5 py-8 text-center text-sm text-slate-400">
+              No departments configured.
+            </p>
+          ) : (
+            deptRows.map((dept) => (
+              <div
+                key={dept.id}
+                className="flex flex-col gap-0.5 px-5 py-3 sm:grid sm:grid-cols-[2fr_72px_72px_110px_110px_120px_80px] sm:items-center sm:gap-4"
+              >
+                <span className="text-sm font-medium text-slate-800">{dept.name}</span>
+                <span className="text-sm tabular-nums text-slate-600 sm:text-right">
+                  {dept.booked}
+                </span>
+                <span className="text-sm tabular-nums text-slate-600 sm:text-right">
+                  {dept.closed}
+                </span>
+                <span className="text-sm tabular-nums text-slate-500 sm:text-right">
+                  {dept.front !== null ? fmt$(dept.front) : "—"}
+                </span>
+                <span className="text-sm tabular-nums text-slate-500 sm:text-right">
+                  {dept.back !== null ? fmt$(dept.back) : "—"}
+                </span>
+                <span className="text-sm tabular-nums font-semibold text-slate-800 sm:text-right">
+                  {dept.total !== null ? fmt$(dept.total) : "—"}
+                </span>
+                <span className="text-sm tabular-nums text-slate-400 sm:text-right">
+                  {dept.goal !== null ? dept.goal : "—"}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function FilterPill({
+  label,
+  active,
+  accent,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  accent: string | null;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={active && accent ? { backgroundColor: accent, color: "#0a0a0a" } : undefined}
+      className={[
+        "rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-all",
+        active && !accent ? "bg-white/20 text-white" : "",
+        !active ? "text-blue-100/60 hover:bg-white/10 hover:text-white" : "",
+      ]
+        .join(" ")
+        .trim()}
+    >
+      {label}
+    </button>
+  );
+}
+
+function KpiTile({
+  kicker,
+  value,
+  sub,
+  valueClass = "text-white",
+}: {
+  kicker: string;
+  value: string;
+  sub: string;
+  valueClass?: string;
+}) {
+  return (
+    <div className="rounded-2xl bg-[#071735] px-4 py-4 shadow-lg shadow-blue-900/20">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-blue-200/60">
+        {kicker}
+      </p>
+      <p className={`mt-2 text-3xl font-bold tabular-nums tracking-tight ${valueClass}`}>
+        {value}
+      </p>
+      <p className="mt-1.5 text-[11px] leading-tight text-blue-100/50">{sub}</p>
+    </div>
+  );
+}
