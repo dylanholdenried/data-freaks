@@ -25,7 +25,13 @@ type Props = {
   month: number;
 };
 
-// Name-based accent so the correct color follows the store regardless of fetch order
+type NeededDisplay =
+  | { kind: "empty" }
+  | { kind: "surplus"; units: number } // booked - goal (positive), shown as negative
+  | { kind: "rate"; rate: number }; // (goal - booked) / remainingDays
+
+// ── Pure helpers (module-level) ──────────────────────────────────────────────
+
 function storeAccent(name: string): string {
   const n = name.toLowerCase();
   if (n.includes("centralia")) return "#58B8E8";
@@ -73,15 +79,12 @@ function computeWorkingDays(
   selectedStoreIds: string[]
 ): string[] {
   const daysInMonth = new Date(year, month, 0).getDate();
-
   const byStore = new Map<string, Map<string, boolean>>();
   for (const sid of selectedStoreIds) byStore.set(sid, new Map());
   for (const day of calendarDays) {
     const m = byStore.get(day.store_id);
-    // .slice(0, 10) normalises any timezone-offset suffix Postgres might include
     if (m) m.set(day.date.slice(0, 10), day.is_working_day);
   }
-
   const result: string[] = [];
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
@@ -94,12 +97,47 @@ function computeWorkingDays(
   return result;
 }
 
+// Cars needed per remaining day, or surplus if already past goal.
+function computeNeeded(
+  booked: number,
+  goal: number | null,
+  remainingDays: number
+): NeededDisplay {
+  if (goal === null || remainingDays === 0) return { kind: "empty" };
+  if (booked >= goal) return { kind: "surplus", units: booked - goal };
+  return { kind: "rate", rate: (goal - booked) / remainingDays };
+}
+
 const fmt$ = (v: number) =>
   new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
     maximumFractionDigits: 0,
   }).format(v);
+
+// ── JSX render helpers ───────────────────────────────────────────────────────
+
+function VsGoalCell({ vsGoal }: { vsGoal: number | null }) {
+  if (vsGoal === null) return <span className="text-slate-400">—</span>;
+  if (vsGoal >= 0)
+    return <span className="font-medium text-emerald-600">+{vsGoal}</span>;
+  return <span className="font-medium text-red-500">{vsGoal}</span>;
+}
+
+function NeededCell({ n }: { n: NeededDisplay }) {
+  if (n.kind === "empty") return <span className="text-slate-400">—</span>;
+  if (n.kind === "surplus")
+    return <span className="font-medium text-emerald-600">-{n.units}</span>;
+  const cls =
+    n.rate > 5 ? "font-medium text-red-500" : "font-medium text-amber-500";
+  return <span className={cls}>{n.rate.toFixed(1)}</span>;
+}
+
+// ── Component ────────────────────────────────────────────────────────────────
+
+// Shared grid template — 10 columns, used by header + every data row
+const GRID =
+  "sm:grid-cols-[2fr_60px_60px_90px_90px_100px_60px_60px_70px_80px] sm:gap-3";
 
 export default function DashboardClient({
   stores,
@@ -112,7 +150,7 @@ export default function DashboardClient({
 }: Props) {
   const [selectedStore, setSelectedStore] = useState<"both" | string>("both");
 
-  const { kpis, deptRows, monthLabel } = useMemo(() => {
+  const { kpis, deptRows, totalsRow, monthLabel } = useMemo(() => {
     const selectedStoreIds =
       selectedStore === "both" ? stores.map((s) => s.id) : [selectedStore];
 
@@ -145,7 +183,7 @@ export default function DashboardClient({
     const todayStr = `${ct.year}-${String(ct.month).padStart(2, "0")}-${String(ct.day).padStart(2, "0")}`;
     const pastSixPM = ct.hour >= 18;
 
-    // Working days
+    // Working days — reuses verified pace engine, no duplication
     const workingDays = computeWorkingDays(year, month, calendarDays, selectedStoreIds);
     const totalWorkingDays = workingDays.length;
     const completedWorkingDays = workingDays.filter(
@@ -153,36 +191,63 @@ export default function DashboardClient({
     ).length;
     const remainingWorkingDays = totalWorkingDays - completedWorkingDays;
 
-
-    // Pace: null when no completed days yet (first day still in progress)
+    // Group pace
     const paceProjection =
       completedWorkingDays > 0
         ? Math.round((bookedCount / completedWorkingDays) * totalWorkingDays)
         : null;
 
-    // Gross
-    const totalGross = closedDeals.reduce(
-      (sum, d) => sum + (d.front_profit ?? 0) + (d.back_profit ?? 0),
-      0
-    );
+    // Gross totals (split for totals row)
+    const totalFront = closedDeals.reduce((s, d) => s + (d.front_profit ?? 0), 0);
+    const totalBack = closedDeals.reduce((s, d) => s + (d.back_profit ?? 0), 0);
+    const totalGross = totalFront + totalBack;
     const avgGross = closedCount > 0 ? totalGross / closedCount : null;
 
-    // Per-dept rows
+    // Per-dept rows — same pace formula scoped to each dept
     const deptRows = scopedDepts.map((dept) => {
+      const dBooked = bookedDeals.filter((d) => d.department_id === dept.id).length;
       const dClosed = closedDeals.filter((d) => d.department_id === dept.id);
       const front = dClosed.reduce((s, d) => s + (d.front_profit ?? 0), 0);
       const back = dClosed.reduce((s, d) => s + (d.back_profit ?? 0), 0);
+      const goal = goalMap.get(dept.id) ?? null;
+      const pace =
+        completedWorkingDays > 0
+          ? Math.round((dBooked / completedWorkingDays) * totalWorkingDays)
+          : null;
       return {
         id: dept.id,
         name: dept.name,
-        booked: bookedDeals.filter((d) => d.department_id === dept.id).length,
+        booked: dBooked,
         closed: dClosed.length,
         front: dClosed.length > 0 ? front : null,
         back: dClosed.length > 0 ? back : null,
         total: dClosed.length > 0 ? front + back : null,
-        goal: goalMap.get(dept.id) ?? null,
+        goal,
+        pace,
+        vsGoal: pace !== null && goal !== null ? pace - goal : null,
+        needed: computeNeeded(dBooked, goal, remainingWorkingDays),
       };
     });
+
+    // Group totals row
+    const totalsRow = {
+      booked: bookedCount,
+      closed: closedCount,
+      front: closedCount > 0 ? totalFront : null,
+      back: closedCount > 0 ? totalBack : null,
+      total: closedCount > 0 ? totalGross : null,
+      goal: totalGoal > 0 ? totalGoal : null,
+      pace: paceProjection,
+      vsGoal:
+        paceProjection !== null && totalGoal > 0
+          ? paceProjection - totalGoal
+          : null,
+      needed: computeNeeded(
+        bookedCount,
+        totalGoal > 0 ? totalGoal : null,
+        remainingWorkingDays
+      ),
+    };
 
     const monthLabel = new Date(year, month - 1, 1).toLocaleDateString("en-US", {
       month: "long",
@@ -202,6 +267,7 @@ export default function DashboardClient({
         avgGross,
       },
       deptRows,
+      totalsRow,
       monthLabel,
     };
   }, [selectedStore, stores, deals, departments, calendarDays, goals, year, month]);
@@ -299,19 +365,32 @@ export default function DashboardClient({
         />
       </div>
 
-      {/* Gross by department */}
+      {/* Department pace & gross table */}
       <section className="overflow-hidden rounded-2xl border border-[#e7ebf3] bg-white shadow-[0_10px_30px_rgba(15,23,42,0.06)]">
         <div className="border-b border-[#edf1f7] bg-[#f8fafd] px-5 py-3">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-            Gross by Department
+            Department Pace &amp; Gross
           </p>
         </div>
+
         {/* Column headers — desktop only */}
-        <div className="hidden border-b border-[#edf1f7] bg-[#f8fafd] px-5 py-2 sm:grid sm:grid-cols-[2fr_72px_72px_110px_110px_120px_80px] sm:gap-4">
+        <div
+          className={`hidden border-b border-[#edf1f7] bg-[#f8fafd] px-5 py-2 sm:grid ${GRID}`}
+        >
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
             Department
           </span>
-          {["Booked", "Closed", "Front", "Back", "Total", "Goal"].map((h) => (
+          {[
+            "Booked",
+            "Closed",
+            "Front",
+            "Back",
+            "Total",
+            "Goal",
+            "Pace",
+            "Vs Goal",
+            "Needed/Day",
+          ].map((h) => (
             <span
               key={h}
               className="text-right text-xs font-semibold uppercase tracking-wide text-slate-400"
@@ -320,44 +399,147 @@ export default function DashboardClient({
             </span>
           ))}
         </div>
+
         <div className="divide-y divide-[#edf1f7]">
           {deptRows.length === 0 ? (
             <p className="px-5 py-8 text-center text-sm text-slate-400">
               No departments configured.
             </p>
           ) : (
-            deptRows.map((dept) => (
+            <>
+              {deptRows.map((dept) => (
+                <div
+                  key={dept.id}
+                  className={`px-5 py-3 sm:grid ${GRID} sm:items-center`}
+                >
+                  {/* Name — always visible */}
+                  <span className="block text-sm font-medium text-slate-800">
+                    {dept.name}
+                  </span>
+
+                  {/* Mobile summary row — hidden on desktop */}
+                  <div className="mt-0.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-400 sm:hidden">
+                    <span>
+                      Booked{" "}
+                      <strong className="text-slate-700">{dept.booked}</strong>
+                    </span>
+                    <span>
+                      Goal{" "}
+                      <strong className="text-slate-700">
+                        {dept.goal ?? "—"}
+                      </strong>
+                    </span>
+                    <span>
+                      Pace{" "}
+                      <strong className="text-slate-700">
+                        {dept.pace ?? "—"}
+                      </strong>
+                    </span>
+                    <span>
+                      Needed <strong><NeededCell n={dept.needed} /></strong>
+                    </span>
+                  </div>
+
+                  {/* Desktop cells — hidden on mobile */}
+                  <span className="hidden text-right text-sm tabular-nums text-slate-600 sm:block">
+                    {dept.booked}
+                  </span>
+                  <span className="hidden text-right text-sm tabular-nums text-slate-600 sm:block">
+                    {dept.closed}
+                  </span>
+                  <span className="hidden text-right text-sm tabular-nums text-slate-500 sm:block">
+                    {dept.front !== null ? fmt$(dept.front) : "—"}
+                  </span>
+                  <span className="hidden text-right text-sm tabular-nums text-slate-500 sm:block">
+                    {dept.back !== null ? fmt$(dept.back) : "—"}
+                  </span>
+                  <span className="hidden text-right text-sm tabular-nums font-semibold text-slate-800 sm:block">
+                    {dept.total !== null ? fmt$(dept.total) : "—"}
+                  </span>
+                  <span className="hidden text-right text-sm tabular-nums text-slate-500 sm:block">
+                    {dept.goal ?? "—"}
+                  </span>
+                  <span className="hidden text-right text-sm tabular-nums text-slate-700 sm:block">
+                    {dept.pace ?? "—"}
+                  </span>
+                  <span className="hidden text-right text-sm tabular-nums sm:block">
+                    <VsGoalCell vsGoal={dept.vsGoal} />
+                  </span>
+                  <span className="hidden text-right text-sm tabular-nums sm:block">
+                    <NeededCell n={dept.needed} />
+                  </span>
+                </div>
+              ))}
+
+              {/* Totals row */}
               <div
-                key={dept.id}
-                className="flex flex-col gap-0.5 px-5 py-3 sm:grid sm:grid-cols-[2fr_72px_72px_110px_110px_120px_80px] sm:items-center sm:gap-4"
+                className={`bg-[#f8fafd] px-5 py-3 sm:grid ${GRID} sm:items-center`}
               >
-                <span className="text-sm font-medium text-slate-800">{dept.name}</span>
-                <span className="text-sm tabular-nums text-slate-600 sm:text-right">
-                  {dept.booked}
+                <span className="block text-xs font-bold uppercase tracking-wide text-slate-500">
+                  All Departments
                 </span>
-                <span className="text-sm tabular-nums text-slate-600 sm:text-right">
-                  {dept.closed}
+
+                {/* Mobile totals summary */}
+                <div className="mt-0.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-400 sm:hidden">
+                  <span>
+                    Booked{" "}
+                    <strong className="text-slate-700">{totalsRow.booked}</strong>
+                  </span>
+                  <span>
+                    Goal{" "}
+                    <strong className="text-slate-700">
+                      {totalsRow.goal ?? "—"}
+                    </strong>
+                  </span>
+                  <span>
+                    Pace{" "}
+                    <strong className="text-slate-700">
+                      {totalsRow.pace ?? "—"}
+                    </strong>
+                  </span>
+                  <span>
+                    Needed <strong><NeededCell n={totalsRow.needed} /></strong>
+                  </span>
+                </div>
+
+                {/* Desktop totals cells */}
+                <span className="hidden text-right text-sm tabular-nums font-bold text-slate-900 sm:block">
+                  {totalsRow.booked}
                 </span>
-                <span className="text-sm tabular-nums text-slate-500 sm:text-right">
-                  {dept.front !== null ? fmt$(dept.front) : "—"}
+                <span className="hidden text-right text-sm tabular-nums font-bold text-slate-900 sm:block">
+                  {totalsRow.closed}
                 </span>
-                <span className="text-sm tabular-nums text-slate-500 sm:text-right">
-                  {dept.back !== null ? fmt$(dept.back) : "—"}
+                <span className="hidden text-right text-sm tabular-nums font-semibold text-slate-500 sm:block">
+                  {totalsRow.front !== null ? fmt$(totalsRow.front) : "—"}
                 </span>
-                <span className="text-sm tabular-nums font-semibold text-slate-800 sm:text-right">
-                  {dept.total !== null ? fmt$(dept.total) : "—"}
+                <span className="hidden text-right text-sm tabular-nums font-semibold text-slate-500 sm:block">
+                  {totalsRow.back !== null ? fmt$(totalsRow.back) : "—"}
                 </span>
-                <span className="text-sm tabular-nums text-slate-400 sm:text-right">
-                  {dept.goal !== null ? dept.goal : "—"}
+                <span className="hidden text-right text-sm tabular-nums font-bold text-slate-900 sm:block">
+                  {totalsRow.total !== null ? fmt$(totalsRow.total) : "—"}
+                </span>
+                <span className="hidden text-right text-sm tabular-nums font-bold text-slate-700 sm:block">
+                  {totalsRow.goal ?? "—"}
+                </span>
+                <span className="hidden text-right text-sm tabular-nums font-bold text-slate-900 sm:block">
+                  {totalsRow.pace ?? "—"}
+                </span>
+                <span className="hidden text-right text-sm tabular-nums font-bold sm:block">
+                  <VsGoalCell vsGoal={totalsRow.vsGoal} />
+                </span>
+                <span className="hidden text-right text-sm tabular-nums font-bold sm:block">
+                  <NeededCell n={totalsRow.needed} />
                 </span>
               </div>
-            ))
+            </>
           )}
         </div>
       </section>
     </div>
   );
 }
+
+// ── Sub-components ───────────────────────────────────────────────────────────
 
 function FilterPill({
   label,
