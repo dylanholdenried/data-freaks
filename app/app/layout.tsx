@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { Button } from "@/components/ui/button";
-import { BarChart3, CalendarRange, ClipboardList, LayoutDashboard, Menu, Settings2 } from "lucide-react";
+import { BarChart3, CalendarRange, LayoutDashboard, Menu, Settings2 } from "lucide-react";
 import { signOut } from "./actions";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
@@ -50,10 +50,6 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           >
             <LayoutDashboard className="h-3.5 w-3.5" />
             Sales Registry
-          </Link>
-          <Link href="/app/deals" prefetch className={navLink}>
-            <ClipboardList className="h-3.5 w-3.5" />
-            Transaction Audit
           </Link>
           <Link href="/app/setup" prefetch className={navLink}>
             <Settings2 className="h-3.5 w-3.5" />
@@ -101,9 +97,6 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
                   >
                     Sales Registry
                   </Link>
-                  <Link href="/app/deals" className="block px-3 py-2 text-slate-700 hover:bg-slate-50" prefetch>
-                    Transaction Audit
-                  </Link>
                   <Link href="/app/deals/new" className="block px-3 py-2 text-slate-700 hover:bg-slate-50" prefetch>
                     Log Transaction
                   </Link>
@@ -133,4 +126,3 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     </div>
   );
 }
-
