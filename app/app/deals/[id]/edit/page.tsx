@@ -5,6 +5,7 @@ import UpdatePendingForm from "./UpdatePendingForm";
 
 type DealRow = {
   id: string;
+  status: string;
   store_id: string;
   department_id: string;
   stock_number: string;
@@ -28,6 +29,8 @@ type DealRow = {
 };
 
 type SpRow = { salesperson_id: string; share_percent: number };
+type VehicleMakeRow = { id: string; name: string };
+type VehicleModelRow = { id: string; name: string; make_id: string };
 
 type TradeRow = {
   year: number | null;
@@ -64,11 +67,11 @@ export default async function EditDealPage({ params }: { params: { id: string } 
   );
   const storeIds = Array.from(storeById.keys());
 
-  // 2. Fetch the deal
+  // 2. Fetch the deal — no status filter; any deal by ID loads here
   const { data: dealData, error: dealFetchError } = await supabase
     .from("deals")
     .select(
-      "id,store_id,department_id,stock_number,customer_last_name," +
+      "id,status,store_id,department_id,stock_number,customer_last_name," +
         "vehicle_year,vehicle_make,vehicle_model," +
         "vin,trim,color,body_style,drivetrain,odometer," +
         "acquisition_source,finance_type,finance_manager_id," +
@@ -96,33 +99,44 @@ export default async function EditDealPage({ params }: { params: { id: string } 
 
   const storeName = storeById.get(deal.store_id) ?? "Unknown Store";
 
-  // 3. All parallel data: dropdowns + dept name + salespeople + trades for close gate
-  const [srcResult, fmResult, deptResult, spResult, tradesResult] = await Promise.all([
-    supabase
-      .from("acquisition_sources")
-      .select("id,name")
-      .eq("store_id", deal.store_id)
-      .order("name"),
-    supabase
-      .from("finance_managers")
-      .select("id,name")
-      .eq("store_id", deal.store_id)
-      .eq("active", true)
-      .order("name"),
-    supabase
-      .from("departments")
-      .select("name")
-      .eq("id", deal.department_id)
-      .maybeSingle(),
-    supabase
-      .from("deal_salespeople")
-      .select("salesperson_id,share_percent")
-      .eq("deal_id", deal.id),
-    supabase
-      .from("trades")
-      .select("year,make,model,acv,exit_strategy")
-      .eq("deal_id", deal.id),
-  ]);
+  // 3. All parallel data: dropdowns + dept name + salespeople + trades + vehicle lists
+  const [srcResult, fmResult, deptResult, spResult, tradesResult, vMakesResult, vModelsResult] =
+    await Promise.all([
+      supabase
+        .from("acquisition_sources")
+        .select("id,name")
+        .eq("store_id", deal.store_id)
+        .order("name"),
+      supabase
+        .from("finance_managers")
+        .select("id,name")
+        .eq("store_id", deal.store_id)
+        .eq("active", true)
+        .order("name"),
+      supabase
+        .from("departments")
+        .select("name")
+        .eq("id", deal.department_id)
+        .maybeSingle(),
+      supabase
+        .from("deal_salespeople")
+        .select("salesperson_id,share_percent")
+        .eq("deal_id", deal.id),
+      supabase
+        .from("trades")
+        .select("year,make,model,acv,exit_strategy")
+        .eq("deal_id", deal.id),
+      supabase
+        .from("vehicle_makes")
+        .select("id,name")
+        .eq("active", true)
+        .order("name"),
+      supabase
+        .from("vehicle_models")
+        .select("id,name,make_id")
+        .eq("active", true)
+        .order("name"),
+    ]);
 
   const acquisitionSources = (srcResult.data ?? []) as { id: string; name: string }[];
   const financeManagers = (fmResult.data ?? []) as { id: string; name: string }[];
@@ -134,10 +148,13 @@ export default async function EditDealPage({ params }: { params: { id: string } 
   const shareSum = dealSalespeople.reduce((sum, s) => sum + (s.share_percent ?? 0), 0);
 
   const trades = (tradesResult.data ?? []) as TradeRow[];
+  const vehicleMakes = (vMakesResult.data ?? []) as VehicleMakeRow[];
+  const vehicleModels = (vModelsResult.data ?? []) as VehicleModelRow[];
 
   return (
     <UpdatePendingForm
       dealId={deal.id}
+      dealStatus={deal.status}
       stockNumber={deal.stock_number}
       customerLastName={deal.customer_last_name}
       vehicleYear={deal.vehicle_year}
@@ -160,6 +177,8 @@ export default async function EditDealPage({ params }: { params: { id: string } 
       initialAge={deal.age}
       acquisitionSources={acquisitionSources}
       financeManagers={financeManagers}
+      vehicleMakes={vehicleMakes}
+      vehicleModels={vehicleModels}
       salespeopleCount={salespeopleCount}
       shareSum={shareSum}
       trades={trades}

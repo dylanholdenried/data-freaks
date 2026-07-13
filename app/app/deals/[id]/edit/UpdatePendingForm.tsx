@@ -6,7 +6,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { CheckCircle2, Info, Loader2, XCircle } from "lucide-react";
 
 type TradeRow = {
   year: number | null;
@@ -19,6 +19,7 @@ type TradeRow = {
 interface Props {
   // Identifiers
   dealId: string;
+  dealStatus: string;
   // Read-only context
   stockNumber: string;
   customerLastName: string;
@@ -44,6 +45,8 @@ interface Props {
   // Dropdown options
   acquisitionSources: { id: string; name: string }[];
   financeManagers: { id: string; name: string }[];
+  vehicleMakes: { id: string; name: string }[];
+  vehicleModels: { id: string; name: string; make_id: string }[];
   // Close gate data (fetched server-side from deal_salespeople + trades)
   salespeopleCount: number;
   shareSum: number; // decimal: 1.0 = 100%
@@ -58,13 +61,83 @@ const SEL =
 
 const LBL = "text-xs font-medium text-slate-500";
 
-// Convert a nullable number to a string for controlled inputs (blank if null)
+const COLORS = [
+  "White", "Black", "Silver", "Gray", "Red", "Blue", "Green",
+  "Brown", "Beige", "Gold", "Orange", "Yellow", "Purple", "Maroon", "Tan", "Other",
+];
+
+const BODY_STYLES = [
+  "Sedan", "SUV", "Truck", "Cargo Van", "Minivan",
+  "Hatchback", "Coupe", "Convertible", "Wagon", "Cab/Chassis",
+];
+
+const DRIVETRAINS = ["FWD", "RWD", "AWD", "4WD"];
+
 function numStr(v: number | null): string {
   return v !== null ? String(v) : "";
 }
 
+// ── VIN decode normalization ──────────────────────────────────────────────────
+
+const GM_MAKES = new Set(["Chevrolet", "GMC"]);
+const TONNAGES = new Set(["1500", "2500", "3500", "4500", "5500", "6500"]);
+
+function mapBodyStyle(raw: string): string {
+  const s = raw.toLowerCase();
+  if (s.includes("sport utility") || s.includes("suv") || s.includes("mpv"))
+    return "SUV";
+  if (s.includes("pickup") || s.includes("truck")) return "Truck";
+  if (s.includes("cab chassis") || s.includes("incomplete")) return "Cab/Chassis";
+  if (s.includes("minivan")) return "Minivan";
+  if (s.includes("van")) return "Cargo Van";
+  if (s.includes("hatchback") || s.includes("liftback")) return "Hatchback";
+  if (s.includes("convertible") || s.includes("cabriolet")) return "Convertible";
+  if (s.includes("coupe")) return "Coupe";
+  if (s.includes("wagon")) return "Wagon";
+  if (s.includes("sedan") || s.includes("saloon")) return "Sedan";
+  return "";
+}
+
+function normalizeDecodedVehicle(
+  normMake: string,
+  rawModel: string,
+  rawSeries: string,
+  rawBody: string,
+): { model: string; trim: string; bodyStyle: string } {
+  let model = rawModel;
+  let trim = rawSeries;
+
+  // Rule 1: GM tonnage — move tonnage from trim into model, clear trim
+  if (GM_MAKES.has(normMake) && TONNAGES.has(rawSeries.trim())) {
+    model = rawModel.replace(/ HD$/i, "").trim() + " " + rawSeries.trim();
+    trim = "";
+  }
+
+  return { model, trim, bodyStyle: mapBodyStyle(rawBody) };
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const cfg: Record<string, string> = {
+    pending: "bg-amber-100 text-amber-700",
+    delivered: "bg-blue-100 text-blue-700",
+    closed: "bg-emerald-100 text-emerald-700",
+    dead: "bg-slate-100 text-slate-600",
+    unwound: "bg-red-100 text-red-700",
+  };
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${
+        cfg[status] ?? "bg-slate-100 text-slate-600"
+      }`}
+    >
+      {status}
+    </span>
+  );
+}
+
 export default function UpdatePendingForm({
   dealId,
+  dealStatus,
   stockNumber,
   customerLastName,
   vehicleYear,
@@ -87,13 +160,65 @@ export default function UpdatePendingForm({
   initialAge,
   acquisitionSources,
   financeManagers,
+  vehicleMakes,
+  vehicleModels,
   salespeopleCount,
   shareSum,
   trades,
 }: Props) {
   const router = useRouter();
 
-  // ── Editable field state (all strings for controlled inputs) ─────────────────
+  // ── Decoded vehicle identity (saved via buildPayload) ─────────────────────────
+  const [displayYear, setDisplayYear] = useState<number>(vehicleYear);
+  const [displayMake, setDisplayMake] = useState(vehicleMake);
+  const [displayModel, setDisplayModel] = useState(vehicleModel);
+
+  // ── Make/Model dropdown IDs + manual-override flags ───────────────────────────
+  // On load: pre-select from dropdowns if the existing deal values are in the list.
+  const [makeId, setMakeId] = useState<string>(() => {
+    const found = vehicleMakes.find(
+      (m) => m.name.toLowerCase() === vehicleMake.toLowerCase()
+    );
+    return found?.id ?? "";
+  });
+  const [makeIsManual, setMakeIsManual] = useState<boolean>(() => {
+    if (!vehicleMake) return false;
+    return !vehicleMakes.some(
+      (m) => m.name.toLowerCase() === vehicleMake.toLowerCase()
+    );
+  });
+  const [modelId, setModelId] = useState<string>(() => {
+    const mk = vehicleMakes.find(
+      (m) => m.name.toLowerCase() === vehicleMake.toLowerCase()
+    );
+    if (!mk) return "";
+    const found = vehicleModels.find(
+      (m) =>
+        m.make_id === mk.id &&
+        m.name.toLowerCase() === vehicleModel.toLowerCase()
+    );
+    return found?.id ?? "";
+  });
+  const [modelIsManual, setModelIsManual] = useState<boolean>(() => {
+    if (!vehicleModel) return false;
+    const mk = vehicleMakes.find(
+      (m) => m.name.toLowerCase() === vehicleMake.toLowerCase()
+    );
+    // If make isn't in the list, model is also manual
+    if (!mk) return !!vehicleModel;
+    return !vehicleModels.some(
+      (m) =>
+        m.make_id === mk.id &&
+        m.name.toLowerCase() === vehicleModel.toLowerCase()
+    );
+  });
+
+  // ── VIN decode state ──────────────────────────────────────────────────────────
+  const [decoding, setDecoding] = useState(false);
+  const [decodeMsg, setDecodeMsg] = useState<string | null>(null);
+  const [decodeError, setDecodeError] = useState<string | null>(null);
+
+  // ── Editable field state ──────────────────────────────────────────────────────
   const [vin, setVin] = useState(initialVin ?? "");
   const [trim, setTrim] = useState(initialTrim ?? "");
   const [color, setColor] = useState(initialColor ?? "");
@@ -116,21 +241,124 @@ export default function UpdatePendingForm({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
-
   const [closing, setClosing] = useState(false);
   const [closeErrors, setCloseErrors] = useState<string[]>([]);
   const [closed, setClosed] = useState(false);
 
-  // ── Shared Step 2 payload builder ────────────────────────────────────────────
-  // Empty string → null. Integers via parseInt, decimals via parseFloat.
-  // Never writes status or non-existent columns.
+  // ── VIN Decoder ───────────────────────────────────────────────────────────────
+  async function handleDecodeVin() {
+    const v = vin.trim();
+    if (v.length !== 17) return;
+
+    setDecoding(true);
+    setDecodeMsg(null);
+    setDecodeError(null);
+
+    try {
+      const res = await fetch(
+        `https://vpic.nhtsa.dot.gov/api/vehicles/decodevin/${encodeURIComponent(v)}?format=json`
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const json = await res.json();
+      const results: { Variable: string; Value: string | null }[] =
+        json.Results ?? [];
+
+      function get(variable: string): string {
+        return results.find((r) => r.Variable === variable)?.Value?.trim() ?? "";
+      }
+
+      const rawYear = get("Model Year");
+      const rawMake = get("Make");
+      const rawModel = get("Model");
+      const rawSeries = get("Series") || get("Trim");
+      const rawBody = get("Body Class");
+      const rawDrive = get("Drive Type");
+
+      if (!rawMake) {
+        setDecodeError("Could not decode this VIN — enter details manually.");
+        return;
+      }
+
+      // Normalize Make to Title Case
+      const normMake = rawMake
+        .toLowerCase()
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+
+      // Normalize Drive Type: take part before "/"
+      const normDrive = rawDrive ? rawDrive.split("/")[0].trim() : "";
+
+      const parsedYear = rawYear ? parseInt(rawYear, 10) : null;
+
+      // Apply normalization rules (GM tonnage + body style mapping)
+      const { model: normModel, trim: normTrim, bodyStyle: normBody } =
+        normalizeDecodedVehicle(normMake, rawModel, rawSeries, rawBody);
+
+      // Set year
+      if (parsedYear && !isNaN(parsedYear)) setDisplayYear(parsedYear);
+
+      // Set make — try to match in dropdown list (case-insensitive)
+      const matchedMake = vehicleMakes.find(
+        (m) => m.name.toLowerCase() === normMake.toLowerCase()
+      );
+      let resolvedMakeId = "";
+      if (matchedMake) {
+        setMakeId(matchedMake.id);
+        resolvedMakeId = matchedMake.id;
+        setMakeIsManual(false);
+      } else {
+        setMakeId("");
+        setMakeIsManual(true);
+      }
+      setDisplayMake(normMake);
+
+      // Set model — try to match in dropdown filtered to the resolved make
+      const matchedModel = vehicleModels.find(
+        (m) =>
+          m.make_id === resolvedMakeId &&
+          m.name.toLowerCase() === normModel.toLowerCase()
+      );
+      if (matchedModel) {
+        setModelId(matchedModel.id);
+        setModelIsManual(false);
+      } else {
+        setModelId("");
+        setModelIsManual(true);
+      }
+      setDisplayModel(normModel);
+
+      // Set remaining fields
+      setTrim(normTrim);
+      if (normBody) setBodyStyle(normBody);
+      if (normDrive) setDrivetrain(normDrive);
+
+      const summaryYear =
+        parsedYear && !isNaN(parsedYear) ? parsedYear : displayYear;
+      const summaryParts = [normBody, normDrive].filter(Boolean).join(" · ");
+      setDecodeMsg(
+        `Decoded from VIN: ${summaryYear} ${normMake} ${normModel}${
+          summaryParts ? " · " + summaryParts : ""
+        }`
+      );
+    } catch {
+      setDecodeError("Could not decode this VIN — enter details manually.");
+    } finally {
+      setDecoding(false);
+    }
+  }
+
+  // ── Payload builder ───────────────────────────────────────────────────────────
+  // Includes vehicle_year/make/model so decode changes persist on Save.
   function buildPayload() {
     return {
+      vehicle_year: displayYear,
+      vehicle_make: displayMake || null,
+      vehicle_model: displayModel || null,
       vin: vin.trim() || null,
       trim: trim.trim() || null,
-      color: color.trim() || null,
-      body_style: bodyStyle.trim() || null,
-      drivetrain: drivetrain.trim() || null,
+      color: color || null,
+      body_style: bodyStyle || null,
+      drivetrain: drivetrain || null,
       odometer: odometer.trim() ? parseInt(odometer, 10) : null,
       acquisition_source: acquisitionSource || null,
       finance_type: financeType || null,
@@ -142,12 +370,12 @@ export default function UpdatePendingForm({
     };
   }
 
-  // ── Save Progress handler ─────────────────────────────────────────────────────
+  // ── Save Progress ─────────────────────────────────────────────────────────────
   async function handleSave() {
     setSaving(true);
     setSaved(false);
     setErrors([]);
-    setCloseErrors([]); // clear any lingering close errors when user saves progress
+    setCloseErrors([]);
 
     try {
       const supabase = createSupabaseBrowserClient();
@@ -157,14 +385,11 @@ export default function UpdatePendingForm({
         .eq("id", dealId);
 
       if (error) throw new Error(error.message);
-
       setSaved(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err: unknown) {
       const msg =
-        err instanceof Error
-          ? err.message
-          : "An unexpected error occurred. Please try again.";
+        err instanceof Error ? err.message : "An unexpected error occurred. Please try again.";
       setErrors([msg]);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
@@ -176,19 +401,14 @@ export default function UpdatePendingForm({
   function validateForClose(): string[] {
     const errs: string[] = [];
 
-    // Vehicle details
     if (!vin.trim()) errs.push("VIN is required");
     if (!trim.trim()) errs.push("Trim is required");
-    if (!color.trim()) errs.push("Color is required");
-    if (!bodyStyle.trim()) errs.push("Body style is required");
-    if (!drivetrain.trim()) errs.push("Drivetrain is required");
+    if (!color) errs.push("Color is required");
+    if (!bodyStyle) errs.push("Body style is required");
+    if (!drivetrain) errs.push("Drivetrain is required");
     if (!odometer.trim()) errs.push("Odometer is required");
-
-    // Acquisition & finance
     if (!acquisitionSource) errs.push("Acquisition source is required");
     if (!financeType) errs.push("Finance type is required");
-
-    // Financials — 0 is valid, blank is not. Never check === "0".
     if (frontProfit.trim() === "")
       errs.push("Front gross is required (enter 0 if zero)");
     if (backProfit.trim() === "")
@@ -196,7 +416,6 @@ export default function UpdatePendingForm({
     if (!salePrice.trim()) errs.push("Sale price is required");
     if (!age.trim()) errs.push("Age is required");
 
-    // Salespeople — count and share sum (shares stored as decimal, 1.0 = 100%)
     if (salespeopleCount < 1) {
       errs.push("At least one salesperson is required");
     } else if (Math.abs(shareSum - 1) >= 0.001) {
@@ -205,7 +424,6 @@ export default function UpdatePendingForm({
       );
     }
 
-    // Trades — every trade must have year, make, model, acv, exit_strategy
     trades.forEach((t, i) => {
       const label = trades.length > 1 ? ` (trade ${i + 1})` : "";
       if (t.year === null) errs.push(`Trade year is required${label}`);
@@ -219,7 +437,7 @@ export default function UpdatePendingForm({
     return errs;
   }
 
-  // ── Close Deal handler ────────────────────────────────────────────────────────
+  // ── Close Deal ────────────────────────────────────────────────────────────────
   async function handleClose() {
     const errs = validateForClose();
     if (errs.length > 0) {
@@ -237,24 +455,18 @@ export default function UpdatePendingForm({
 
     try {
       const supabase = createSupabaseBrowserClient();
-
-      // Single update: Step 2 fields + status='closed' in one round trip
       const { error } = await supabase
         .from("deals")
         .update({ ...buildPayload(), status: "closed" })
         .eq("id", dealId);
 
       if (error) throw new Error(error.message);
-
       setClosed(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
-      // Redirect to pending list after a short pause so the banner is readable
       setTimeout(() => router.push("/app/deals"), 2000);
     } catch (err: unknown) {
       const msg =
-        err instanceof Error
-          ? err.message
-          : "An unexpected error occurred. Please try again.";
+        err instanceof Error ? err.message : "An unexpected error occurred. Please try again.";
       setCloseErrors([`Close failed: ${msg}`]);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
@@ -264,17 +476,20 @@ export default function UpdatePendingForm({
 
   const busy = saving || closing || closed;
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
       {/* Page header */}
       <section className="app-panel p-5">
         <p className="app-kicker">Transaction Intake</p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">
-          Update Pending Deal
-        </h1>
+        <div className="mt-1 flex items-center gap-3">
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+            Update Deal
+          </h1>
+          <StatusBadge status={dealStatus} />
+        </div>
         <p className="mt-1 text-sm text-slate-500">
-          Step 2 — Fill economics and close when ready.
+          Fill economics and close when ready.
         </p>
       </section>
 
@@ -286,14 +501,14 @@ export default function UpdatePendingForm({
             <p className="font-semibold text-green-800">Deal closed</p>
             <p className="mt-0.5 text-sm text-green-700">
               Stock{" "}
-              <span className="font-mono font-semibold">#{stockNumber}</span> has
-              been marked Closed. Redirecting to Pending Deals…
+              <span className="font-mono font-semibold">#{stockNumber}</span>{" "}
+              has been marked Closed. Redirecting to Sales Registry…
             </p>
             <a
               href="/app/deals"
               className="mt-1 inline-block text-xs text-green-700 underline hover:text-green-900"
             >
-              Go to Pending Deals →
+              Go to Sales Registry →
             </a>
           </div>
         </div>
@@ -327,7 +542,7 @@ export default function UpdatePendingForm({
             <p className="mt-0.5 text-sm text-green-700">
               Deal{" "}
               <span className="font-mono font-semibold">#{stockNumber}</span>{" "}
-              updated — status remains Pending.
+              updated successfully.
             </p>
           </div>
           <button
@@ -376,7 +591,7 @@ export default function UpdatePendingForm({
             <div>
               <p className={LBL}>Vehicle</p>
               <p className="mt-0.5 text-sm text-slate-800">
-                {vehicleYear} {vehicleMake} {vehicleModel}
+                {displayYear} {displayMake} {displayModel}
               </p>
             </div>
             <div>
@@ -395,9 +610,45 @@ export default function UpdatePendingForm({
                   : `${salespeopleCount} · ${Math.round(shareSum * 100)}% allocated`}
               </p>
             </div>
+            <div>
+              <p className={LBL}>Status</p>
+              <div className="mt-0.5">
+                <StatusBadge status={dealStatus} />
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
+
+      {/* ── VIN decode success banner ─────────────────────────────────────────── */}
+      {decodeMsg && (
+        <div className="flex items-start gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+          <p className="flex-1 text-sm text-blue-800">{decodeMsg}</p>
+          <button
+            type="button"
+            onClick={() => setDecodeMsg(null)}
+            className="shrink-0 text-xs text-blue-600 underline hover:text-blue-900"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* ── VIN decode error banner ───────────────────────────────────────────── */}
+      {decodeError && (
+        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <p className="flex-1 text-sm text-amber-800">{decodeError}</p>
+          <button
+            type="button"
+            onClick={() => setDecodeError(null)}
+            className="shrink-0 text-xs text-amber-600 underline hover:text-amber-900"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* ── Vehicle Details ──────────────────────────────────────────────────── */}
       <Card className="app-panel border-[#e7ebf3] shadow-none">
@@ -405,15 +656,40 @@ export default function UpdatePendingForm({
           <CardTitle className="text-lg">Vehicle Details</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+
+          {/* Row 1: VIN (2 cols + Decode button) | Trim */}
           <div className="grid gap-4 sm:grid-cols-3">
-            <div className="space-y-1">
+            <div className="space-y-1 sm:col-span-2">
               <label className={LBL}>VIN</label>
-              <Input
-                value={vin}
-                onChange={(e) => setVin(e.target.value)}
-                placeholder="1GCUYDED0MZ123456"
-                disabled={closed}
-              />
+              <div className="flex gap-2">
+                <Input
+                  value={vin}
+                  onChange={(e) => {
+                    setVin(e.target.value);
+                    setDecodeMsg(null);
+                    setDecodeError(null);
+                  }}
+                  onBlur={() => {
+                    if (vin.trim().length === 17) handleDecodeVin();
+                  }}
+                  placeholder="1GCUYDED0MZ123456"
+                  disabled={closed || decoding}
+                  className="font-mono"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleDecodeVin}
+                  disabled={vin.trim().length !== 17 || decoding || closed}
+                  className="shrink-0"
+                >
+                  {decoding ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Decode VIN"
+                  )}
+                </Button>
+              </div>
             </div>
             <div className="space-y-1">
               <label className={LBL}>Trim</label>
@@ -424,36 +700,96 @@ export default function UpdatePendingForm({
                 disabled={closed}
               />
             </div>
-            <div className="space-y-1">
-              <label className={LBL}>Color</label>
-              <Input
-                value={color}
-                onChange={(e) => setColor(e.target.value)}
-                placeholder="Summit White"
-                disabled={closed}
-              />
-            </div>
           </div>
 
+          {/* Row 2: Make | Model | Odometer */}
           <div className="grid gap-4 sm:grid-cols-3">
+
+            {/* Make */}
             <div className="space-y-1">
-              <label className={LBL}>Body Style</label>
-              <Input
-                value={bodyStyle}
-                onChange={(e) => setBodyStyle(e.target.value)}
-                placeholder="Crew Cab"
-                disabled={closed}
-              />
+              <label className={LBL}>Make</label>
+              {makeIsManual ? (
+                <>
+                  <Input
+                    value={displayMake}
+                    onChange={(e) => setDisplayMake(e.target.value)}
+                    placeholder="e.g. Chevrolet"
+                    disabled={closed}
+                  />
+                  <p className="text-xs text-amber-600">
+                    ⚠ Not in vehicle list — verify or ask an admin to add it
+                  </p>
+                </>
+              ) : (
+                <select
+                  value={makeId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    const found = vehicleMakes.find((m) => m.id === id);
+                    setMakeId(id);
+                    setDisplayMake(found?.name ?? "");
+                    // Reset model when make changes
+                    setModelId("");
+                    setDisplayModel("");
+                    setModelIsManual(false);
+                  }}
+                  disabled={closed}
+                  className={SEL}
+                >
+                  <option value="">Select make</option>
+                  {vehicleMakes.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
+
+            {/* Model */}
             <div className="space-y-1">
-              <label className={LBL}>Drivetrain</label>
-              <Input
-                value={drivetrain}
-                onChange={(e) => setDrivetrain(e.target.value)}
-                placeholder="4WD"
-                disabled={closed}
-              />
+              <label className={LBL}>Model</label>
+              {makeIsManual || modelIsManual ? (
+                <>
+                  <Input
+                    value={displayModel}
+                    onChange={(e) => setDisplayModel(e.target.value)}
+                    placeholder="e.g. Silverado 1500"
+                    disabled={closed}
+                  />
+                  {modelIsManual && !makeIsManual && (
+                    <p className="text-xs text-amber-600">
+                      ⚠ Not in vehicle list — verify or ask an admin to add it
+                    </p>
+                  )}
+                </>
+              ) : (
+                <select
+                  value={modelId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    const found = vehicleModels.find((m) => m.id === id);
+                    setModelId(id);
+                    setDisplayModel(found?.name ?? "");
+                  }}
+                  disabled={closed || !makeId}
+                  className={SEL}
+                >
+                  <option value="">
+                    {makeId ? "Select model" : "Select make first"}
+                  </option>
+                  {vehicleModels
+                    .filter((m) => m.make_id === makeId)
+                    .map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                </select>
+              )}
             </div>
+
+            {/* Odometer */}
             <div className="space-y-1">
               <label className={LBL}>Odometer</label>
               <Input
@@ -466,6 +802,59 @@ export default function UpdatePendingForm({
               />
             </div>
           </div>
+
+          {/* Row 3: Color | Body Style | Drivetrain */}
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-1">
+              <label className={LBL}>Color</label>
+              <select
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+                disabled={closed}
+                className={SEL}
+              >
+                <option value="">Select color</option>
+                {COLORS.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className={LBL}>Body Style</label>
+              <select
+                value={bodyStyle}
+                onChange={(e) => setBodyStyle(e.target.value)}
+                disabled={closed}
+                className={SEL}
+              >
+                <option value="">Select body style</option>
+                {BODY_STYLES.map((b) => (
+                  <option key={b} value={b}>
+                    {b}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className={LBL}>Drivetrain</label>
+              <select
+                value={drivetrain}
+                onChange={(e) => setDrivetrain(e.target.value)}
+                disabled={closed}
+                className={SEL}
+              >
+                <option value="">Select drivetrain</option>
+                {DRIVETRAINS.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
         </CardContent>
       </Card>
 
@@ -476,7 +865,6 @@ export default function UpdatePendingForm({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-3">
-            {/* Acquisition source — stores the name string, not a uuid */}
             <div className="space-y-1">
               <label className={LBL}>Acquisition Source</label>
               <select
@@ -497,8 +885,6 @@ export default function UpdatePendingForm({
                 ))}
               </select>
             </div>
-
-            {/* Finance type — lowercase enum stored in DB */}
             <div className="space-y-1">
               <label className={LBL}>Finance Type</label>
               <select
@@ -514,8 +900,6 @@ export default function UpdatePendingForm({
                 <option value="cash">Cash</option>
               </select>
             </div>
-
-            {/* Finance manager — uuid FK; table is currently empty, handled gracefully */}
             <div className="space-y-1">
               <label className={LBL}>Finance Manager</label>
               <select
@@ -578,7 +962,6 @@ export default function UpdatePendingForm({
               />
             </div>
           </div>
-
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-1">
               <label className={LBL}>Age (days in stock)</label>
