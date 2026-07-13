@@ -8,6 +8,7 @@ type DealRow = {
   status: string;
   store_id: string;
   department_id: string;
+  sale_date: string;
   stock_number: string;
   customer_last_name: string;
   vehicle_year: number;
@@ -31,6 +32,7 @@ type DealRow = {
 type SpRow = { salesperson_id: string; share_percent: number };
 type VehicleMakeRow = { id: string; name: string };
 type VehicleModelRow = { id: string; name: string; make_id: string };
+type DeptOption = { id: string; name: string };
 
 type TradeRow = {
   year: number | null;
@@ -71,7 +73,7 @@ export default async function EditDealPage({ params }: { params: { id: string } 
   const { data: dealData, error: dealFetchError } = await supabase
     .from("deals")
     .select(
-      "id,status,store_id,department_id,stock_number,customer_last_name," +
+      "id,status,store_id,department_id,sale_date,stock_number,customer_last_name," +
         "vehicle_year,vehicle_make,vehicle_model," +
         "vin,trim,color,body_style,drivetrain,odometer," +
         "acquisition_source,finance_type,finance_manager_id," +
@@ -115,9 +117,9 @@ export default async function EditDealPage({ params }: { params: { id: string } 
         .order("name"),
       supabase
         .from("departments")
-        .select("name")
-        .eq("id", deal.department_id)
-        .maybeSingle(),
+        .select("id,name")
+        .eq("store_id", deal.store_id)
+        .order("name"),
       supabase
         .from("deal_salespeople")
         .select("salesperson_id,share_percent")
@@ -140,8 +142,7 @@ export default async function EditDealPage({ params }: { params: { id: string } 
 
   const acquisitionSources = (srcResult.data ?? []) as { id: string; name: string }[];
   const financeManagers = (fmResult.data ?? []) as { id: string; name: string }[];
-  const departmentName =
-    (deptResult.data as { name: string } | null)?.name ?? "Unknown Department";
+  const departments = (deptResult.data ?? []) as DeptOption[];
 
   const dealSalespeople = (spResult.data ?? []) as SpRow[];
   const salespeopleCount = dealSalespeople.length;
@@ -161,7 +162,9 @@ export default async function EditDealPage({ params }: { params: { id: string } 
       vehicleMake={deal.vehicle_make}
       vehicleModel={deal.vehicle_model}
       storeName={storeName}
-      departmentName={departmentName}
+      initialSaleDate={deal.sale_date}
+      initialDepartmentId={deal.department_id}
+      departments={departments}
       initialVin={deal.vin}
       initialTrim={deal.trim}
       initialColor={deal.color}

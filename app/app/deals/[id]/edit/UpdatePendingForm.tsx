@@ -20,15 +20,18 @@ interface Props {
   // Identifiers
   dealId: string;
   dealStatus: string;
-  // Read-only context
+  // Step 1 fields — editable until closed
   stockNumber: string;
   customerLastName: string;
+  initialSaleDate: string;
+  initialDepartmentId: string;
+  departments: { id: string; name: string }[];
+  // Read-only context
   vehicleYear: number;
   vehicleMake: string;
   vehicleModel: string;
   storeName: string;
-  departmentName: string;
-  // Pre-filled Step 2 fields (null = not yet entered)
+  // Step 2 fields (null = not yet entered)
   initialVin: string | null;
   initialTrim: string | null;
   initialColor: string | null;
@@ -138,13 +141,16 @@ function StatusBadge({ status }: { status: string }) {
 export default function UpdatePendingForm({
   dealId,
   dealStatus,
-  stockNumber,
-  customerLastName,
+  // Destructure with "initial" aliases so state can own the canonical names
+  stockNumber: initialStockNumber,
+  customerLastName: initialCustomerLastName,
+  initialSaleDate,
+  initialDepartmentId,
+  departments,
   vehicleYear,
   vehicleMake,
   vehicleModel,
   storeName,
-  departmentName,
   initialVin,
   initialTrim,
   initialColor,
@@ -168,13 +174,18 @@ export default function UpdatePendingForm({
 }: Props) {
   const router = useRouter();
 
+  // ── Step 1 editable state ─────────────────────────────────────────────────────
+  const [stockNumber, setStockNumber] = useState(initialStockNumber);
+  const [customerLastName, setCustomerLastName] = useState(initialCustomerLastName);
+  const [saleDate, setSaleDate] = useState(initialSaleDate ?? "");
+  const [departmentId, setDepartmentId] = useState(initialDepartmentId ?? "");
+
   // ── Decoded vehicle identity (saved via buildPayload) ─────────────────────────
   const [displayYear, setDisplayYear] = useState<number>(vehicleYear);
   const [displayMake, setDisplayMake] = useState(vehicleMake);
   const [displayModel, setDisplayModel] = useState(vehicleModel);
 
   // ── Make/Model dropdown IDs + manual-override flags ───────────────────────────
-  // On load: pre-select from dropdowns if the existing deal values are in the list.
   const [makeId, setMakeId] = useState<string>(() => {
     const found = vehicleMakes.find(
       (m) => m.name.toLowerCase() === vehicleMake.toLowerCase()
@@ -204,7 +215,6 @@ export default function UpdatePendingForm({
     const mk = vehicleMakes.find(
       (m) => m.name.toLowerCase() === vehicleMake.toLowerCase()
     );
-    // If make isn't in the list, model is also manual
     if (!mk) return !!vehicleModel;
     return !vehicleModels.some(
       (m) =>
@@ -218,7 +228,7 @@ export default function UpdatePendingForm({
   const [decodeMsg, setDecodeMsg] = useState<string | null>(null);
   const [decodeError, setDecodeError] = useState<string | null>(null);
 
-  // ── Editable field state ──────────────────────────────────────────────────────
+  // ── Step 2 editable state ─────────────────────────────────────────────────────
   const [vin, setVin] = useState(initialVin ?? "");
   const [trim, setTrim] = useState(initialTrim ?? "");
   const [color, setColor] = useState(initialColor ?? "");
@@ -280,24 +290,18 @@ export default function UpdatePendingForm({
         return;
       }
 
-      // Normalize Make to Title Case
       const normMake = rawMake
         .toLowerCase()
         .replace(/\b\w/g, (c) => c.toUpperCase());
 
-      // Normalize Drive Type: take part before "/"
       const normDrive = rawDrive ? rawDrive.split("/")[0].trim() : "";
-
       const parsedYear = rawYear ? parseInt(rawYear, 10) : null;
 
-      // Apply normalization rules (GM tonnage + body style mapping)
       const { model: normModel, trim: normTrim, bodyStyle: normBody } =
         normalizeDecodedVehicle(normMake, rawModel, rawSeries, rawBody);
 
-      // Set year
       if (parsedYear && !isNaN(parsedYear)) setDisplayYear(parsedYear);
 
-      // Set make — try to match in dropdown list (case-insensitive)
       const matchedMake = vehicleMakes.find(
         (m) => m.name.toLowerCase() === normMake.toLowerCase()
       );
@@ -312,7 +316,6 @@ export default function UpdatePendingForm({
       }
       setDisplayMake(normMake);
 
-      // Set model — try to match in dropdown filtered to the resolved make
       const matchedModel = vehicleModels.find(
         (m) =>
           m.make_id === resolvedMakeId &&
@@ -327,7 +330,6 @@ export default function UpdatePendingForm({
       }
       setDisplayModel(normModel);
 
-      // Set remaining fields
       setTrim(normTrim);
       if (normBody) setBodyStyle(normBody);
       if (normDrive) setDrivetrain(normDrive);
@@ -348,12 +350,18 @@ export default function UpdatePendingForm({
   }
 
   // ── Payload builder ───────────────────────────────────────────────────────────
-  // Includes vehicle_year/make/model so decode changes persist on Save.
   function buildPayload() {
     return {
+      // Step 1 fields
+      sale_date: saleDate || null,
+      stock_number: stockNumber.trim() || null,
+      customer_last_name: customerLastName.trim() || null,
+      department_id: departmentId || null,
+      // Vehicle identity (updated by decode or Make/Model dropdowns)
       vehicle_year: displayYear,
       vehicle_make: displayMake || null,
       vehicle_model: displayModel || null,
+      // Step 2 fields
       vin: vin.trim() || null,
       trim: trim.trim() || null,
       color: color || null,
@@ -401,14 +409,25 @@ export default function UpdatePendingForm({
   function validateForClose(): string[] {
     const errs: string[] = [];
 
+    // Step 1 fields
+    if (!saleDate) errs.push("Sale date is required");
+    if (!stockNumber.trim()) errs.push("Stock number is required");
+    if (!customerLastName.trim()) errs.push("Customer last name is required");
+    if (!departmentId) errs.push("Department is required");
+
+    // Step 2 — vehicle details
     if (!vin.trim()) errs.push("VIN is required");
     if (!trim.trim()) errs.push("Trim is required");
     if (!color) errs.push("Color is required");
     if (!bodyStyle) errs.push("Body style is required");
     if (!drivetrain) errs.push("Drivetrain is required");
     if (!odometer.trim()) errs.push("Odometer is required");
+
+    // Acquisition & finance
     if (!acquisitionSource) errs.push("Acquisition source is required");
     if (!financeType) errs.push("Finance type is required");
+
+    // Financials — 0 is valid, blank is not
     if (frontProfit.trim() === "")
       errs.push("Front gross is required (enter 0 if zero)");
     if (backProfit.trim() === "")
@@ -416,6 +435,7 @@ export default function UpdatePendingForm({
     if (!salePrice.trim()) errs.push("Sale price is required");
     if (!age.trim()) errs.push("Age is required");
 
+    // Salespeople
     if (salespeopleCount < 1) {
       errs.push("At least one salesperson is required");
     } else if (Math.abs(shareSum - 1) >= 0.001) {
@@ -424,6 +444,7 @@ export default function UpdatePendingForm({
       );
     }
 
+    // Trades
     trades.forEach((t, i) => {
       const label = trades.length > 1 ? ` (trade ${i + 1})` : "";
       if (t.year === null) errs.push(`Trade year is required${label}`);
@@ -473,6 +494,11 @@ export default function UpdatePendingForm({
       setClosing(false);
     }
   }
+
+  // isLocked reflects the deal's actual persisted status, not just session state.
+  // closed/unwound deals are read-only; Stage 5 adds a Reopen action.
+  const isLocked =
+    dealStatus === "closed" || dealStatus === "unwound" || closed;
 
   const busy = saving || closing || closed;
 
@@ -569,50 +595,88 @@ export default function UpdatePendingForm({
         </div>
       )}
 
-      {/* ── Deal Context (read-only) ─────────────────────────────────────────── */}
+      {/* ── Deal Details (Step 1 — editable until closed) ────────────────────── */}
       <Card className="app-panel border-[#e7ebf3] shadow-none">
         <CardHeader className="border-[#edf1f7]">
-          <CardTitle className="text-lg">Deal Context</CardTitle>
+          <CardTitle className="text-lg">Deal Details</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="grid gap-x-6 gap-y-4 sm:grid-cols-3">
-            <div>
-              <p className={LBL}>Stock #</p>
-              <p className="mt-0.5 font-mono text-sm font-semibold text-slate-800">
-                {stockNumber}
+        <CardContent className="space-y-4">
+          {/* Row 1: Sale Date | Customer Last Name | Stock # */}
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-1">
+              <label className={LBL}>Sale Date</label>
+              <Input
+                type="date"
+                value={saleDate}
+                onChange={(e) => setSaleDate(e.target.value)}
+                disabled={isLocked}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className={LBL}>Customer Last Name</label>
+              <Input
+                value={customerLastName}
+                onChange={(e) => setCustomerLastName(e.target.value)}
+                placeholder="Smith"
+                disabled={isLocked}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className={LBL}>Stock #</label>
+              <Input
+                value={stockNumber}
+                onChange={(e) => setStockNumber(e.target.value)}
+                placeholder="12345"
+                disabled={isLocked}
+              />
+            </div>
+          </div>
+
+          {/* Row 2: Department | Store (read-only) | Vehicle (read-only computed) */}
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-1">
+              <label className={LBL}>Department</label>
+              <select
+                value={departmentId}
+                onChange={(e) => setDepartmentId(e.target.value)}
+                disabled={isLocked}
+                className={SEL}
+              >
+                <option value="">Select department</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className={LBL}>Store</label>
+              <p className="flex h-10 items-center text-sm text-slate-600">
+                {storeName}
               </p>
             </div>
-            <div>
-              <p className={LBL}>Customer</p>
-              <p className="mt-0.5 text-sm font-medium text-slate-800">
-                {customerLastName}
-              </p>
-            </div>
-            <div>
-              <p className={LBL}>Vehicle</p>
-              <p className="mt-0.5 text-sm text-slate-800">
+            <div className="space-y-1">
+              <label className={LBL}>Vehicle</label>
+              <p className="flex h-10 items-center text-sm text-slate-600">
                 {displayYear} {displayMake} {displayModel}
               </p>
             </div>
-            <div>
-              <p className={LBL}>Store</p>
-              <p className="mt-0.5 text-sm text-slate-600">{storeName}</p>
-            </div>
-            <div>
-              <p className={LBL}>Department</p>
-              <p className="mt-0.5 text-sm text-slate-600">{departmentName}</p>
-            </div>
-            <div>
-              <p className={LBL}>Salespeople</p>
-              <p className="mt-0.5 text-sm text-slate-600">
+          </div>
+
+          {/* Row 3: Salespeople summary | Status */}
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-1">
+              <label className={LBL}>Salespeople</label>
+              <p className="flex h-10 items-center text-sm text-slate-600">
                 {salespeopleCount === 0
                   ? "None assigned"
                   : `${salespeopleCount} · ${Math.round(shareSum * 100)}% allocated`}
               </p>
             </div>
-            <div>
-              <p className={LBL}>Status</p>
-              <div className="mt-0.5">
+            <div className="space-y-1">
+              <label className={LBL}>Status</label>
+              <div className="flex h-10 items-center">
                 <StatusBadge status={dealStatus} />
               </div>
             </div>
@@ -673,14 +737,14 @@ export default function UpdatePendingForm({
                     if (vin.trim().length === 17) handleDecodeVin();
                   }}
                   placeholder="1GCUYDED0MZ123456"
-                  disabled={closed || decoding}
+                  disabled={isLocked || decoding}
                   className="font-mono"
                 />
                 <Button
                   type="button"
                   variant="outline"
                   onClick={handleDecodeVin}
-                  disabled={vin.trim().length !== 17 || decoding || closed}
+                  disabled={vin.trim().length !== 17 || decoding || isLocked}
                   className="shrink-0"
                 >
                   {decoding ? (
@@ -697,7 +761,7 @@ export default function UpdatePendingForm({
                 value={trim}
                 onChange={(e) => setTrim(e.target.value)}
                 placeholder="LT Trail Boss"
-                disabled={closed}
+                disabled={isLocked}
               />
             </div>
           </div>
@@ -714,7 +778,7 @@ export default function UpdatePendingForm({
                     value={displayMake}
                     onChange={(e) => setDisplayMake(e.target.value)}
                     placeholder="e.g. Chevrolet"
-                    disabled={closed}
+                    disabled={isLocked}
                   />
                   <p className="text-xs text-amber-600">
                     ⚠ Not in vehicle list — verify or ask an admin to add it
@@ -728,12 +792,11 @@ export default function UpdatePendingForm({
                     const found = vehicleMakes.find((m) => m.id === id);
                     setMakeId(id);
                     setDisplayMake(found?.name ?? "");
-                    // Reset model when make changes
                     setModelId("");
                     setDisplayModel("");
                     setModelIsManual(false);
                   }}
-                  disabled={closed}
+                  disabled={isLocked}
                   className={SEL}
                 >
                   <option value="">Select make</option>
@@ -755,7 +818,7 @@ export default function UpdatePendingForm({
                     value={displayModel}
                     onChange={(e) => setDisplayModel(e.target.value)}
                     placeholder="e.g. Silverado 1500"
-                    disabled={closed}
+                    disabled={isLocked}
                   />
                   {modelIsManual && !makeIsManual && (
                     <p className="text-xs text-amber-600">
@@ -772,7 +835,7 @@ export default function UpdatePendingForm({
                     setModelId(id);
                     setDisplayModel(found?.name ?? "");
                   }}
-                  disabled={closed || !makeId}
+                  disabled={isLocked || !makeId}
                   className={SEL}
                 >
                   <option value="">
@@ -798,7 +861,7 @@ export default function UpdatePendingForm({
                 onChange={(e) => setOdometer(e.target.value)}
                 placeholder="12450"
                 min={0}
-                disabled={closed}
+                disabled={isLocked}
               />
             </div>
           </div>
@@ -810,7 +873,7 @@ export default function UpdatePendingForm({
               <select
                 value={color}
                 onChange={(e) => setColor(e.target.value)}
-                disabled={closed}
+                disabled={isLocked}
                 className={SEL}
               >
                 <option value="">Select color</option>
@@ -826,7 +889,7 @@ export default function UpdatePendingForm({
               <select
                 value={bodyStyle}
                 onChange={(e) => setBodyStyle(e.target.value)}
-                disabled={closed}
+                disabled={isLocked}
                 className={SEL}
               >
                 <option value="">Select body style</option>
@@ -842,7 +905,7 @@ export default function UpdatePendingForm({
               <select
                 value={drivetrain}
                 onChange={(e) => setDrivetrain(e.target.value)}
-                disabled={closed}
+                disabled={isLocked}
                 className={SEL}
               >
                 <option value="">Select drivetrain</option>
@@ -870,7 +933,7 @@ export default function UpdatePendingForm({
               <select
                 value={acquisitionSource}
                 onChange={(e) => setAcquisitionSource(e.target.value)}
-                disabled={closed}
+                disabled={isLocked}
                 className={SEL}
               >
                 <option value="">
@@ -890,7 +953,7 @@ export default function UpdatePendingForm({
               <select
                 value={financeType}
                 onChange={(e) => setFinanceType(e.target.value)}
-                disabled={closed}
+                disabled={isLocked}
                 className={SEL}
               >
                 <option value="">None</option>
@@ -905,7 +968,7 @@ export default function UpdatePendingForm({
               <select
                 value={financeManagerId}
                 onChange={(e) => setFinanceManagerId(e.target.value)}
-                disabled={closed || financeManagers.length === 0}
+                disabled={isLocked || financeManagers.length === 0}
                 className={SEL}
               >
                 <option value="">
@@ -938,7 +1001,7 @@ export default function UpdatePendingForm({
                 value={frontProfit}
                 onChange={(e) => setFrontProfit(e.target.value)}
                 placeholder="1200"
-                disabled={closed}
+                disabled={isLocked}
               />
             </div>
             <div className="space-y-1">
@@ -948,7 +1011,7 @@ export default function UpdatePendingForm({
                 value={backProfit}
                 onChange={(e) => setBackProfit(e.target.value)}
                 placeholder="900"
-                disabled={closed}
+                disabled={isLocked}
               />
             </div>
             <div className="space-y-1">
@@ -958,7 +1021,7 @@ export default function UpdatePendingForm({
                 value={salePrice}
                 onChange={(e) => setSalePrice(e.target.value)}
                 placeholder="52500"
-                disabled={closed}
+                disabled={isLocked}
               />
             </div>
           </div>
@@ -971,7 +1034,7 @@ export default function UpdatePendingForm({
                 onChange={(e) => setAge(e.target.value)}
                 placeholder="14"
                 min={0}
-                disabled={closed}
+                disabled={isLocked}
               />
             </div>
           </div>
@@ -979,25 +1042,27 @@ export default function UpdatePendingForm({
       </Card>
 
       {/* ── Action bar ───────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-end gap-3 pb-6">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={handleSave}
-          disabled={busy}
-          className="min-w-[160px]"
-        >
-          {saving ? "Saving…" : "Save Progress"}
-        </Button>
-        <Button
-          type="button"
-          onClick={handleClose}
-          disabled={busy}
-          className="min-w-[160px] bg-green-700 hover:bg-green-800"
-        >
-          {closing ? "Closing…" : "Close Deal"}
-        </Button>
-      </div>
+      {!isLocked && (
+        <div className="flex items-center justify-end gap-3 pb-6">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleSave}
+            disabled={busy}
+            className="min-w-[160px]"
+          >
+            {saving ? "Saving…" : "Save Progress"}
+          </Button>
+          <Button
+            type="button"
+            onClick={handleClose}
+            disabled={busy}
+            className="min-w-[160px] bg-green-700 hover:bg-green-800"
+          >
+            {closing ? "Closing…" : "Close Deal"}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
