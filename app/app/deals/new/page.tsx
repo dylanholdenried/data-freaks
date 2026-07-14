@@ -3,9 +3,10 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import NewDealForm from "./NewDealForm";
 
-// Matches the prop types expected by NewDealForm
 type StoreRow = { id: string; name: string };
 type ItemRow = { id: string; name: string; store_id: string };
+type VehicleMakeRow = { id: string; name: string };
+type VehicleModelRow = { id: string; name: string; make_id: string };
 
 export default async function NewDealPage() {
   const supabase = createSupabaseServerClient();
@@ -35,23 +36,21 @@ export default async function NewDealPage() {
   let departments: ItemRow[] = [];
   let salespeople: ItemRow[] = [];
 
-  if (storeIds.length > 0) {
-    const [deptResult, spResult] = await Promise.all([
-      supabase
-        .from("departments")
-        .select("id,name,store_id")
-        .in("store_id", storeIds)
-        .order("name"),
-      supabase
-        .from("salespeople")
-        .select("id,name,store_id")
-        .in("store_id", storeIds)
-        .eq("active", true)
-        .order("name"),
-    ]);
-    departments = (deptResult.data ?? []) as unknown as ItemRow[];
-    salespeople = (spResult.data ?? []) as unknown as ItemRow[];
-  }
+  const [deptResult, spResult, vMakesResult, vModelsResult] = await Promise.all([
+    storeIds.length > 0
+      ? supabase.from("departments").select("id,name,store_id").in("store_id", storeIds).order("name")
+      : Promise.resolve({ data: [] as ItemRow[] }),
+    storeIds.length > 0
+      ? supabase.from("salespeople").select("id,name,store_id").in("store_id", storeIds).eq("active", true).order("name")
+      : Promise.resolve({ data: [] as ItemRow[] }),
+    supabase.from("vehicle_makes").select("id,name").eq("active", true).order("name"),
+    supabase.from("vehicle_models").select("id,name,make_id").eq("active", true).order("name"),
+  ]);
+
+  departments = (deptResult.data ?? []) as unknown as ItemRow[];
+  salespeople = (spResult.data ?? []) as unknown as ItemRow[];
+  const vehicleMakes = (vMakesResult.data ?? []) as unknown as VehicleMakeRow[];
+  const vehicleModels = (vModelsResult.data ?? []) as unknown as VehicleModelRow[];
 
   return (
     <NewDealForm
@@ -59,6 +58,8 @@ export default async function NewDealPage() {
       stores={stores}
       departments={departments}
       salespeople={salespeople}
+      vehicleMakes={vehicleMakes}
+      vehicleModels={vehicleModels}
     />
   );
 }

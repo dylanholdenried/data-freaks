@@ -5,7 +5,8 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CheckCircle2, PlusCircle, Trash2 } from "lucide-react";
+import { CheckCircle2, Loader2, PlusCircle, Trash2, XCircle } from "lucide-react";
+import { BODY_STYLES, DRIVETRAINS, decodeVin, VinDecodeError } from "@/lib/vehicle";
 
 type Store = { id: string; name: string };
 type Department = { id: string; name: string; store_id: string };
@@ -16,6 +17,8 @@ interface Props {
   stores: Store[];
   departments: Department[];
   salespeople: Salesperson[];
+  vehicleMakes: { id: string; name: string }[];
+  vehicleModels: { id: string; name: string; make_id: string }[];
 }
 
 type Trade = {
@@ -29,7 +32,7 @@ type Trade = {
 
 type Split = {
   salesperson_id: string;
-  share: string; // UI display: "100" = 100%; stored in DB as 1.0
+  share: string; // UI display: "100" = 100%; stored in DB as whole number
 };
 
 const emptyTrade = (): Trade => ({
@@ -49,7 +52,14 @@ const SEL =
 
 const LBL = "text-xs font-medium text-slate-500";
 
-export default function NewDealForm({ userId, stores, departments, salespeople }: Props) {
+export default function NewDealForm({
+  userId,
+  stores,
+  departments,
+  salespeople,
+  vehicleMakes,
+  vehicleModels,
+}: Props) {
   // ── Form state ──────────────────────────────────────────────────────────────
   const [storeId, setStoreId] = useState("");
   const [departmentId, setDepartmentId] = useState("");
@@ -63,6 +73,19 @@ export default function NewDealForm({ userId, stores, departments, salespeople }
   const [hasTrade, setHasTrade] = useState(false);
   const [trades, setTrades] = useState<Trade[]>([emptyTrade()]);
   const [notes, setNotes] = useState("");
+
+  // ── VIN decode state ─────────────────────────────────────────────────────────
+  const [vin, setVin] = useState("");
+  const [trim, setTrim] = useState("");
+  const [bodyStyle, setBodyStyle] = useState("");
+  const [drivetrain, setDrivetrain] = useState("");
+  const [decoding, setDecoding] = useState(false);
+  const [decodeError, setDecodeError] = useState<string | null>(null);
+  const [makeId, setMakeId] = useState("");
+  const [makeIsManual, setMakeIsManual] = useState(false);
+  const [modelId, setModelId] = useState("");
+  const [modelIsManual, setModelIsManual] = useState(false);
+  const [decoded, setDecoded] = useState(false);
 
   // ── UI state ─────────────────────────────────────────────────────────────────
   const [saving, setSaving] = useState(false);
@@ -81,6 +104,63 @@ export default function NewDealForm({ userId, stores, departments, salespeople }
     setStoreId(id);
     setDepartmentId("");
     setSplits([{ salesperson_id: "", share: "100" }]);
+  }
+
+  // ── VIN Decoder ──────────────────────────────────────────────────────────────
+  async function handleDecodeVin() {
+    const v = vin.trim();
+    if (v.length !== 17) return;
+
+    setDecoding(true);
+    setDecodeError(null);
+
+    try {
+      const d = await decodeVin(v);
+
+      if (d.year !== null) setVehicleYear(String(d.year));
+
+      const matchedMake = vehicleMakes.find(
+        (m) => m.name.toLowerCase() === d.make.toLowerCase()
+      );
+      let resolvedMakeId = "";
+      if (matchedMake) {
+        setMakeId(matchedMake.id);
+        resolvedMakeId = matchedMake.id;
+        setMakeIsManual(false);
+      } else {
+        setMakeId("");
+        setMakeIsManual(true);
+      }
+      setVehicleMake(d.make);
+
+      const matchedModel = vehicleModels.find(
+        (m) =>
+          m.make_id === resolvedMakeId &&
+          m.name.toLowerCase() === d.model.toLowerCase()
+      );
+      if (matchedModel) {
+        setModelId(matchedModel.id);
+        setModelIsManual(false);
+      } else {
+        setModelId("");
+        setModelIsManual(true);
+      }
+      setVehicleModel(d.model);
+
+      setTrim(d.trim);
+      if (d.bodyStyle) setBodyStyle(d.bodyStyle);
+      if (d.drivetrain) setDrivetrain(d.drivetrain);
+
+      setDecoded(true);
+    } catch (err) {
+      if (err instanceof VinDecodeError) {
+        setDecodeError(err.message);
+      } else {
+        setDecodeError("Could not decode this VIN — enter details manually.");
+      }
+    } finally {
+      setDecoding(false);
+    }
   }
 
   // ── Salesperson split helpers ────────────────────────────────────────────────
@@ -126,6 +206,17 @@ export default function NewDealForm({ userId, stores, departments, salespeople }
     setTrades([emptyTrade()]);
     setNotes("");
     setErrors([]);
+    setVin("");
+    setTrim("");
+    setBodyStyle("");
+    setDrivetrain("");
+    setDecoding(false);
+    setDecodeError(null);
+    setMakeId("");
+    setMakeIsManual(false);
+    setModelId("");
+    setModelIsManual(false);
+    setDecoded(false);
   }
 
   // ── Validation ───────────────────────────────────────────────────────────────
@@ -171,7 +262,7 @@ export default function NewDealForm({ userId, stores, departments, salespeople }
     try {
       const supabase = createSupabaseBrowserClient();
 
-      // 1. Insert deal — only confirmed real columns
+      // 1. Insert deal
       const { data: deal, error: dealError } = await supabase
         .from("deals")
         .insert({
@@ -183,6 +274,10 @@ export default function NewDealForm({ userId, stores, departments, salespeople }
           vehicle_year: parseInt(vehicleYear, 10),
           vehicle_make: vehicleMake.trim(),
           vehicle_model: vehicleModel.trim(),
+          vin: vin.trim() || null,
+          trim: trim.trim() || null,
+          body_style: bodyStyle || null,
+          drivetrain: drivetrain || null,
           status: "pending",
           entered_by: userId,
         })
@@ -192,7 +287,7 @@ export default function NewDealForm({ userId, stores, departments, salespeople }
       if (dealError) throw new Error(`Deal insert failed: ${dealError.message}`);
       const dealId = deal.id;
 
-      // 2. Insert deal_salespeople (share stored as decimal: 100% → 1.0)
+      // 2. Insert deal_salespeople (share stored as whole number: 100% → 100)
       const activeSplits = splits.filter((s) => s.salesperson_id);
       if (activeSplits.length > 0) {
         const { error: spError } = await supabase.from("deal_salespeople").insert(
@@ -221,7 +316,7 @@ export default function NewDealForm({ userId, stores, departments, salespeople }
         if (tradeError) throw new Error(`Trade insert failed: ${tradeError.message}`);
       }
 
-      // 4. Insert note (deal_notes.note — confirmed column name)
+      // 4. Insert note
       if (notes.trim()) {
         const { error: noteError } = await supabase
           .from("deal_notes")
@@ -341,6 +436,73 @@ export default function NewDealForm({ userId, stores, departments, salespeople }
           <CardTitle className="text-lg">Deal Details</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+
+          {/* VIN */}
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-1 sm:col-span-2">
+              <label className={LBL}>VIN (optional)</label>
+              <div className="flex gap-2">
+                <Input
+                  value={vin}
+                  onChange={(e) => {
+                    setVin(e.target.value);
+                    setDecodeError(null);
+                    setDecoded(false);
+                  }}
+                  onBlur={() => {
+                    if (vin.trim().length === 17) handleDecodeVin();
+                  }}
+                  placeholder="1GCUYDED0MZ123456"
+                  disabled={decoding}
+                  className="font-mono"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleDecodeVin}
+                  disabled={vin.trim().length !== 17 || decoding}
+                  className="shrink-0"
+                >
+                  {decoding ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Decode VIN"
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Decode success indicator */}
+          {decoded && (
+            <p className="text-sm text-green-700">
+              ✓ Decoded from VIN —{" "}
+              <button
+                type="button"
+                onClick={() => setDecoded(false)}
+                className="text-xs text-green-600 underline hover:text-green-900"
+              >
+                Edit manually
+              </button>
+            </p>
+          )}
+
+          {/* Decode error */}
+          {decodeError && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <p className="flex-1 text-sm text-amber-800">{decodeError}</p>
+              <button
+                type="button"
+                onClick={() => setDecodeError(null)}
+                className="shrink-0 text-xs text-amber-600 underline hover:text-amber-900"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          {/* Sale Date | Customer Last Name | Stock # */}
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-1">
               <label className={LBL}>Sale Date *</label>
@@ -368,7 +530,10 @@ export default function NewDealForm({ userId, stores, departments, salespeople }
             </div>
           </div>
 
+          {/* Year | Make | Model */}
           <div className="grid gap-4 sm:grid-cols-3">
+
+            {/* Year */}
             <div className="space-y-1">
               <label className={LBL}>Year *</label>
               <Input
@@ -378,25 +543,137 @@ export default function NewDealForm({ userId, stores, departments, salespeople }
                 placeholder="2024"
                 min={1900}
                 max={2100}
+                disabled={decoded}
               />
             </div>
+
+            {/* Make */}
             <div className="space-y-1">
               <label className={LBL}>Make *</label>
+              {makeIsManual ? (
+                <>
+                  <Input
+                    value={vehicleMake}
+                    onChange={(e) => setVehicleMake(e.target.value)}
+                    placeholder="e.g. Chevrolet"
+                    disabled={decoded}
+                  />
+                  {!decoded && (
+                    <p className="text-xs text-amber-600">
+                      ⚠ Not in vehicle list — verify or ask an admin to add it
+                    </p>
+                  )}
+                </>
+              ) : (
+                <select
+                  value={makeId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    const found = vehicleMakes.find((m) => m.id === id);
+                    setMakeId(id);
+                    setVehicleMake(found?.name ?? "");
+                    setModelId("");
+                    setVehicleModel("");
+                    setModelIsManual(false);
+                  }}
+                  disabled={decoded}
+                  className={SEL}
+                >
+                  <option value="">Select make</option>
+                  {vehicleMakes.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {/* Model */}
+            <div className="space-y-1">
+              <label className={LBL}>Model *</label>
+              {makeIsManual || modelIsManual ? (
+                <>
+                  <Input
+                    value={vehicleModel}
+                    onChange={(e) => setVehicleModel(e.target.value)}
+                    placeholder="e.g. Silverado 1500"
+                    disabled={decoded}
+                  />
+                  {modelIsManual && !makeIsManual && !decoded && (
+                    <p className="text-xs text-amber-600">
+                      ⚠ Not in vehicle list — verify or ask an admin to add it
+                    </p>
+                  )}
+                </>
+              ) : (
+                <select
+                  value={modelId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    const found = vehicleModels.find((m) => m.id === id);
+                    setModelId(id);
+                    setVehicleModel(found?.name ?? "");
+                  }}
+                  disabled={decoded || !makeId}
+                  className={SEL}
+                >
+                  <option value="">{makeId ? "Select model" : "Select make first"}</option>
+                  {vehicleModels
+                    .filter((m) => m.make_id === makeId)
+                    .map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                </select>
+              )}
+            </div>
+
+          </div>
+
+          {/* Trim | Body Style | Drivetrain */}
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-1">
+              <label className={LBL}>Trim</label>
               <Input
-                value={vehicleMake}
-                onChange={(e) => setVehicleMake(e.target.value)}
-                placeholder="Chevrolet"
+                value={trim}
+                onChange={(e) => setTrim(e.target.value)}
+                placeholder="LT Trail Boss"
               />
             </div>
             <div className="space-y-1">
-              <label className={LBL}>Model *</label>
-              <Input
-                value={vehicleModel}
-                onChange={(e) => setVehicleModel(e.target.value)}
-                placeholder="Silverado"
-              />
+              <label className={LBL}>Body Style</label>
+              <select
+                value={bodyStyle}
+                onChange={(e) => setBodyStyle(e.target.value)}
+                className={SEL}
+              >
+                <option value="">Select body style</option>
+                {BODY_STYLES.map((b) => (
+                  <option key={b} value={b}>
+                    {b}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className={LBL}>Drivetrain</label>
+              <select
+                value={drivetrain}
+                onChange={(e) => setDrivetrain(e.target.value)}
+                className={SEL}
+              >
+                <option value="">Select drivetrain</option>
+                {DRIVETRAINS.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
+
         </CardContent>
       </Card>
 
