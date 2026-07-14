@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CheckCircle2, Info, Loader2, XCircle } from "lucide-react";
+import { COLORS, BODY_STYLES, DRIVETRAINS, decodeVin, VinDecodeError } from "@/lib/vehicle";
 
 type TradeRow = {
   year: number | null;
@@ -64,60 +65,11 @@ const SEL =
 
 const LBL = "text-xs font-medium text-slate-500";
 
-const COLORS = [
-  "White", "Black", "Silver", "Gray", "Red", "Blue", "Green",
-  "Brown", "Beige", "Gold", "Orange", "Yellow", "Purple", "Maroon", "Tan", "Other",
-];
-
-const BODY_STYLES = [
-  "Sedan", "SUV", "Truck", "Cargo Van", "Minivan",
-  "Hatchback", "Coupe", "Convertible", "Wagon", "Cab/Chassis",
-];
-
-const DRIVETRAINS = ["FWD", "RWD", "AWD", "4WD"];
 
 function numStr(v: number | null): string {
   return v !== null ? String(v) : "";
 }
 
-// ── VIN decode normalization ──────────────────────────────────────────────────
-
-const GM_MAKES = new Set(["Chevrolet", "GMC"]);
-const TONNAGES = new Set(["1500", "2500", "3500", "4500", "5500", "6500"]);
-
-function mapBodyStyle(raw: string): string {
-  const s = raw.toLowerCase();
-  if (s.includes("sport utility") || s.includes("suv") || s.includes("mpv"))
-    return "SUV";
-  if (s.includes("pickup") || s.includes("truck")) return "Truck";
-  if (s.includes("cab chassis") || s.includes("incomplete")) return "Cab/Chassis";
-  if (s.includes("minivan")) return "Minivan";
-  if (s.includes("van")) return "Cargo Van";
-  if (s.includes("hatchback") || s.includes("liftback")) return "Hatchback";
-  if (s.includes("convertible") || s.includes("cabriolet")) return "Convertible";
-  if (s.includes("coupe")) return "Coupe";
-  if (s.includes("wagon")) return "Wagon";
-  if (s.includes("sedan") || s.includes("saloon")) return "Sedan";
-  return "";
-}
-
-function normalizeDecodedVehicle(
-  normMake: string,
-  rawModel: string,
-  rawSeries: string,
-  rawBody: string,
-): { model: string; trim: string; bodyStyle: string } {
-  let model = rawModel;
-  let trim = rawSeries;
-
-  // Rule 1: GM tonnage — move tonnage from trim into model, clear trim
-  if (GM_MAKES.has(normMake) && TONNAGES.has(rawSeries.trim())) {
-    model = rawModel.replace(/ HD$/i, "").trim() + " " + rawSeries.trim();
-    trim = "";
-  }
-
-  return { model, trim, bodyStyle: mapBodyStyle(rawBody) };
-}
 
 function StatusBadge({ status }: { status: string }) {
   const cfg: Record<string, string> = {
@@ -265,45 +217,12 @@ export default function UpdatePendingForm({
     setDecodeError(null);
 
     try {
-      const res = await fetch(
-        `https://vpic.nhtsa.dot.gov/api/vehicles/decodevin/${encodeURIComponent(v)}?format=json`
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const decoded = await decodeVin(v);
 
-      const json = await res.json();
-      const results: { Variable: string; Value: string | null }[] =
-        json.Results ?? [];
-
-      function get(variable: string): string {
-        return results.find((r) => r.Variable === variable)?.Value?.trim() ?? "";
-      }
-
-      const rawYear = get("Model Year");
-      const rawMake = get("Make");
-      const rawModel = get("Model");
-      const rawSeries = get("Series") || get("Trim");
-      const rawBody = get("Body Class");
-      const rawDrive = get("Drive Type");
-
-      if (!rawMake) {
-        setDecodeError("Could not decode this VIN — enter details manually.");
-        return;
-      }
-
-      const normMake = rawMake
-        .toLowerCase()
-        .replace(/\b\w/g, (c) => c.toUpperCase());
-
-      const normDrive = rawDrive ? rawDrive.split("/")[0].trim() : "";
-      const parsedYear = rawYear ? parseInt(rawYear, 10) : null;
-
-      const { model: normModel, trim: normTrim, bodyStyle: normBody } =
-        normalizeDecodedVehicle(normMake, rawModel, rawSeries, rawBody);
-
-      if (parsedYear && !isNaN(parsedYear)) setDisplayYear(parsedYear);
+      if (decoded.year !== null) setDisplayYear(decoded.year);
 
       const matchedMake = vehicleMakes.find(
-        (m) => m.name.toLowerCase() === normMake.toLowerCase()
+        (m) => m.name.toLowerCase() === decoded.make.toLowerCase()
       );
       let resolvedMakeId = "";
       if (matchedMake) {
@@ -314,12 +233,12 @@ export default function UpdatePendingForm({
         setMakeId("");
         setMakeIsManual(true);
       }
-      setDisplayMake(normMake);
+      setDisplayMake(decoded.make);
 
       const matchedModel = vehicleModels.find(
         (m) =>
           m.make_id === resolvedMakeId &&
-          m.name.toLowerCase() === normModel.toLowerCase()
+          m.name.toLowerCase() === decoded.model.toLowerCase()
       );
       if (matchedModel) {
         setModelId(matchedModel.id);
@@ -328,22 +247,25 @@ export default function UpdatePendingForm({
         setModelId("");
         setModelIsManual(true);
       }
-      setDisplayModel(normModel);
+      setDisplayModel(decoded.model);
 
-      setTrim(normTrim);
-      if (normBody) setBodyStyle(normBody);
-      if (normDrive) setDrivetrain(normDrive);
+      setTrim(decoded.trim);
+      if (decoded.bodyStyle) setBodyStyle(decoded.bodyStyle);
+      if (decoded.drivetrain) setDrivetrain(decoded.drivetrain);
 
-      const summaryYear =
-        parsedYear && !isNaN(parsedYear) ? parsedYear : displayYear;
-      const summaryParts = [normBody, normDrive].filter(Boolean).join(" · ");
+      const summaryYear = decoded.year ?? displayYear;
+      const summaryParts = [decoded.bodyStyle, decoded.drivetrain].filter(Boolean).join(" · ");
       setDecodeMsg(
-        `Decoded from VIN: ${summaryYear} ${normMake} ${normModel}${
+        `Decoded from VIN: ${summaryYear} ${decoded.make} ${decoded.model}${
           summaryParts ? " · " + summaryParts : ""
         }`
       );
-    } catch {
-      setDecodeError("Could not decode this VIN — enter details manually.");
+    } catch (err) {
+      if (err instanceof VinDecodeError) {
+        setDecodeError(err.message);
+      } else {
+        setDecodeError("Could not decode this VIN — enter details manually.");
+      }
     } finally {
       setDecoding(false);
     }

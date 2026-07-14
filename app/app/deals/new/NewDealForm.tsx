@@ -199,7 +199,7 @@ export default function NewDealForm({ userId, stores, departments, salespeople }
           activeSplits.map((s) => ({
             deal_id: dealId,
             salesperson_id: s.salesperson_id,
-            share_percent: parseFloat(s.share) / 100,
+            share_percent: parseFloat(s.share),
           }))
         );
         if (spError) throw new Error(`Salesperson link failed: ${spError.message}`);
