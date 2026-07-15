@@ -102,8 +102,16 @@ export default async function EditDealPage({ params }: { params: { id: string } 
   const storeName = storeById.get(deal.store_id) ?? "Unknown Store";
 
   // 3. All parallel data: dropdowns + dept name + salespeople + trades + vehicle lists
-  const [srcResult, fmResult, deptResult, spResult, tradesResult, vMakesResult, vModelsResult] =
-    await Promise.all([
+  const [
+    srcResult,
+    fmResult,
+    deptResult,
+    spResult,
+    tradesResult,
+    vMakesResult,
+    vModelsResult,
+    deptMakesResult,
+  ] = await Promise.all([
       supabase
         .from("acquisition_sources")
         .select("id,name")
@@ -138,6 +146,7 @@ export default async function EditDealPage({ params }: { params: { id: string } 
         .select("id,name,make_id")
         .eq("active", true)
         .order("name"),
+      supabase.from("department_makes").select("department_id,make"),
     ]);
 
   const acquisitionSources = (srcResult.data ?? []) as { id: string; name: string }[];
@@ -146,11 +155,17 @@ export default async function EditDealPage({ params }: { params: { id: string } 
 
   const dealSalespeople = (spResult.data ?? []) as SpRow[];
   const salespeopleCount = dealSalespeople.length;
-  const shareSum = dealSalespeople.reduce((sum, s) => sum + (s.share_percent ?? 0), 0);
+  // share_percent is a whole number in DB (100 = 100%); form expects decimal 1.0 = 100%
+  const shareSum =
+    dealSalespeople.reduce((sum, s) => sum + (s.share_percent ?? 0), 0) / 100;
 
   const trades = (tradesResult.data ?? []) as TradeRow[];
   const vehicleMakes = (vMakesResult.data ?? []) as VehicleMakeRow[];
   const vehicleModels = (vModelsResult.data ?? []) as VehicleModelRow[];
+  const departmentMakes = (deptMakesResult.data ?? []) as {
+    department_id: string;
+    make: string;
+  }[];
 
   return (
     <UpdatePendingForm
@@ -182,6 +197,7 @@ export default async function EditDealPage({ params }: { params: { id: string } 
       financeManagers={financeManagers}
       vehicleMakes={vehicleMakes}
       vehicleModels={vehicleModels}
+      departmentMakes={departmentMakes}
       salespeopleCount={salespeopleCount}
       shareSum={shareSum}
       trades={trades}

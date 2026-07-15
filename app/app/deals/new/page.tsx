@@ -7,6 +7,7 @@ type StoreRow = { id: string; name: string };
 type ItemRow = { id: string; name: string; store_id: string };
 type VehicleMakeRow = { id: string; name: string };
 type VehicleModelRow = { id: string; name: string; make_id: string };
+type DepartmentMakeRow = { department_id: string; make: string };
 
 export default async function NewDealPage() {
   const supabase = createSupabaseServerClient();
@@ -36,7 +37,7 @@ export default async function NewDealPage() {
   let departments: ItemRow[] = [];
   let salespeople: ItemRow[] = [];
 
-  const [deptResult, spResult, vMakesResult, vModelsResult] = await Promise.all([
+  const [deptResult, spResult, vMakesResult, vModelsResult, deptMakesResult] = await Promise.all([
     storeIds.length > 0
       ? supabase.from("departments").select("id,name,store_id").in("store_id", storeIds).order("name")
       : Promise.resolve({ data: [] as ItemRow[] }),
@@ -45,12 +46,14 @@ export default async function NewDealPage() {
       : Promise.resolve({ data: [] as ItemRow[] }),
     supabase.from("vehicle_makes").select("id,name").eq("active", true).order("name"),
     supabase.from("vehicle_models").select("id,name,make_id").eq("active", true).order("name"),
+    supabase.from("department_makes").select("department_id,make"),
   ]);
 
   departments = (deptResult.data ?? []) as unknown as ItemRow[];
   salespeople = (spResult.data ?? []) as unknown as ItemRow[];
   const vehicleMakes = (vMakesResult.data ?? []) as unknown as VehicleMakeRow[];
   const vehicleModels = (vModelsResult.data ?? []) as unknown as VehicleModelRow[];
+  const departmentMakes = (deptMakesResult.data ?? []) as unknown as DepartmentMakeRow[];
 
   return (
     <NewDealForm
@@ -60,6 +63,7 @@ export default async function NewDealPage() {
       salespeople={salespeople}
       vehicleMakes={vehicleMakes}
       vehicleModels={vehicleModels}
+      departmentMakes={departmentMakes}
     />
   );
 }

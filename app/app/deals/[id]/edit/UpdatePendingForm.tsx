@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CheckCircle2, Info, Loader2, XCircle } from "lucide-react";
 import { COLORS, BODY_STYLES, DRIVETRAINS, decodeVin, VinDecodeError } from "@/lib/vehicle";
+import { canClose } from "@/lib/can-close";
 
 type TradeRow = {
   year: number | null;
@@ -51,6 +52,7 @@ interface Props {
   financeManagers: { id: string; name: string }[];
   vehicleMakes: { id: string; name: string }[];
   vehicleModels: { id: string; name: string; make_id: string }[];
+  departmentMakes: { department_id: string; make: string }[];
   // Close gate data (fetched server-side from deal_salespeople + trades)
   salespeopleCount: number;
   shareSum: number; // decimal: 1.0 = 100%
@@ -120,6 +122,7 @@ export default function UpdatePendingForm({
   financeManagers,
   vehicleMakes,
   vehicleModels,
+  departmentMakes,
   salespeopleCount,
   shareSum,
   trades,
@@ -337,15 +340,19 @@ export default function UpdatePendingForm({
     if (!customerLastName.trim()) errs.push("Customer last name is required");
     if (!departmentId) errs.push("Department is required");
 
-    // Step 2 — vehicle details
-    if (!vin.trim()) errs.push("VIN is required");
+    // Vehicle identity
+    if (!displayYear) errs.push("Vehicle year is required");
+    if (!displayMake.trim()) errs.push("Vehicle make is required");
+    if (!displayModel.trim()) errs.push("Vehicle model is required");
+
+    // Step 2 — vehicle details (VIN owned by canClose)
     if (!trim.trim()) errs.push("Trim is required");
     if (!color) errs.push("Color is required");
     if (!bodyStyle) errs.push("Body style is required");
     if (!drivetrain) errs.push("Drivetrain is required");
     if (!odometer.trim()) errs.push("Odometer is required");
 
-    // Acquisition & finance
+    // Acquisition & finance (finance manager owned by canClose)
     if (!acquisitionSource) errs.push("Acquisition source is required");
     if (!financeType) errs.push("Finance type is required");
 
@@ -380,14 +387,64 @@ export default function UpdatePendingForm({
     return errs;
   }
 
+  async function ensureOpenFlag(flagType: "no_vin_at_close" | "make_dept_mismatch", detail: string) {
+    const supabase = createSupabaseBrowserClient();
+    const { data: existing } = await supabase
+      .from("deal_flags")
+      .select("id")
+      .eq("deal_id", dealId)
+      .eq("flag_type", flagType)
+      .is("resolved_at", null)
+      .limit(1);
+
+    if (existing && existing.length > 0) return;
+
+    const { error } = await supabase.from("deal_flags").insert({
+      deal_id: dealId,
+      flag_type: flagType,
+      detail,
+    });
+    if (error) throw new Error(`Deal flag insert failed: ${error.message}`);
+  }
+
   // ── Close Deal ────────────────────────────────────────────────────────────────
   async function handleClose() {
-    const errs = validateForClose();
+    const fieldErrs = validateForClose();
+    const gate = canClose({
+      vin,
+      vehicleMake: displayMake,
+      departmentId,
+      departmentMakes,
+      financeManagerId,
+    });
+    const errs = [...fieldErrs, ...gate.reasons];
+
     if (errs.length > 0) {
       setCloseErrors(errs);
       setSaved(false);
       setErrors([]);
       window.scrollTo({ top: 0, behavior: "smooth" });
+
+      // Accountability flags only when canClose accountability rules failed
+      try {
+        if (!vin.trim()) {
+          await ensureOpenFlag("no_vin_at_close", "VIN missing at close attempt");
+        }
+        if (
+          displayMake.trim() &&
+          departmentId &&
+          gate.reasons.includes("Make is not valid for this department")
+        ) {
+          await ensureOpenFlag(
+            "make_dept_mismatch",
+            `${displayMake.trim()} not allowed for department`
+          );
+        }
+      } catch (flagErr: unknown) {
+        const msg =
+          flagErr instanceof Error ? flagErr.message : "Could not record close flag.";
+        setCloseErrors([...errs, msg]);
+      }
       return;
     }
 

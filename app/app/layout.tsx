@@ -4,8 +4,9 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { Button } from "@/components/ui/button";
-import { BarChart3, CalendarRange, LayoutDashboard, Menu, Settings2 } from "lucide-react";
+import { BarChart3, CalendarRange, LayoutDashboard, Settings2 } from "lucide-react";
 import { signOut } from "./actions";
+import AppMobileMenu from "./AppMobileMenu";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const supabase = createSupabaseServerClient();
@@ -84,30 +85,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
                 <BarChart3 className="h-4 w-4 text-blue-600" />
                 <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">Dealer Command</p>
               </div>
-              <details className="relative lg:hidden">
-                <summary className="flex cursor-pointer list-none items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-sm [&::-webkit-details-marker]:hidden">
-                  <Menu className="h-3.5 w-3.5" />
-                  Menu
-                </summary>
-                <nav className="absolute left-0 z-50 mt-1 w-56 rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-lg">
-                  <Link
-                    href="/app/deals"
-                    className="block px-3 py-2 text-slate-700 hover:bg-slate-50"
-                    prefetch
-                  >
-                    Sales Registry
-                  </Link>
-                  <Link href="/app/deals/new" className="block px-3 py-2 text-slate-700 hover:bg-slate-50" prefetch>
-                    Log Transaction
-                  </Link>
-                  <Link href="/app/setup" className="block px-3 py-2 text-slate-700 hover:bg-slate-50" prefetch>
-                    Setup & Config
-                  </Link>
-                  <Link href="/app/calendar" className="block px-3 py-2 text-slate-700 hover:bg-slate-50" prefetch>
-                    Pace Calendar
-                  </Link>
-                </nav>
-              </details>
+              <AppMobileMenu />
             </div>
             <div className="flex items-center gap-3 text-xs text-slate-500">
               <span className="hidden sm:inline">

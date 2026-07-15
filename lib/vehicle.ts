@@ -51,6 +51,19 @@ export function normalizeDecodedVehicle(
   return { model, trim, bodyStyle: mapBodyStyle(rawBody) };
 }
 
+/** Empty allow-list for a department = any make allowed. Compare case-insensitively. */
+export function isMakeAllowedForDepartment(
+  make: string,
+  departmentId: string,
+  departmentMakes: { department_id: string; make: string }[]
+): boolean {
+  const allowed = departmentMakes
+    .filter((row) => row.department_id === departmentId)
+    .map((row) => row.make.toUpperCase());
+  if (allowed.length === 0) return true;
+  return allowed.includes(make.trim().toUpperCase());
+}
+
 // ── VIN decoder ───────────────────────────────────────────────────────────────
 
 export type DecodedVehicle = {

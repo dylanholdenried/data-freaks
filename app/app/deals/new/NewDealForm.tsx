@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CheckCircle2, Loader2, PlusCircle, Trash2, XCircle } from "lucide-react";
-import { BODY_STYLES, DRIVETRAINS, decodeVin, VinDecodeError } from "@/lib/vehicle";
+import { BODY_STYLES, DRIVETRAINS, decodeVin, isMakeAllowedForDepartment, VinDecodeError } from "@/lib/vehicle";
 
 type Store = { id: string; name: string };
 type Department = { id: string; name: string; store_id: string };
@@ -19,6 +19,7 @@ interface Props {
   salespeople: Salesperson[];
   vehicleMakes: { id: string; name: string }[];
   vehicleModels: { id: string; name: string; make_id: string }[];
+  departmentMakes: { department_id: string; make: string }[];
 }
 
 type Trade = {
@@ -59,6 +60,7 @@ export default function NewDealForm({
   salespeople,
   vehicleMakes,
   vehicleModels,
+  departmentMakes,
 }: Props) {
   // ── Form state ──────────────────────────────────────────────────────────────
   const [storeId, setStoreId] = useState("");
@@ -98,6 +100,12 @@ export default function NewDealForm({
   // ── Derived: filter dropdown options to selected store ───────────────────────
   const storeDepts = departments.filter((d) => d.store_id === storeId);
   const storeSalespeople = salespeople.filter((sp) => sp.store_id === storeId);
+  const makeDeptMismatch =
+    Boolean(vehicleMake.trim()) &&
+    Boolean(departmentId) &&
+    !isMakeAllowedForDepartment(vehicleMake, departmentId, departmentMakes);
+  const selectedDeptName =
+    departments.find((d) => d.id === departmentId)?.name ?? "this department";
 
   // ── Store change: reset dependent fields ────────────────────────────────────
   function handleStoreChange(id: string) {
@@ -258,6 +266,8 @@ export default function NewDealForm({
     // Capture display values before state is reset
     const savedStock = stockNumber.trim();
     const savedCustomer = customerLastName.trim();
+    const savedMake = vehicleMake.trim();
+    const shouldFlagMismatch = makeDeptMismatch;
 
     try {
       const supabase = createSupabaseBrowserClient();
@@ -272,7 +282,7 @@ export default function NewDealForm({
           sale_date: saleDate,
           stock_number: stockNumber.trim(),
           vehicle_year: parseInt(vehicleYear, 10),
-          vehicle_make: vehicleMake.trim(),
+          vehicle_make: savedMake,
           vehicle_model: vehicleModel.trim(),
           vin: vin.trim() || null,
           trim: trim.trim() || null,
@@ -286,6 +296,16 @@ export default function NewDealForm({
 
       if (dealError) throw new Error(`Deal insert failed: ${dealError.message}`);
       const dealId = deal.id;
+
+      // 1b. Flag make/department mismatch (warn-only; save was already allowed)
+      if (shouldFlagMismatch) {
+        const { error: flagError } = await supabase.from("deal_flags").insert({
+          deal_id: dealId,
+          flag_type: "make_dept_mismatch",
+          detail: `${savedMake} not allowed for department`,
+        });
+        if (flagError) throw new Error(`Deal flag insert failed: ${flagError.message}`);
+      }
 
       // 2. Insert deal_salespeople (share stored as whole number: 100% → 100)
       const activeSplits = splits.filter((s) => s.salesperson_id);
@@ -383,6 +403,18 @@ export default function NewDealForm({
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* Make / department mismatch — warn only; save still allowed */}
+      {makeDeptMismatch && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+          <p className="text-sm font-semibold text-amber-900">Make / department mismatch</p>
+          <p className="mt-1 text-sm text-amber-800">
+            <span className="font-medium">{vehicleMake.trim()}</span> is not allowed for{" "}
+            <span className="font-medium">{selectedDeptName}</span>. You can still save; this
+            deal will be flagged.
+          </p>
         </div>
       )}
 
