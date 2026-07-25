@@ -1,6 +1,7 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
+import { getAccessibleStores } from "@/lib/store-access";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,40 +16,40 @@ export default async function CalendarPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("dealer_group_id, role")
+    .select("id, dealer_group_id, role")
     .or(profileMatchAuthUserId(session!.user.id))
     .maybeSingle();
 
   const dealerGroupId = await getEffectiveDealerGroupId(profile);
 
-  if (!dealerGroupId) {
+  if (!dealerGroupId || !profile) {
     return <SelectAutoGroupEmptyState />;
   }
 
-  const { data: stores } = await supabase.from("stores").select("id,name").eq("dealer_group_id", dealerGroupId);
-  const storeIds = (stores ?? []).map((s: any) => s.id);
+  const stores = await getAccessibleStores(supabase, profile);
+  const storeIds = stores.map((s) => s.id);
   const { data: calendarDays } = storeIds.length
     ? await supabase
         .from("store_calendar_days")
-        .select("store_id,calendar_date,is_working_day")
+        .select("store_id,date,is_working_day")
         .in("store_id", storeIds)
-    : { data: [] as any[] };
+    : { data: [] as { store_id: string; date: string; is_working_day: boolean }[] };
 
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth();
-  const monthRows = (calendarDays ?? []).filter((d: any) => {
-    const dt = new Date(d.calendar_date);
+  const monthRows = (calendarDays ?? []).filter((d) => {
+    const dt = new Date(d.date);
     return dt.getFullYear() === year && dt.getMonth() === month;
   });
 
   const workingByStore = new Map<string, number>();
-  for (const store of stores ?? []) {
-    const count = monthRows.filter((d: any) => d.store_id === store.id && d.is_working_day).length;
+  for (const store of stores) {
+    const count = monthRows.filter((d) => d.store_id === store.id && d.is_working_day).length;
     workingByStore.set(store.id, count);
   }
 
-  const hasStores = (stores ?? []).length > 0;
+  const hasStores = stores.length > 0;
 
   return (
     <div className="space-y-6">
@@ -64,7 +65,7 @@ export default async function CalendarPage() {
             <CardTitle className="text-lg">Current month working days by store</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {(stores ?? []).map((store: any) => (
+            {stores.map((store) => (
               <div key={store.id} className="rounded-xl border border-[#edf1f7] bg-[#fafcff] p-3">
                 <div className="mb-2 flex items-center justify-between">
                   <p className="text-sm font-semibold text-slate-800">{store.name}</p>
@@ -80,6 +81,9 @@ export default async function CalendarPage() {
                 </div>
               </div>
             ))}
+            {!hasStores && (
+              <p className="text-sm text-slate-500">No stores available for your account.</p>
+            )}
           </CardContent>
         </Card>
 
@@ -99,10 +103,10 @@ export default async function CalendarPage() {
                 >
                   {!hasStores && (
                     <option value="" className="text-slate-900">
-                      Add a store in Setup first
+                      No accessible stores
                     </option>
                   )}
-                  {(stores ?? []).map((store: any) => (
+                  {stores.map((store) => (
                     <option key={store.id} value={store.id} className="text-slate-900">
                       {store.name}
                     </option>
@@ -134,4 +138,3 @@ export default async function CalendarPage() {
     </div>
   );
 }
-

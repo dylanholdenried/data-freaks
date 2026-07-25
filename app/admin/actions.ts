@@ -140,14 +140,22 @@ export async function createUserInGroup(formData: FormData) {
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const first_name = String(formData.get("first_name") || "").trim() || null;
   const last_name = String(formData.get("last_name") || "").trim() || null;
+  const phone = String(formData.get("phone") || "").trim() || null;
   const role = String(formData.get("role") || "store_admin") as AppRole;
   const status = String(formData.get("status") || "active") as UserStatus;
+  const storeIds = formData
+    .getAll("store_ids")
+    .map((v) => String(v).trim())
+    .filter(Boolean);
 
   if (!dealer_group_id || !email) {
     throw new Error("Email and group are required");
   }
   if (role !== "group_admin" && role !== "store_admin") {
     throw new Error("Invalid role");
+  }
+  if (role === "store_admin" && storeIds.length === 0) {
+    throw new Error("Select at least one store for a store admin");
   }
 
   const password = randomBytes(24).toString("base64url");
@@ -156,7 +164,7 @@ export async function createUserInGroup(formData: FormData) {
     email,
     password,
     email_confirm: true,
-    user_metadata: { first_name, last_name },
+    user_metadata: { first_name, last_name, phone },
   });
 
   if (authError || !authData.user) {
@@ -172,6 +180,7 @@ export async function createUserInGroup(formData: FormData) {
       email,
       first_name,
       last_name,
+      phone,
       role,
       status,
       dealer_group_id,
@@ -182,6 +191,8 @@ export async function createUserInGroup(formData: FormData) {
   if (profileError) {
     throw new Error(`Create profile failed: ${profileError.message}`);
   }
+
+  await syncUserStoreAccess(service, userId, dealer_group_id, role, storeIds);
 
   revalidateGroup(dealer_group_id);
 }
@@ -196,14 +207,22 @@ export async function updateUserInGroup(formData: FormData) {
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const first_name = String(formData.get("first_name") || "").trim() || null;
   const last_name = String(formData.get("last_name") || "").trim() || null;
+  const phone = String(formData.get("phone") || "").trim() || null;
   const role = String(formData.get("role") || "store_admin") as AppRole;
   const status = String(formData.get("status") || "active") as UserStatus;
+  const storeIds = formData
+    .getAll("store_ids")
+    .map((v) => String(v).trim())
+    .filter(Boolean);
 
   if (!id || !user_id || !dealer_group_id || !email) {
     throw new Error("User id, auth id, email, and group are required");
   }
   if (role !== "group_admin" && role !== "store_admin") {
     throw new Error("Invalid role");
+  }
+  if (role === "store_admin" && storeIds.length === 0) {
+    throw new Error("Select at least one store for a store admin");
   }
 
   const { data: existing } = await service
@@ -222,7 +241,7 @@ export async function updateUserInGroup(formData: FormData) {
 
   const { error: authError } = await service.auth.admin.updateUserById(user_id, {
     email,
-    user_metadata: { first_name, last_name },
+    user_metadata: { first_name, last_name, phone },
   });
 
   if (authError) {
@@ -235,6 +254,7 @@ export async function updateUserInGroup(formData: FormData) {
       email,
       first_name,
       last_name,
+      phone,
       role,
       status,
     })
@@ -245,7 +265,60 @@ export async function updateUserInGroup(formData: FormData) {
     throw new Error(`Update profile failed: ${profileError.message}`);
   }
 
+  // Live user_store_access.user_id matches auth/profile user id
+  await syncUserStoreAccess(service, user_id, dealer_group_id, role, storeIds);
+
   revalidateGroup(dealer_group_id);
+}
+
+async function syncUserStoreAccess(
+  service: ReturnType<typeof createSupabaseServiceClient>,
+  /** profiles.id / auth user id used as user_store_access.user_id */
+  userId: string,
+  dealerGroupId: string,
+  role: AppRole,
+  storeIds: string[]
+) {
+  const { error: deleteError } = await service
+    .from("user_store_access")
+    .delete()
+    .eq("user_id", userId);
+
+  if (deleteError) {
+    throw new Error(`Clear store access failed: ${deleteError.message}`);
+  }
+
+  if (role !== "store_admin") {
+    return;
+  }
+
+  const uniqueIds = Array.from(new Set(storeIds));
+  if (uniqueIds.length === 0) return;
+
+  const { data: validStores, error: storesError } = await service
+    .from("stores")
+    .select("id")
+    .eq("dealer_group_id", dealerGroupId)
+    .in("id", uniqueIds);
+
+  if (storesError) {
+    throw new Error(`Validate stores failed: ${storesError.message}`);
+  }
+
+  const validIds = (validStores ?? []).map((s) => s.id as string);
+  if (validIds.length !== uniqueIds.length) {
+    throw new Error("One or more selected stores are not in this auto group");
+  }
+
+  const rows = validIds.map((store_id) => ({
+    user_id: userId,
+    store_id,
+  }));
+
+  const { error: insertError } = await service.from("user_store_access").insert(rows);
+  if (insertError) {
+    throw new Error(`Assign store access failed: ${insertError.message}`);
+  }
 }
 
 export async function disableUserInGroup(formData: FormData) {

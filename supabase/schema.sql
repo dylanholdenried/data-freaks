@@ -110,6 +110,47 @@ as $$
   );
 $$;
 
+-- Store access: platform_admin, group_admin (all stores in group), or user_store_access row.
+create or replace function public.has_store_access(p_store_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select
+    public.is_platform_admin()
+    or exists (
+      select 1
+      from public.stores s
+      join public.profiles p
+        on (p.user_id = auth.uid() or p.id = auth.uid())
+      where s.id = p_store_id
+        and p.status = 'active'
+        and (
+          (p.role = 'group_admin' and p.dealer_group_id = s.dealer_group_id)
+          or exists (
+            select 1
+            from public.user_store_access usa
+            where usa.store_id = p_store_id
+              and (usa.user_id = p.user_id or usa.user_id = p.id)
+          )
+        )
+    );
+$$;
+
+create or replace function public.accessible_store_ids()
+returns setof uuid
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select s.id
+  from public.stores s
+  where public.has_store_access(s.id);
+$$;
+
 -- ===========================
 -- PROFILES / USERS
 -- ===========================
@@ -120,6 +161,7 @@ create table public.profiles (
   email text not null,
   first_name text,
   last_name text,
+  phone text,
   role app_role not null default 'store_admin',
   dealer_group_id uuid references public.dealer_groups(id),
   status user_status not null default 'active',
@@ -200,17 +242,15 @@ create table public.departments (
 
 create index departments_store_id_idx on public.departments(store_id);
 
+-- Live shape: id, user_id (auth user), store_id
 create table public.user_store_access (
   id uuid primary key default gen_random_uuid(),
-  profile_id uuid not null references public.profiles(id) on delete cascade,
-  store_id uuid not null references public.stores(id) on delete cascade,
-  role app_role not null default 'store_admin',
-  is_primary boolean not null default false,
-  created_at timestamptz not null default now()
+  user_id uuid not null references auth.users(id) on delete cascade,
+  store_id uuid not null references public.stores(id) on delete cascade
 );
 
 create unique index user_store_access_unique
-  on public.user_store_access(profile_id, store_id);
+  on public.user_store_access(user_id, store_id);
 
 -- ===========================
 -- SALESPEOPLE / SOURCES
@@ -483,13 +523,22 @@ using (is_platform_admin());
 create policy "stores_group_members_select"
 on public.stores
 for select
+using (public.has_store_access(id));
+
+drop policy if exists "user_store_access_platform_admin_all" on public.user_store_access;
+create policy "user_store_access_platform_admin_all"
+on public.user_store_access
+for all
+using (public.is_platform_admin())
+with check (public.is_platform_admin());
+
+drop policy if exists "user_store_access_select_own" on public.user_store_access;
+create policy "user_store_access_select_own"
+on public.user_store_access
+for select
 using (
-  exists (
-    select 1 from public.profiles p
-    where p.dealer_group_id = stores.dealer_group_id
-      and p.user_id = auth.uid()
-      and p.status = 'active'
-  )
+  user_id = auth.uid()
+  or user_id = public.current_profile_id()
 );
 
 create policy "stores_demo_public_select"
@@ -505,16 +554,20 @@ using (is_platform_admin());
 create policy "departments_group_members_select"
 on public.departments
 for select
-using (
-  exists (
-    select 1
-    from public.stores s
-    join public.profiles p on p.dealer_group_id = s.dealer_group_id
-    where departments.store_id = s.id
-      and p.user_id = auth.uid()
-      and p.status = 'active'
-  )
-);
+using (public.has_store_access(store_id));
+
+drop policy if exists "departments_members_insert" on public.departments;
+create policy "departments_members_insert"
+on public.departments
+for insert
+with check (public.has_store_access(store_id));
+
+drop policy if exists "departments_members_update" on public.departments;
+create policy "departments_members_update"
+on public.departments
+for update
+using (public.has_store_access(store_id))
+with check (public.has_store_access(store_id));
 
 create policy "departments_demo_public_select"
 on public.departments
@@ -529,16 +582,20 @@ using (is_platform_admin());
 create policy "salespeople_group_members_select"
 on public.salespeople
 for select
-using (
-  exists (
-    select 1
-    from public.stores s
-    join public.profiles p on p.dealer_group_id = s.dealer_group_id
-    where salespeople.store_id = s.id
-      and p.user_id = auth.uid()
-      and p.status = 'active'
-  )
-);
+using (public.has_store_access(store_id));
+
+drop policy if exists "salespeople_members_insert" on public.salespeople;
+create policy "salespeople_members_insert"
+on public.salespeople
+for insert
+with check (public.has_store_access(store_id));
+
+drop policy if exists "salespeople_members_update" on public.salespeople;
+create policy "salespeople_members_update"
+on public.salespeople
+for update
+using (public.has_store_access(store_id))
+with check (public.has_store_access(store_id));
 
 create policy "salespeople_demo_public_select"
 on public.salespeople
@@ -553,16 +610,20 @@ using (is_platform_admin());
 create policy "acquisition_sources_group_members_select"
 on public.acquisition_sources
 for select
-using (
-  exists (
-    select 1
-    from public.stores s
-    join public.profiles p on p.dealer_group_id = s.dealer_group_id
-    where acquisition_sources.store_id = s.id
-      and p.user_id = auth.uid()
-      and p.status = 'active'
-  )
-);
+using (public.has_store_access(store_id));
+
+drop policy if exists "acquisition_sources_members_insert" on public.acquisition_sources;
+create policy "acquisition_sources_members_insert"
+on public.acquisition_sources
+for insert
+with check (public.has_store_access(store_id));
+
+drop policy if exists "acquisition_sources_members_update" on public.acquisition_sources;
+create policy "acquisition_sources_members_update"
+on public.acquisition_sources
+for update
+using (public.has_store_access(store_id))
+with check (public.has_store_access(store_id));
 
 create policy "acquisition_sources_demo_public_select"
 on public.acquisition_sources
@@ -611,16 +672,20 @@ using (is_platform_admin());
 create policy "store_calendar_group_members_select"
 on public.store_calendar_days
 for select
-using (
-  exists (
-    select 1
-    from public.stores s
-    join public.profiles p on p.dealer_group_id = s.dealer_group_id
-    where store_calendar_days.store_id = s.id
-      and p.user_id = auth.uid()
-      and p.status = 'active'
-  )
-);
+using (public.has_store_access(store_id));
+
+drop policy if exists "store_calendar_members_insert" on public.store_calendar_days;
+create policy "store_calendar_members_insert"
+on public.store_calendar_days
+for insert
+with check (public.has_store_access(store_id));
+
+drop policy if exists "store_calendar_members_update" on public.store_calendar_days;
+create policy "store_calendar_members_update"
+on public.store_calendar_days
+for update
+using (public.has_store_access(store_id))
+with check (public.has_store_access(store_id));
 
 create policy "store_calendar_demo_public_select"
 on public.store_calendar_days
@@ -637,14 +702,7 @@ using (is_platform_admin());
 create policy "deals_group_members_select"
 on public.deals
 for select
-using (
-  exists (
-    select 1 from public.profiles p
-    where p.dealer_group_id = deals.dealer_group_id
-      and p.user_id = auth.uid()
-      and p.status = 'active'
-  )
-);
+using (public.has_store_access(store_id));
 
 drop policy if exists "deals_group_members_modify" on public.deals;
 drop policy if exists "deals_group_members_insert" on public.deals;
@@ -653,34 +711,13 @@ drop policy if exists "deals_group_members_update" on public.deals;
 create policy "deals_group_members_insert"
 on public.deals
 for insert
-with check (
-  exists (
-    select 1 from public.profiles p
-    where p.dealer_group_id = deals.dealer_group_id
-      and p.user_id = auth.uid()
-      and p.status = 'active'
-  )
-);
+with check (public.has_store_access(store_id));
 
 create policy "deals_group_members_update"
 on public.deals
 for update
-using (
-  exists (
-    select 1 from public.profiles p
-    where p.dealer_group_id = deals.dealer_group_id
-      and p.user_id = auth.uid()
-      and p.status = 'active'
-  )
-)
-with check (
-  exists (
-    select 1 from public.profiles p
-    where p.dealer_group_id = deals.dealer_group_id
-      and p.user_id = auth.uid()
-      and p.status = 'active'
-  )
-);
+using (public.has_store_access(store_id))
+with check (public.has_store_access(store_id));
 
 create policy "deals_demo_public_select"
 on public.deals
@@ -698,10 +735,8 @@ for select
 using (
   exists (
     select 1 from public.deals d
-    join public.profiles p on p.dealer_group_id = d.dealer_group_id
     where deal_salespeople.deal_id = d.id
-      and p.user_id = auth.uid()
-      and p.status = 'active'
+      and public.has_store_access(d.store_id)
   )
 );
 
@@ -716,10 +751,8 @@ for insert
 with check (
   exists (
     select 1 from public.deals d
-    join public.profiles p on p.dealer_group_id = d.dealer_group_id
     where deal_salespeople.deal_id = d.id
-      and p.user_id = auth.uid()
-      and p.status = 'active'
+      and public.has_store_access(d.store_id)
   )
 );
 
@@ -729,19 +762,15 @@ for update
 using (
   exists (
     select 1 from public.deals d
-    join public.profiles p on p.dealer_group_id = d.dealer_group_id
     where deal_salespeople.deal_id = d.id
-      and p.user_id = auth.uid()
-      and p.status = 'active'
+      and public.has_store_access(d.store_id)
   )
 )
 with check (
   exists (
     select 1 from public.deals d
-    join public.profiles p on p.dealer_group_id = d.dealer_group_id
     where deal_salespeople.deal_id = d.id
-      and p.user_id = auth.uid()
-      and p.status = 'active'
+      and public.has_store_access(d.store_id)
   )
 );
 
@@ -751,10 +780,8 @@ for delete
 using (
   exists (
     select 1 from public.deals d
-    join public.profiles p on p.dealer_group_id = d.dealer_group_id
     where deal_salespeople.deal_id = d.id
-      and p.user_id = auth.uid()
-      and p.status = 'active'
+      and public.has_store_access(d.store_id)
   )
 );
 
@@ -781,10 +808,8 @@ for select
 using (
   exists (
     select 1 from public.deals d
-    join public.profiles p on p.dealer_group_id = d.dealer_group_id
     where trades.deal_id = d.id
-      and p.user_id = auth.uid()
-      and p.status = 'active'
+      and public.has_store_access(d.store_id)
   )
 );
 
@@ -799,10 +824,8 @@ for insert
 with check (
   exists (
     select 1 from public.deals d
-    join public.profiles p on p.dealer_group_id = d.dealer_group_id
     where trades.deal_id = d.id
-      and p.user_id = auth.uid()
-      and p.status = 'active'
+      and public.has_store_access(d.store_id)
   )
 );
 
@@ -812,19 +835,15 @@ for update
 using (
   exists (
     select 1 from public.deals d
-    join public.profiles p on p.dealer_group_id = d.dealer_group_id
     where trades.deal_id = d.id
-      and p.user_id = auth.uid()
-      and p.status = 'active'
+      and public.has_store_access(d.store_id)
   )
 )
 with check (
   exists (
     select 1 from public.deals d
-    join public.profiles p on p.dealer_group_id = d.dealer_group_id
     where trades.deal_id = d.id
-      and p.user_id = auth.uid()
-      and p.status = 'active'
+      and public.has_store_access(d.store_id)
   )
 );
 
@@ -834,10 +853,8 @@ for delete
 using (
   exists (
     select 1 from public.deals d
-    join public.profiles p on p.dealer_group_id = d.dealer_group_id
     where trades.deal_id = d.id
-      and p.user_id = auth.uid()
-      and p.status = 'active'
+      and public.has_store_access(d.store_id)
   )
 );
 
@@ -864,10 +881,8 @@ for select
 using (
   exists (
     select 1 from public.deals d
-    join public.profiles p on p.dealer_group_id = d.dealer_group_id
     where deal_notes.deal_id = d.id
-      and p.user_id = auth.uid()
-      and p.status = 'active'
+      and public.has_store_access(d.store_id)
   )
 );
 
@@ -877,10 +892,8 @@ for insert
 with check (
   exists (
     select 1 from public.deals d
-    join public.profiles p on p.dealer_group_id = d.dealer_group_id
     where deal_notes.deal_id = d.id
-      and p.user_id = auth.uid()
-      and p.status = 'active'
+      and public.has_store_access(d.store_id)
   )
 );
 

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
+import { assertStoreAccess } from "@/lib/store-access";
 
 export async function signOut() {
   const supabase = createSupabaseServerClient();
@@ -21,9 +22,14 @@ export async function createStore(formData: FormData) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("dealer_group_id, role")
+    .select("id, dealer_group_id, role")
     .or(profileMatchAuthUserId(session.user.id))
     .maybeSingle();
+
+  // Only platform / group admins create stores via this legacy path
+  if (!profile || (profile.role !== "platform_admin" && profile.role !== "group_admin")) {
+    throw new Error("Not allowed to create stores");
+  }
 
   const dealerGroupId = await getEffectiveDealerGroupId(profile);
   if (!dealerGroupId) redirect("/app/dashboard");
@@ -38,8 +44,24 @@ export async function createStore(formData: FormData) {
 
 export async function createDepartment(formData: FormData) {
   const supabase = createSupabaseServerClient();
+  const {
+    data: { session }
+  } = await supabase.auth.getSession();
+  if (!session) redirect("/login");
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, dealer_group_id, role")
+    .or(profileMatchAuthUserId(session.user.id))
+    .maybeSingle();
+
+  const storeId = String(formData.get("store_id") || "").trim();
+  if (!(await assertStoreAccess(supabase, profile, storeId))) {
+    throw new Error("Store not allowed");
+  }
+
   await supabase.from("departments").insert({
-    store_id: String(formData.get("store_id")),
+    store_id: storeId,
     name: String(formData.get("department_name"))
   });
   revalidatePath("/app/setup");
@@ -47,18 +69,50 @@ export async function createDepartment(formData: FormData) {
 
 export async function createSalesperson(formData: FormData) {
   const supabase = createSupabaseServerClient();
+  const {
+    data: { session }
+  } = await supabase.auth.getSession();
+  if (!session) redirect("/login");
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, dealer_group_id, role")
+    .or(profileMatchAuthUserId(session.user.id))
+    .maybeSingle();
+
+  const storeId = String(formData.get("store_id") || "").trim();
+  if (!(await assertStoreAccess(supabase, profile, storeId))) {
+    throw new Error("Store not allowed");
+  }
+
   await supabase.from("salespeople").insert({
-    store_id: String(formData.get("store_id")),
-    first_name: String(formData.get("first_name")),
-    last_name: String(formData.get("last_name"))
+    store_id: storeId,
+    name: `${String(formData.get("first_name") || "").trim()} ${String(formData.get("last_name") || "").trim()}`.trim(),
+    active: true
   });
   revalidatePath("/app/setup");
 }
 
 export async function createSource(formData: FormData) {
   const supabase = createSupabaseServerClient();
+  const {
+    data: { session }
+  } = await supabase.auth.getSession();
+  if (!session) redirect("/login");
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, dealer_group_id, role")
+    .or(profileMatchAuthUserId(session.user.id))
+    .maybeSingle();
+
+  const storeId = String(formData.get("store_id") || "").trim();
+  if (!(await assertStoreAccess(supabase, profile, storeId))) {
+    throw new Error("Store not allowed");
+  }
+
   await supabase.from("acquisition_sources").insert({
-    store_id: String(formData.get("store_id")),
+    store_id: storeId,
     name: String(formData.get("source_name"))
   });
   revalidatePath("/app/setup");
@@ -66,13 +120,30 @@ export async function createSource(formData: FormData) {
 
 export async function addCalendarDay(formData: FormData) {
   const supabase = createSupabaseServerClient();
+  const {
+    data: { session }
+  } = await supabase.auth.getSession();
+  if (!session) redirect("/login");
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, dealer_group_id, role")
+    .or(profileMatchAuthUserId(session.user.id))
+    .maybeSingle();
+
+  const storeId = String(formData.get("store_id") || "").trim();
+  if (!(await assertStoreAccess(supabase, profile, storeId))) {
+    throw new Error("Store not allowed");
+  }
+
+  // Live column is `date` (unique on store_id, date)
   await supabase.from("store_calendar_days").upsert(
     {
-      store_id: String(formData.get("store_id")),
-      calendar_date: String(formData.get("calendar_date")),
+      store_id: storeId,
+      date: String(formData.get("calendar_date")),
       is_working_day: String(formData.get("is_working_day")) === "true"
     },
-    { onConflict: "store_id,calendar_date" }
+    { onConflict: "store_id,date" }
   );
   revalidatePath("/app/calendar");
   revalidatePath("/app/dashboard");
@@ -94,13 +165,18 @@ export async function createDeal(formData: FormData) {
   const dealerGroupId = await getEffectiveDealerGroupId(profile);
   if (!profile || !dealerGroupId) redirect("/app/dashboard");
 
+  const storeId = String(formData.get("store_id") || "").trim();
+  if (!(await assertStoreAccess(supabase, profile, storeId))) {
+    throw new Error("Store not allowed");
+  }
+
   const front = Number(formData.get("front_profit") || 0);
   const back = Number(formData.get("back_profit") || 0);
   const sourceRaw = String(formData.get("acquisition_source_id") || "").trim();
 
   const payload = {
     dealer_group_id: dealerGroupId,
-    store_id: String(formData.get("store_id")),
+    store_id: storeId,
     department_id: String(formData.get("department_id")),
     status: String(formData.get("status") || "pending"),
     trade_status: String(formData.get("trade_status") || "no_trade"),

@@ -16,6 +16,7 @@ import {
 } from "@/app/admin/actions";
 import { openStoreViewForGroupAction } from "@/app/app/group-actions";
 import { requireAdminServiceClient } from "@/app/admin/admin-data";
+import StoreAccessFields, { PhoneField } from "./StoreAccessFields";
 
 type PageProps = { params: { id: string } };
 
@@ -41,15 +42,38 @@ async function getGroupDetail(id: string) {
       .order("name", { ascending: true }),
     supabase
       .from("profiles")
-      .select("id, user_id, email, first_name, last_name, role, status, created_at")
+      .select("id, user_id, email, first_name, last_name, phone, role, status, created_at")
       .eq("dealer_group_id", id)
       .order("created_at", { ascending: false }),
   ]);
+
+  const accessKeys = (users ?? []).flatMap((u) => [u.id, u.user_id].filter(Boolean));
+  let accessByProfile = new Map<string, string[]>();
+  if (accessKeys.length > 0) {
+    const { data: accessRows } = await supabase
+      .from("user_store_access")
+      .select("user_id, store_id")
+      .in("user_id", accessKeys);
+    const userByAuthId = new Map((users ?? []).map((u) => [u.user_id, u.id]));
+    for (const row of accessRows ?? []) {
+      const profileKey = userByAuthId.get(row.user_id) ?? row.user_id;
+      const list = accessByProfile.get(profileKey) ?? [];
+      list.push(row.store_id);
+      accessByProfile.set(profileKey, list);
+      // Also index by auth user_id for lookup flexibility
+      if (profileKey !== row.user_id) {
+        const byAuth = accessByProfile.get(row.user_id) ?? [];
+        byAuth.push(row.store_id);
+        accessByProfile.set(row.user_id, byAuth);
+      }
+    }
+  }
 
   return {
     group,
     stores: stores ?? [],
     users: users ?? [],
+    accessByProfile,
   };
 }
 
@@ -58,7 +82,9 @@ export default async function AdminGroupDetailPage({ params }: PageProps) {
   const detail = await getGroupDetail(id);
   if (!detail) notFound();
 
-  const { group, stores, users } = detail;
+  const { group, stores, users, accessByProfile } = detail;
+  const storeOptions = stores.map((s) => ({ id: s.id, name: s.name }));
+  const storeNameById = new Map(stores.map((s) => [s.id, s.name]));
 
   return (
     <div className="space-y-6">
@@ -88,23 +114,23 @@ export default async function AdminGroupDetailPage({ params }: PageProps) {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-semibold">Group details</CardTitle>
+          <CardTitle className="text-sm font-semibold">Group settings</CardTitle>
         </CardHeader>
         <CardContent>
-          <form action={updateAutoGroup} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <form action={updateAutoGroup} className="grid gap-3 sm:grid-cols-3">
             <input type="hidden" name="id" value={group.id} />
             <div className="sm:col-span-2">
-              <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor="name">
+              <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor="group_name">
                 Name
               </label>
-              <Input id="name" name="name" required defaultValue={group.name} />
+              <Input id="group_name" name="name" defaultValue={group.name} required />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor="plan">
+              <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor="group_plan">
                 Plan
               </label>
               <select
-                id="plan"
+                id="group_plan"
                 name="plan"
                 defaultValue={group.plan}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -114,8 +140,10 @@ export default async function AdminGroupDetailPage({ params }: PageProps) {
                 <option value="premium">Premium</option>
               </select>
             </div>
-            <div className="flex items-end">
-              <Button type="submit">Save group</Button>
+            <div className="sm:col-span-3">
+              <Button type="submit" size="sm">
+                Save group
+              </Button>
             </div>
           </form>
         </CardContent>
@@ -126,24 +154,22 @@ export default async function AdminGroupDetailPage({ params }: PageProps) {
           <CardTitle className="text-sm font-semibold">Stores ({stores.length})</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <form action={createStoreInGroup} className="grid gap-3 sm:grid-cols-3">
+          <form action={createStoreInGroup} className="flex flex-wrap items-end gap-3">
             <input type="hidden" name="dealer_group_id" value={group.id} />
-            <div className="sm:col-span-2">
+            <div className="min-w-[220px] flex-1">
               <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor="store_name">
                 Store name
               </label>
-              <Input id="store_name" name="name" required placeholder="Downtown" />
+              <Input id="store_name" name="name" placeholder="Centralia" required />
             </div>
-            <div className="flex items-end">
-              <Button type="submit">Add store</Button>
-            </div>
+            <Button type="submit">Add store</Button>
           </form>
 
           <div className="-mx-6 border-t border-border">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
+                  <TableHead>Store</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -151,28 +177,35 @@ export default async function AdminGroupDetailPage({ params }: PageProps) {
                 {stores.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={2} className="text-sm text-muted-foreground">
-                      No stores in this group yet.
+                      No stores yet.
                     </TableCell>
                   </TableRow>
                 )}
                 {stores.map((store) => (
                   <TableRow key={store.id}>
-                    <TableCell colSpan={2} className="p-2">
-                      <form
-                        action={updateStoreInGroup}
-                        className="grid items-end gap-2 sm:grid-cols-[1fr_auto]"
-                      >
+                    <TableCell>
+                      <form action={updateStoreInGroup} className="flex flex-wrap items-center gap-2">
                         <input type="hidden" name="id" value={store.id} />
                         <input type="hidden" name="dealer_group_id" value={group.id} />
-                        <Input name="name" required defaultValue={store.name} aria-label="Store name" />
-                        <div className="flex justify-end gap-2">
-                          <Button type="submit" size="sm" variant="outline">
-                            Save
-                          </Button>
-                          <Button formAction={deleteStoreInGroup} type="submit" size="sm" variant="ghost">
-                            Remove
-                          </Button>
-                        </div>
+                        <Input
+                          name="name"
+                          defaultValue={store.name}
+                          aria-label="Store name"
+                          className="max-w-xs"
+                        />
+                        {store.is_demo ? <Badge variant="outline">Demo</Badge> : null}
+                        <Button type="submit" size="sm" variant="outline">
+                          Save
+                        </Button>
+                      </form>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <form action={deleteStoreInGroup}>
+                        <input type="hidden" name="id" value={store.id} />
+                        <input type="hidden" name="dealer_group_id" value={group.id} />
+                        <Button type="submit" size="sm" variant="ghost">
+                          Delete
+                        </Button>
                       </form>
                     </TableCell>
                   </TableRow>
@@ -188,7 +221,7 @@ export default async function AdminGroupDetailPage({ params }: PageProps) {
           <CardTitle className="text-sm font-semibold">Users ({users.length})</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <form action={createUserInGroup} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <form action={createUserInGroup} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <input type="hidden" name="dealer_group_id" value={group.id} />
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor="user_first_name">
@@ -208,20 +241,8 @@ export default async function AdminGroupDetailPage({ params }: PageProps) {
               </label>
               <Input id="user_email" name="email" type="email" required placeholder="jane@dealer.com" />
             </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor="user_role">
-                Role
-              </label>
-              <select
-                id="user_role"
-                name="role"
-                defaultValue="store_admin"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="store_admin">Store admin</option>
-                <option value="group_admin">Group admin</option>
-              </select>
-            </div>
+            <PhoneField id="user_phone" />
+            <StoreAccessFields stores={storeOptions} idPrefix="create_user" />
             <div className="flex items-end">
               <input type="hidden" name="status" value="active" />
               <Button type="submit">Add user</Button>
@@ -233,7 +254,7 @@ export default async function AdminGroupDetailPage({ params }: PageProps) {
               <TableHeader>
                 <TableRow>
                   <TableHead>User</TableHead>
-                  <TableHead>Role / status</TableHead>
+                  <TableHead>Role / status / stores</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -247,6 +268,11 @@ export default async function AdminGroupDetailPage({ params }: PageProps) {
                 )}
                 {users.map((user) => {
                   const isPlatformAdmin = user.role === "platform_admin";
+                  const assignedStoreIds = accessByProfile.get(user.id) ?? [];
+                  const assignedNames = assignedStoreIds
+                    .map((sid) => storeNameById.get(sid))
+                    .filter(Boolean);
+
                   if (isPlatformAdmin) {
                     return (
                       <TableRow key={user.id}>
@@ -255,6 +281,9 @@ export default async function AdminGroupDetailPage({ params }: PageProps) {
                             {[user.first_name, user.last_name].filter(Boolean).join(" ") || "—"}
                           </div>
                           <div className="text-xs text-muted-foreground">{user.email}</div>
+                          {user.phone ? (
+                            <div className="text-xs text-muted-foreground">{user.phone}</div>
+                          ) : null}
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
@@ -299,15 +328,13 @@ export default async function AdminGroupDetailPage({ params }: PageProps) {
                               aria-label="Email"
                               className="sm:col-span-2 lg:col-span-2"
                             />
-                            <select
-                              name="role"
-                              defaultValue={user.role === "group_admin" ? "group_admin" : "store_admin"}
-                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                              aria-label="Role"
-                            >
-                              <option value="store_admin">Store admin</option>
-                              <option value="group_admin">Group admin</option>
-                            </select>
+                            <Input
+                              name="phone"
+                              type="tel"
+                              defaultValue={user.phone ?? ""}
+                              placeholder="Phone"
+                              aria-label="Phone"
+                            />
                             <select
                               name="status"
                               defaultValue={user.status}
@@ -318,7 +345,18 @@ export default async function AdminGroupDetailPage({ params }: PageProps) {
                               <option value="active">Active</option>
                               <option value="disabled">Disabled</option>
                             </select>
-                            <div className="flex justify-end gap-2 sm:col-span-2">
+                            <StoreAccessFields
+                              stores={storeOptions}
+                              defaultRole={user.role === "group_admin" ? "group_admin" : "store_admin"}
+                              defaultStoreIds={assignedStoreIds}
+                              idPrefix={`edit_${user.id}`}
+                            />
+                            {user.role === "store_admin" && assignedNames.length > 0 ? (
+                              <p className="text-[11px] text-muted-foreground sm:col-span-2 lg:col-span-full">
+                                Currently: {assignedNames.join(", ")}
+                              </p>
+                            ) : null}
+                            <div className="flex justify-end gap-2 sm:col-span-2 lg:col-span-full">
                               <Button type="submit" size="sm" variant="outline">
                                 Save
                               </Button>

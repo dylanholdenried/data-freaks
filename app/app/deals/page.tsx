@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
+import { getAccessibleStores } from "@/lib/store-access";
 import DealsClient from "./DealsClient";
 import SelectAutoGroupEmptyState from "../SelectAutoGroupEmptyState";
 
@@ -35,23 +36,17 @@ export default async function DealsPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("dealer_group_id, role")
+    .select("id, dealer_group_id, role")
     .or(profileMatchAuthUserId(session!.user.id))
     .maybeSingle();
 
   const dealerGroupId = await getEffectiveDealerGroupId(profile);
 
-  if (!dealerGroupId) {
+  if (!dealerGroupId || !profile) {
     return <SelectAutoGroupEmptyState />;
   }
 
-  const { data: storesData } = await supabase
-    .from("stores")
-    .select("id,name")
-    .eq("dealer_group_id", dealerGroupId)
-    .order("name");
-
-  const stores = (storesData ?? []) as unknown as Store[];
+  const stores = (await getAccessibleStores(supabase, profile)) as Store[];
   const storeIds = stores.map((s) => s.id);
 
   if (storeIds.length === 0) {

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
+import { getAccessibleStores } from "@/lib/store-access";
 import UpdatePendingForm from "./UpdatePendingForm";
 import SelectAutoGroupEmptyState from "../../../SelectAutoGroupEmptyState";
 
@@ -53,26 +54,20 @@ export default async function EditDealPage({ params }: { params: { id: string } 
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("dealer_group_id, role")
+    .select("id, dealer_group_id, role")
     .or(profileMatchAuthUserId(session!.user.id))
     .maybeSingle();
 
   const dealerGroupId = await getEffectiveDealerGroupId(profile);
 
-  if (!dealerGroupId) {
+  if (!dealerGroupId || !profile) {
     return <SelectAutoGroupEmptyState />;
   }
 
-  // 1. User's stores — establishes the auth boundary
-  const { data: storesData } = await supabase
-    .from("stores")
-    .select("id,name")
-    .eq("dealer_group_id", dealerGroupId);
-
-  const storeById = new Map(
-    (storesData ?? []).map((s: { id: string; name: string }) => [s.id, s.name])
-  );
-  const storeIds = Array.from(storeById.keys());
+  // 1. User's accessible stores — establishes the auth boundary
+  const accessibleStores = await getAccessibleStores(supabase, profile);
+  const storeById = new Map(accessibleStores.map((s) => [s.id, s.name]));
+  const storeIds = accessibleStores.map((s) => s.id);
 
   // 2. Fetch the deal — no status filter; any deal by ID loads here
   const { data: dealData, error: dealFetchError } = await supabase

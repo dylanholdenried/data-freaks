@@ -186,7 +186,9 @@ export default function DealsClient({
 }: Props) {
   // ── Filter state ─────────────────────────────────────────────────────────────
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [storeFilter, setStoreFilter] = useState<"both" | string>("both");
+  const [storeFilter, setStoreFilter] = useState<"both" | string>(
+    stores.length === 1 ? stores[0].id : "both"
+  );
   const [allTime, setAllTime] = useState(false);
   const [yearFilter, setYearFilter] = useState(initialYear);
   const [monthFilter, setMonthFilter] = useState(initialMonth);

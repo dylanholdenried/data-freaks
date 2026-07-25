@@ -159,7 +159,9 @@ export default function DashboardClient({
   year,
   month,
 }: Props) {
-  const [selectedStore, setSelectedStore] = useState<"both" | string>("both");
+  const [selectedStore, setSelectedStore] = useState<"both" | string>(
+    stores.length === 1 ? stores[0].id : "both"
+  );
 
   const { kpis, deptRows, totalsRow, leaderboard, monthLabel } = useMemo(() => {
     const selectedStoreIds =
