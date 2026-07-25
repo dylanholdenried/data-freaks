@@ -1,7 +1,9 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
+import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import UpdatePendingForm from "./UpdatePendingForm";
+import SelectAutoGroupEmptyState from "../../../SelectAutoGroupEmptyState";
 
 type DealRow = {
   id: string;
@@ -50,19 +52,21 @@ export default async function EditDealPage({ params }: { params: { id: string } 
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("dealer_group_id")
+    .select("dealer_group_id, role")
     .or(profileMatchAuthUserId(session!.user.id))
     .maybeSingle();
 
-  if (!profile?.dealer_group_id) {
-    redirect("/app/dashboard");
+  const dealerGroupId = await getEffectiveDealerGroupId(profile);
+
+  if (!dealerGroupId) {
+    return <SelectAutoGroupEmptyState />;
   }
 
   // 1. User's stores — establishes the auth boundary
   const { data: storesData } = await supabase
     .from("stores")
     .select("id,name")
-    .eq("dealer_group_id", profile.dealer_group_id);
+    .eq("dealer_group_id", dealerGroupId);
 
   const storeById = new Map(
     (storesData ?? []).map((s: { id: string; name: string }) => [s.id, s.name])

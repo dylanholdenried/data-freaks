@@ -423,6 +423,13 @@ on public.profiles
 for update
 using (user_id = auth.uid() or id = auth.uid());
 
+drop policy if exists "profiles_platform_admin_all" on public.profiles;
+create policy "profiles_platform_admin_all"
+on public.profiles
+for all
+using (is_platform_admin())
+with check (is_platform_admin());
+
 -- Dealer groups: platform admins see all; members see their group.
 
 create policy "dealer_groups_platform_admin_all"

@@ -1,9 +1,11 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
+import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { addCalendarDay } from "@/app/app/actions";
+import SelectAutoGroupEmptyState from "../SelectAutoGroupEmptyState";
 
 export default async function CalendarPage() {
   const supabase = createSupabaseServerClient();
@@ -13,16 +15,24 @@ export default async function CalendarPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("dealer_group_id")
+    .select("dealer_group_id, role")
     .or(profileMatchAuthUserId(session!.user.id))
     .maybeSingle();
 
-  const { data: stores } = await supabase.from("stores").select("id,name").eq("dealer_group_id", profile?.dealer_group_id);
+  const dealerGroupId = await getEffectiveDealerGroupId(profile);
+
+  if (!dealerGroupId) {
+    return <SelectAutoGroupEmptyState />;
+  }
+
+  const { data: stores } = await supabase.from("stores").select("id,name").eq("dealer_group_id", dealerGroupId);
   const storeIds = (stores ?? []).map((s: any) => s.id);
-  const { data: calendarDays } = await supabase
-    .from("store_calendar_days")
-    .select("store_id,calendar_date,is_working_day")
-    .in("store_id", storeIds);
+  const { data: calendarDays } = storeIds.length
+    ? await supabase
+        .from("store_calendar_days")
+        .select("store_id,calendar_date,is_working_day")
+        .in("store_id", storeIds)
+    : { data: [] as any[] };
 
   const now = new Date();
   const year = now.getFullYear();

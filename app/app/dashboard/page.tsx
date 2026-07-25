@@ -1,7 +1,8 @@
-import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
+import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import DashboardClient from "./DashboardClient";
+import SelectAutoGroupEmptyState from "../SelectAutoGroupEmptyState";
 
 type Store = { id: string; name: string };
 type Deal = {
@@ -26,12 +27,14 @@ export default async function DashboardPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("dealer_group_id")
+    .select("dealer_group_id, role")
     .or(profileMatchAuthUserId(session!.user.id))
     .maybeSingle();
 
-  if (!profile?.dealer_group_id) {
-    redirect("/app/deals");
+  const dealerGroupId = await getEffectiveDealerGroupId(profile);
+
+  if (!dealerGroupId) {
+    return <SelectAutoGroupEmptyState />;
   }
 
   // Current month bounds (UTC date — close enough for month-level scoping)
@@ -46,7 +49,7 @@ export default async function DashboardPage() {
   const { data: storesData } = await supabase
     .from("stores")
     .select("id,name")
-    .eq("dealer_group_id", profile.dealer_group_id)
+    .eq("dealer_group_id", dealerGroupId)
     .order("name");
 
   const stores = (storesData ?? []) as unknown as Store[];

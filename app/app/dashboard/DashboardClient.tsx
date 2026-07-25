@@ -146,7 +146,7 @@ function NeededCell({ n }: { n: NeededDisplay }) {
 
 // Shared grid template — 10 columns, used by header + every data row
 const GRID =
-  "sm:grid-cols-[2fr_60px_60px_90px_90px_100px_60px_60px_70px_80px] sm:gap-3";
+  "xl:grid-cols-[2fr_60px_60px_90px_90px_100px_60px_60px_70px_80px] xl:gap-3";
 
 export default function DashboardClient({
   stores,
@@ -354,8 +354,8 @@ export default function DashboardClient({
   // Leaderboard grid — extra Store column only when viewing both stores
   const showStore = selectedStore === "both";
   const LB_GRID = showStore
-    ? "sm:grid-cols-[28px_1fr_100px_70px_70px_110px_100px] sm:gap-3"
-    : "sm:grid-cols-[28px_1fr_70px_70px_110px_100px] sm:gap-3";
+    ? "xl:grid-cols-[28px_1fr_100px_70px_70px_110px_100px] xl:gap-3"
+    : "xl:grid-cols-[28px_1fr_70px_70px_110px_100px] xl:gap-3";
 
   return (
     <div className="space-y-5">
@@ -442,7 +442,7 @@ export default function DashboardClient({
       </div>
 
       {/* Department pace & gross table */}
-      <section className="overflow-hidden rounded-2xl border border-[#e7ebf3] bg-white shadow-[0_10px_30px_rgba(15,23,42,0.06)]">
+      <section className="w-full min-w-0 rounded-2xl border border-[#e7ebf3] bg-white shadow-[0_10px_30px_rgba(15,23,42,0.06)]">
         <div className="border-b border-[#edf1f7] bg-[#f8fafd] px-5 py-3">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
             Department Pace &amp; Gross
@@ -451,7 +451,7 @@ export default function DashboardClient({
 
         {/* Column headers — desktop only */}
         <div
-          className={`hidden border-b border-[#edf1f7] bg-[#f8fafd] px-5 py-2 sm:grid ${GRID}`}
+          className={`hidden border-b border-[#edf1f7] bg-[#f8fafd] px-5 py-2 xl:grid ${GRID}`}
         >
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
             Department
@@ -486,7 +486,7 @@ export default function DashboardClient({
               {deptRows.map((dept) => (
                 <div
                   key={dept.id}
-                  className={`px-5 py-3 sm:grid ${GRID} sm:items-center`}
+                  className={`px-5 py-3 xl:grid ${GRID} xl:items-center`}
                 >
                   {/* Name — always visible */}
                   <span className="block text-sm font-medium text-slate-800">
@@ -494,7 +494,7 @@ export default function DashboardClient({
                   </span>
 
                   {/* Mobile summary row — hidden on desktop */}
-                  <div className="mt-0.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-400 sm:hidden">
+                  <div className="mt-0.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-400 xl:hidden">
                     <span>
                       Booked{" "}
                       <strong className="text-slate-700">{dept.booked}</strong>
@@ -517,31 +517,31 @@ export default function DashboardClient({
                   </div>
 
                   {/* Desktop cells — hidden on mobile */}
-                  <span className="hidden text-right text-sm tabular-nums text-slate-600 sm:block">
+                  <span className="hidden text-right text-sm tabular-nums text-slate-600 xl:block">
                     {dept.booked}
                   </span>
-                  <span className="hidden text-right text-sm tabular-nums text-slate-600 sm:block">
+                  <span className="hidden text-right text-sm tabular-nums text-slate-600 xl:block">
                     {dept.closed}
                   </span>
-                  <span className="hidden text-right text-sm tabular-nums text-slate-500 sm:block">
+                  <span className="hidden text-right text-sm tabular-nums text-slate-500 xl:block">
                     {dept.front !== null ? fmt$(dept.front) : "—"}
                   </span>
-                  <span className="hidden text-right text-sm tabular-nums text-slate-500 sm:block">
+                  <span className="hidden text-right text-sm tabular-nums text-slate-500 xl:block">
                     {dept.back !== null ? fmt$(dept.back) : "—"}
                   </span>
-                  <span className="hidden text-right text-sm tabular-nums font-semibold text-slate-800 sm:block">
+                  <span className="hidden text-right text-sm tabular-nums font-semibold text-slate-800 xl:block">
                     {dept.total !== null ? fmt$(dept.total) : "—"}
                   </span>
-                  <span className="hidden text-right text-sm tabular-nums text-slate-500 sm:block">
+                  <span className="hidden text-right text-sm tabular-nums text-slate-500 xl:block">
                     {dept.goal ?? "—"}
                   </span>
-                  <span className="hidden text-right text-sm tabular-nums text-slate-700 sm:block">
+                  <span className="hidden text-right text-sm tabular-nums text-slate-700 xl:block">
                     {dept.pace ?? "—"}
                   </span>
-                  <span className="hidden text-right text-sm tabular-nums sm:block">
+                  <span className="hidden text-right text-sm tabular-nums xl:block">
                     <VsGoalCell vsGoal={dept.vsGoal} />
                   </span>
-                  <span className="hidden text-right text-sm tabular-nums sm:block">
+                  <span className="hidden text-right text-sm tabular-nums xl:block">
                     <NeededCell n={dept.needed} />
                   </span>
                 </div>
@@ -549,14 +549,14 @@ export default function DashboardClient({
 
               {/* Totals row */}
               <div
-                className={`bg-[#f8fafd] px-5 py-3 sm:grid ${GRID} sm:items-center`}
+                className={`bg-[#f8fafd] px-5 py-3 xl:grid ${GRID} xl:items-center`}
               >
                 <span className="block text-xs font-bold uppercase tracking-wide text-slate-500">
                   All Departments
                 </span>
 
                 {/* Mobile totals summary */}
-                <div className="mt-0.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-400 sm:hidden">
+                <div className="mt-0.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-400 xl:hidden">
                   <span>
                     Booked{" "}
                     <strong className="text-slate-700">{totalsRow.booked}</strong>
@@ -579,31 +579,31 @@ export default function DashboardClient({
                 </div>
 
                 {/* Desktop totals cells */}
-                <span className="hidden text-right text-sm tabular-nums font-bold text-slate-900 sm:block">
+                <span className="hidden text-right text-sm tabular-nums font-bold text-slate-900 xl:block">
                   {totalsRow.booked}
                 </span>
-                <span className="hidden text-right text-sm tabular-nums font-bold text-slate-900 sm:block">
+                <span className="hidden text-right text-sm tabular-nums font-bold text-slate-900 xl:block">
                   {totalsRow.closed}
                 </span>
-                <span className="hidden text-right text-sm tabular-nums font-semibold text-slate-500 sm:block">
+                <span className="hidden text-right text-sm tabular-nums font-semibold text-slate-500 xl:block">
                   {totalsRow.front !== null ? fmt$(totalsRow.front) : "—"}
                 </span>
-                <span className="hidden text-right text-sm tabular-nums font-semibold text-slate-500 sm:block">
+                <span className="hidden text-right text-sm tabular-nums font-semibold text-slate-500 xl:block">
                   {totalsRow.back !== null ? fmt$(totalsRow.back) : "—"}
                 </span>
-                <span className="hidden text-right text-sm tabular-nums font-bold text-slate-900 sm:block">
+                <span className="hidden text-right text-sm tabular-nums font-bold text-slate-900 xl:block">
                   {totalsRow.total !== null ? fmt$(totalsRow.total) : "—"}
                 </span>
-                <span className="hidden text-right text-sm tabular-nums font-bold text-slate-700 sm:block">
+                <span className="hidden text-right text-sm tabular-nums font-bold text-slate-700 xl:block">
                   {totalsRow.goal ?? "—"}
                 </span>
-                <span className="hidden text-right text-sm tabular-nums font-bold text-slate-900 sm:block">
+                <span className="hidden text-right text-sm tabular-nums font-bold text-slate-900 xl:block">
                   {totalsRow.pace ?? "—"}
                 </span>
-                <span className="hidden text-right text-sm tabular-nums font-bold sm:block">
+                <span className="hidden text-right text-sm tabular-nums font-bold xl:block">
                   <VsGoalCell vsGoal={totalsRow.vsGoal} />
                 </span>
-                <span className="hidden text-right text-sm tabular-nums font-bold sm:block">
+                <span className="hidden text-right text-sm tabular-nums font-bold xl:block">
                   <NeededCell n={totalsRow.needed} />
                 </span>
               </div>
@@ -613,7 +613,7 @@ export default function DashboardClient({
       </section>
 
       {/* Salesperson leaderboard */}
-      <section className="overflow-hidden rounded-2xl border border-[#e7ebf3] bg-white shadow-[0_10px_30px_rgba(15,23,42,0.06)]">
+      <section className="w-full min-w-0 rounded-2xl border border-[#e7ebf3] bg-white shadow-[0_10px_30px_rgba(15,23,42,0.06)]">
         <div className="border-b border-[#edf1f7] bg-[#f8fafd] px-5 py-3">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
             Salesperson Leaderboard
@@ -622,7 +622,7 @@ export default function DashboardClient({
 
         {/* Column headers — desktop only */}
         <div
-          className={`hidden border-b border-[#edf1f7] bg-[#f8fafd] px-5 py-2 sm:grid ${LB_GRID}`}
+          className={`hidden border-b border-[#edf1f7] bg-[#f8fafd] px-5 py-2 xl:grid ${LB_GRID}`}
         >
           <span /> {/* rank */}
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -652,7 +652,7 @@ export default function DashboardClient({
             leaderboard.map((row, idx) => (
               <div
                 key={row.id}
-                className={`px-5 py-3 sm:grid ${LB_GRID} sm:items-center`}
+                className={`px-5 py-3 xl:grid ${LB_GRID} xl:items-center`}
               >
                 {/* Rank */}
                 <span
@@ -669,7 +669,7 @@ export default function DashboardClient({
                 </span>
 
                 {/* Mobile summary — hidden on desktop */}
-                <div className="mt-0.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-400 sm:hidden">
+                <div className="mt-0.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-400 xl:hidden">
                   {showStore && <span>{row.storeName}</span>}
                   <span>
                     Booked{" "}
@@ -693,22 +693,22 @@ export default function DashboardClient({
 
                 {/* Store — desktop, Both mode only */}
                 {showStore && (
-                  <span className="hidden text-sm text-slate-500 sm:block">
+                  <span className="hidden text-sm text-slate-500 xl:block">
                     {row.storeName}
                   </span>
                 )}
 
                 {/* Desktop cells */}
-                <span className="hidden text-right text-sm tabular-nums text-slate-600 sm:block">
+                <span className="hidden text-right text-sm tabular-nums text-slate-600 xl:block">
                   {fmtUnits(row.bookedUnits)}
                 </span>
-                <span className="hidden text-right text-sm tabular-nums text-slate-600 sm:block">
+                <span className="hidden text-right text-sm tabular-nums text-slate-600 xl:block">
                   {fmtUnits(row.closedUnits)}
                 </span>
-                <span className="hidden text-right text-sm tabular-nums font-semibold text-slate-800 sm:block">
+                <span className="hidden text-right text-sm tabular-nums font-semibold text-slate-800 xl:block">
                   {row.totalGross > 0 ? fmt$(row.totalGross) : "—"}
                 </span>
-                <span className="hidden text-right text-sm tabular-nums text-slate-500 sm:block">
+                <span className="hidden text-right text-sm tabular-nums text-slate-500 xl:block">
                   {row.avgGross !== null ? fmt$(row.avgGross) : "—"}
                 </span>
               </div>

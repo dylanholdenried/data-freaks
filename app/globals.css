@@ -11,7 +11,7 @@ body {
 }
 
 .app-canvas {
-  @apply min-h-screen bg-[#f3f6fb];
+  @apply min-h-screen overflow-x-clip bg-[#f3f6fb];
 }
 
 .app-panel {

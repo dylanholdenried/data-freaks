@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
+import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 
 export async function signOut() {
   const supabase = createSupabaseServerClient();
@@ -20,14 +21,17 @@ export async function createStore(formData: FormData) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("dealer_group_id")
+    .select("dealer_group_id, role")
     .or(profileMatchAuthUserId(session.user.id))
     .maybeSingle();
 
+  const dealerGroupId = await getEffectiveDealerGroupId(profile);
+  if (!dealerGroupId) redirect("/app/dashboard");
+
   await supabase.from("stores").insert({
-    dealer_group_id: profile?.dealer_group_id,
+    dealer_group_id: dealerGroupId,
     name: String(formData.get("store_name")),
-    code: String(formData.get("store_code") || "")
+    is_demo: false
   });
   revalidatePath("/app/setup");
 }
@@ -83,17 +87,19 @@ export async function createDeal(formData: FormData) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id,dealer_group_id")
+    .select("id,dealer_group_id,role")
     .or(profileMatchAuthUserId(session.user.id))
     .maybeSingle();
-  if (!profile?.dealer_group_id) redirect("/awaiting-approval");
+
+  const dealerGroupId = await getEffectiveDealerGroupId(profile);
+  if (!profile || !dealerGroupId) redirect("/app/dashboard");
 
   const front = Number(formData.get("front_profit") || 0);
   const back = Number(formData.get("back_profit") || 0);
   const sourceRaw = String(formData.get("acquisition_source_id") || "").trim();
 
   const payload = {
-    dealer_group_id: profile.dealer_group_id,
+    dealer_group_id: dealerGroupId,
     store_id: String(formData.get("store_id")),
     department_id: String(formData.get("department_id")),
     status: String(formData.get("status") || "pending"),

@@ -235,8 +235,8 @@ function GoalsSection({
                   </p>
                   <div className="space-y-2">
                     {depts.map((dept) => (
-                      <div key={dept.id} className="flex items-center gap-3">
-                        <label className="w-40 shrink-0 text-sm text-slate-700">{dept.name}</label>
+                      <div key={dept.id} className="flex min-w-0 flex-wrap items-center gap-3">
+                        <label className="min-w-0 flex-1 basis-40 text-sm text-slate-700 sm:flex-none sm:basis-auto sm:w-40 sm:shrink-0">{dept.name}</label>
                         <Input
                           type="number"
                           min={0}
@@ -245,7 +245,7 @@ function GoalsSection({
                           onChange={(e) =>
                             setDrafts((prev) => ({ ...prev, [dept.id]: e.target.value }))
                           }
-                          className="w-28"
+                          className="w-28 shrink-0"
                         />
                         <span className="text-xs text-slate-400">units</span>
                       </div>

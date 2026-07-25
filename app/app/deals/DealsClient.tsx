@@ -313,8 +313,8 @@ export default function DealsClient({
   // Grid template — Store column only when Both is selected
   const showStore = storeFilter === "both";
   const TGRID = showStore
-    ? "sm:grid-cols-[65px_80px_110px_1fr_90px_100px_115px_90px_68px_68px_76px_20px] sm:gap-2"
-    : "sm:grid-cols-[65px_80px_110px_1fr_100px_115px_90px_68px_68px_76px_20px] sm:gap-2";
+    ? "xl:grid-cols-[65px_80px_110px_1fr_90px_100px_115px_90px_68px_68px_76px_20px] xl:gap-2"
+    : "xl:grid-cols-[65px_80px_110px_1fr_100px_115px_90px_68px_68px_76px_20px] xl:gap-2";
 
   return (
     <div className="space-y-5">
@@ -470,7 +470,7 @@ export default function DealsClient({
       </section>
 
       {/* Table */}
-      <section className="overflow-hidden rounded-2xl border border-[#e7ebf3] bg-white shadow-[0_10px_30px_rgba(15,23,42,0.06)]">
+      <section className="w-full min-w-0 rounded-2xl border border-[#e7ebf3] bg-white shadow-[0_10px_30px_rgba(15,23,42,0.06)]">
         {/* Count bar */}
         <div className="flex items-center justify-between border-b border-[#edf1f7] bg-[#f8fafd] px-5 py-3">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
@@ -481,9 +481,9 @@ export default function DealsClient({
           </p>
         </div>
 
-        {/* Column headers — desktop only */}
+        {/* Column headers — xl+ only */}
         <div
-          className={`hidden border-b border-[#edf1f7] bg-[#f8fafd] px-5 py-2 sm:grid ${TGRID}`}
+          className={`hidden border-b border-[#edf1f7] bg-[#f8fafd] px-5 py-2 xl:grid ${TGRID}`}
         >
           <SortHeader col="sale_date" label="Date" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
           <SortHeader col="stock_number" label="Stock #" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
@@ -523,7 +523,7 @@ export default function DealsClient({
                   key={deal.id}
                   href={`/app/deals/${deal.id}/edit`}
                   prefetch
-                  className={`group flex flex-col px-5 py-3 transition-colors hover:bg-[#f5f8ff] sm:grid ${TGRID} sm:items-center`}
+                  className={`group flex min-w-0 flex-col px-5 py-3 transition-colors hover:bg-[#f5f8ff] xl:grid ${TGRID} xl:items-center`}
                 >
                   {/* Date — always visible, grid cell 1 */}
                   <span className="text-sm text-slate-400">
@@ -536,17 +536,17 @@ export default function DealsClient({
                   </span>
 
                   {/* Customer — always visible, grid cell 3 */}
-                  <span className="text-sm font-medium text-slate-800">
+                  <span className="min-w-0 truncate text-sm font-medium text-slate-800">
                     {deal.customer_last_name}
                   </span>
 
                   {/* Vehicle — always visible, grid cell 4 (1fr) */}
-                  <span className="text-sm text-slate-600">
+                  <span className="min-w-0 truncate text-sm text-slate-600">
                     {deal.vehicle_year} {deal.vehicle_make} {deal.vehicle_model}
                   </span>
 
-                  {/* Mobile summary — hidden on desktop, not a grid cell */}
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-400 sm:hidden">
+                  {/* Stacked summary — hidden at xl+, not a grid cell */}
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-400 xl:hidden">
                     <StatusBadge status={deal.status} />
                     {showStore && <span>{storeName}</span>}
                     <span>{deptName}</span>
@@ -558,45 +558,45 @@ export default function DealsClient({
                     )}
                   </div>
 
-                  {/* Store — desktop, Both mode only */}
+                  {/* Store — xl+, Both mode only */}
                   {showStore && (
-                    <span className="hidden text-sm text-slate-500 sm:block">
+                    <span className="hidden text-sm text-slate-500 xl:block">
                       {storeName}
                     </span>
                   )}
 
                   {/* Dept */}
-                  <span className="hidden text-sm text-slate-500 sm:block">
+                  <span className="hidden text-sm text-slate-500 xl:block">
                     {deptName}
                   </span>
 
                   {/* Salesperson(s) */}
-                  <span className="hidden text-sm text-slate-500 sm:block">
+                  <span className="hidden text-sm text-slate-500 xl:block">
                     {spNames.length > 0 ? spNames.join(", ") : "—"}
                   </span>
 
                   {/* Status badge */}
-                  <span className="hidden sm:block">
+                  <span className="hidden xl:block">
                     <StatusBadge status={deal.status} />
                   </span>
 
                   {/* Front */}
-                  <span className="hidden text-right text-sm tabular-nums text-slate-500 sm:block">
+                  <span className="hidden text-right text-sm tabular-nums text-slate-500 xl:block">
                     {deal.front_profit !== null ? fmt$(deal.front_profit) : "—"}
                   </span>
 
                   {/* Back */}
-                  <span className="hidden text-right text-sm tabular-nums text-slate-500 sm:block">
+                  <span className="hidden text-right text-sm tabular-nums text-slate-500 xl:block">
                     {deal.back_profit !== null ? fmt$(deal.back_profit) : "—"}
                   </span>
 
                   {/* Total */}
-                  <span className="hidden text-right text-sm tabular-nums font-semibold text-slate-800 sm:block">
+                  <span className="hidden text-right text-sm tabular-nums font-semibold text-slate-800 xl:block">
                     {totalGross !== null ? fmt$(totalGross) : "—"}
                   </span>
 
                   {/* Chevron */}
-                  <ChevronRight className="hidden h-4 w-4 text-slate-300 transition-colors group-hover:text-blue-400 sm:block" />
+                  <ChevronRight className="hidden h-4 w-4 text-slate-300 transition-colors group-hover:text-blue-400 xl:block" />
                 </Link>
               );
             })

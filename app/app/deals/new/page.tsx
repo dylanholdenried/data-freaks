@@ -1,7 +1,8 @@
-import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
+import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import NewDealForm from "./NewDealForm";
+import SelectAutoGroupEmptyState from "../../SelectAutoGroupEmptyState";
 
 type StoreRow = { id: string; name: string };
 type ItemRow = { id: string; name: string; store_id: string };
@@ -17,18 +18,20 @@ export default async function NewDealPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("dealer_group_id")
+    .select("dealer_group_id, role")
     .or(profileMatchAuthUserId(session!.user.id))
     .maybeSingle();
 
-  if (!profile?.dealer_group_id) {
-    redirect("/app/dashboard");
+  const dealerGroupId = await getEffectiveDealerGroupId(profile);
+
+  if (!dealerGroupId) {
+    return <SelectAutoGroupEmptyState />;
   }
 
   const { data: storesData } = await supabase
     .from("stores")
     .select("id,name")
-    .eq("dealer_group_id", profile.dealer_group_id)
+    .eq("dealer_group_id", dealerGroupId)
     .order("name");
 
   const stores = (storesData ?? []) as unknown as StoreRow[];
