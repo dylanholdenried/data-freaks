@@ -10,6 +10,7 @@ const linkClass =
 const links = [
   { href: "/admin/requests", label: "Requests" },
   { href: "/admin/groups", label: "Auto Groups" },
+  { href: "/admin/bulk-upload", label: "Bulk upload" },
   { href: "/app/dashboard", label: "Store view" },
 ] as const;
 

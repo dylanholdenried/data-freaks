@@ -906,3 +906,11 @@ using (is_platform_admin());
 -- ===========================
 -- Add concrete demo seed data in demo_seed.sql.
 
+-- ===========================
+-- BULK DEAL IMPORT (see migrations)
+-- ===========================
+-- Staging tables + commit_deal_import_batch RPC live in:
+--   supabase/migrations/20260725140000_deal_import_batches.sql
+-- Apply that migration in the Supabase SQL editor (or CLI) before using
+-- /admin/bulk-upload.
+

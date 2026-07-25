@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, Building2, ClipboardList } from "lucide-react";
+import { BarChart3, Building2, ClipboardList, Upload } from "lucide-react";
 
 const navLink =
   "flex items-center gap-2 rounded-lg px-3 py-2 text-slate-300 hover:bg-white/10 hover:text-white";
@@ -20,6 +20,12 @@ const links = [
     label: "Auto Groups",
     icon: Building2,
     match: (p: string) => p.startsWith("/admin/groups"),
+  },
+  {
+    href: "/admin/bulk-upload",
+    label: "Bulk upload",
+    icon: Upload,
+    match: (p: string) => p.startsWith("/admin/bulk-upload"),
   },
   {
     href: "/app/dashboard",
