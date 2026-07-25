@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CheckCircle2, Loader2, PlusCircle, Trash2, XCircle } from "lucide-react";
 import { BODY_STYLES, DRIVETRAINS, decodeVin, isMakeAllowedForDepartment, VinDecodeError } from "@/lib/vehicle";
+import { cn } from "@/lib/utils";
 
 type Store = { id: string; name: string };
 type Department = { id: string; name: string; store_id: string };
@@ -52,6 +53,12 @@ const SEL =
   "disabled:cursor-not-allowed disabled:opacity-60";
 
 const LBL = "text-xs font-medium text-slate-500";
+
+function emptyCls(value: string) {
+  return !value.trim()
+    ? "border-red-400 bg-red-50 focus-visible:ring-red-400 focus:ring-red-400"
+    : "";
+}
 
 export default function NewDealForm({
   userId,
@@ -430,7 +437,7 @@ export default function NewDealForm({
               <select
                 value={storeId}
                 onChange={(e) => handleStoreChange(e.target.value)}
-                className={SEL}
+                className={cn(SEL, emptyCls(storeId))}
               >
                 <option value="">Select store</option>
                 {stores.map((s) => (
@@ -446,7 +453,7 @@ export default function NewDealForm({
                 value={departmentId}
                 onChange={(e) => setDepartmentId(e.target.value)}
                 disabled={!storeId}
-                className={SEL}
+                className={cn(SEL, emptyCls(departmentId))}
               >
                 <option value="">
                   {storeId ? "Select department" : "Select a store first"}
@@ -484,9 +491,8 @@ export default function NewDealForm({
                   onBlur={() => {
                     if (vin.trim().length === 17) handleDecodeVin();
                   }}
-                  placeholder="1GCUYDED0MZ123456"
                   disabled={decoding}
-                  className="font-mono"
+                  className={`font-mono ${emptyCls(vin)}`}
                 />
                 <Button
                   type="button"
@@ -542,6 +548,7 @@ export default function NewDealForm({
                 type="date"
                 value={saleDate}
                 onChange={(e) => setSaleDate(e.target.value)}
+                className={emptyCls(saleDate)}
               />
             </div>
             <div className="space-y-1">
@@ -549,7 +556,7 @@ export default function NewDealForm({
               <Input
                 value={customerLastName}
                 onChange={(e) => setCustomerLastName(e.target.value)}
-                placeholder="Smith"
+                className={emptyCls(customerLastName)}
               />
             </div>
             <div className="space-y-1">
@@ -557,7 +564,7 @@ export default function NewDealForm({
               <Input
                 value={stockNumber}
                 onChange={(e) => setStockNumber(e.target.value)}
-                placeholder="12345"
+                className={emptyCls(stockNumber)}
               />
             </div>
           </div>
@@ -572,10 +579,10 @@ export default function NewDealForm({
                 type="number"
                 value={vehicleYear}
                 onChange={(e) => setVehicleYear(e.target.value)}
-                placeholder="2024"
                 min={1900}
                 max={2100}
                 disabled={decoded}
+                className={emptyCls(vehicleYear)}
               />
             </div>
 
@@ -587,8 +594,8 @@ export default function NewDealForm({
                   <Input
                     value={vehicleMake}
                     onChange={(e) => setVehicleMake(e.target.value)}
-                    placeholder="e.g. Chevrolet"
                     disabled={decoded}
+                    className={emptyCls(vehicleMake)}
                   />
                   {!decoded && (
                     <p className="text-xs text-amber-600">
@@ -609,7 +616,7 @@ export default function NewDealForm({
                     setModelIsManual(false);
                   }}
                   disabled={decoded}
-                  className={SEL}
+                  className={cn(SEL, emptyCls(makeId))}
                 >
                   <option value="">Select make</option>
                   {vehicleMakes.map((m) => (
@@ -629,8 +636,8 @@ export default function NewDealForm({
                   <Input
                     value={vehicleModel}
                     onChange={(e) => setVehicleModel(e.target.value)}
-                    placeholder="e.g. Silverado 1500"
                     disabled={decoded}
+                    className={emptyCls(vehicleModel)}
                   />
                   {modelIsManual && !makeIsManual && !decoded && (
                     <p className="text-xs text-amber-600">
@@ -648,7 +655,7 @@ export default function NewDealForm({
                     setVehicleModel(found?.name ?? "");
                   }}
                   disabled={decoded || !makeId}
-                  className={SEL}
+                  className={cn(SEL, emptyCls(modelId))}
                 >
                   <option value="">{makeId ? "Select model" : "Select make first"}</option>
                   {vehicleModels
@@ -671,7 +678,7 @@ export default function NewDealForm({
               <Input
                 value={trim}
                 onChange={(e) => setTrim(e.target.value)}
-                placeholder="LT Trail Boss"
+                className={emptyCls(trim)}
               />
             </div>
             <div className="space-y-1">
@@ -679,7 +686,7 @@ export default function NewDealForm({
               <select
                 value={bodyStyle}
                 onChange={(e) => setBodyStyle(e.target.value)}
-                className={SEL}
+                className={cn(SEL, emptyCls(bodyStyle))}
               >
                 <option value="">Select body style</option>
                 {BODY_STYLES.map((b) => (
@@ -694,7 +701,7 @@ export default function NewDealForm({
               <select
                 value={drivetrain}
                 onChange={(e) => setDrivetrain(e.target.value)}
-                className={SEL}
+                className={cn(SEL, emptyCls(drivetrain))}
               >
                 <option value="">Select drivetrain</option>
                 {DRIVETRAINS.map((d) => (
@@ -723,7 +730,7 @@ export default function NewDealForm({
                   value={split.salesperson_id}
                   onChange={(e) => updateSplit(idx, "salesperson_id", e.target.value)}
                   disabled={!storeId}
-                  className={SEL}
+                  className={cn(SEL, emptyCls(split.salesperson_id))}
                 >
                   <option value="">
                     {!storeId
@@ -748,7 +755,7 @@ export default function NewDealForm({
                     onChange={(e) => updateSplit(idx, "share", e.target.value)}
                     min={0}
                     max={100}
-                    className="pr-7"
+                    className={`pr-7 ${emptyCls(split.share)}`}
                   />
                   <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
                     %
@@ -841,7 +848,7 @@ export default function NewDealForm({
                       type="number"
                       value={trade.year}
                       onChange={(e) => updateTrade(idx, "year", e.target.value)}
-                      placeholder="2020"
+                      className={emptyCls(trade.year)}
                     />
                   </div>
                   <div className="space-y-1">
@@ -849,7 +856,7 @@ export default function NewDealForm({
                     <Input
                       value={trade.make}
                       onChange={(e) => updateTrade(idx, "make", e.target.value)}
-                      placeholder="Ford"
+                      className={emptyCls(trade.make)}
                     />
                   </div>
                   <div className="space-y-1">
@@ -857,7 +864,7 @@ export default function NewDealForm({
                     <Input
                       value={trade.model}
                       onChange={(e) => updateTrade(idx, "model", e.target.value)}
-                      placeholder="F-150"
+                      className={emptyCls(trade.model)}
                     />
                   </div>
                 </div>
@@ -868,7 +875,7 @@ export default function NewDealForm({
                       type="number"
                       value={trade.acv}
                       onChange={(e) => updateTrade(idx, "acv", e.target.value)}
-                      placeholder="18000"
+                      className={emptyCls(trade.acv)}
                     />
                   </div>
                   <div className="space-y-1">
@@ -877,7 +884,7 @@ export default function NewDealForm({
                       type="number"
                       value={trade.allowance}
                       onChange={(e) => updateTrade(idx, "allowance", e.target.value)}
-                      placeholder="20000"
+                      className={emptyCls(trade.allowance)}
                     />
                   </div>
                   <div className="space-y-1">
@@ -885,7 +892,7 @@ export default function NewDealForm({
                     <select
                       value={trade.exit_strategy}
                       onChange={(e) => updateTrade(idx, "exit_strategy", e.target.value)}
-                      className={SEL}
+                      className={cn(SEL, emptyCls(trade.exit_strategy))}
                     >
                       <option value="">Select...</option>
                       <option value="retail">Retail</option>
@@ -915,8 +922,10 @@ export default function NewDealForm({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={3}
-            placeholder="Optional — handoff context, conditions, manager notes..."
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className={cn(
+              "w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              emptyCls(notes)
+            )}
           />
         </CardContent>
       </Card>

@@ -6,9 +6,10 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CheckCircle2, Info, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, Info, Loader2, PlusCircle, Trash2, XCircle } from "lucide-react";
 import { COLORS, BODY_STYLES, DRIVETRAINS, decodeVin, VinDecodeError } from "@/lib/vehicle";
 import { canClose } from "@/lib/can-close";
+import { cn } from "@/lib/utils";
 
 type TradeRow = {
   year: number | null;
@@ -16,6 +17,11 @@ type TradeRow = {
   model: string | null;
   acv: number | null;
   exit_strategy: string | null;
+};
+
+type Split = {
+  salesperson_id: string;
+  share: string; // UI display: "100" = 100%; stored in DB as whole number
 };
 
 interface Props {
@@ -53,9 +59,8 @@ interface Props {
   vehicleMakes: { id: string; name: string }[];
   vehicleModels: { id: string; name: string; make_id: string }[];
   departmentMakes: { department_id: string; make: string }[];
-  // Close gate data (fetched server-side from deal_salespeople + trades)
-  salespeopleCount: number;
-  shareSum: number; // decimal: 1.0 = 100%
+  salespeople: { id: string; name: string }[];
+  initialSplits: { salesperson_id: string; share_percent: number }[];
   trades: TradeRow[];
 }
 
@@ -67,6 +72,11 @@ const SEL =
 
 const LBL = "text-xs font-medium text-slate-500";
 
+function emptyCls(value: string, locked = false) {
+  return !locked && !value.trim()
+    ? "border-red-400 bg-red-50 focus-visible:ring-red-400 focus:ring-red-400"
+    : "";
+}
 
 function numStr(v: number | null): string {
   return v !== null ? String(v) : "";
@@ -123,8 +133,8 @@ export default function UpdatePendingForm({
   vehicleMakes,
   vehicleModels,
   departmentMakes,
-  salespeopleCount,
-  shareSum,
+  salespeople,
+  initialSplits,
   trades,
 }: Props) {
   const router = useRouter();
@@ -134,6 +144,17 @@ export default function UpdatePendingForm({
   const [customerLastName, setCustomerLastName] = useState(initialCustomerLastName);
   const [saleDate, setSaleDate] = useState(initialSaleDate ?? "");
   const [departmentId, setDepartmentId] = useState(initialDepartmentId ?? "");
+
+  // ── Salesperson splits ────────────────────────────────────────────────────────
+  const [splits, setSplits] = useState<Split[]>(() => {
+    if (initialSplits.length === 0) {
+      return [{ salesperson_id: "", share: "100" }];
+    }
+    return initialSplits.map((s) => ({
+      salesperson_id: s.salesperson_id,
+      share: String(s.share_percent ?? 100),
+    }));
+  });
 
   // ── Decoded vehicle identity (saved via buildPayload) ─────────────────────────
   const [displayYear, setDisplayYear] = useState<number>(vehicleYear);
@@ -274,6 +295,43 @@ export default function UpdatePendingForm({
     }
   }
 
+  // ── Salesperson split helpers ─────────────────────────────────────────────────
+  function addSplit() {
+    setSplits([{ ...splits[0], share: "50" }, { salesperson_id: "", share: "50" }]);
+  }
+
+  function removeSplit(idx: number) {
+    const next = splits.filter((_, i) => i !== idx);
+    if (next.length === 1) next[0] = { ...next[0], share: "100" };
+    setSplits(next);
+  }
+
+  function updateSplit(idx: number, field: keyof Split, value: string) {
+    setSplits(splits.map((s, i) => (i === idx ? { ...s, [field]: value } : s)));
+  }
+
+  async function saveSalespeople(
+    supabase: ReturnType<typeof createSupabaseBrowserClient>
+  ) {
+    const { error: delError } = await supabase
+      .from("deal_salespeople")
+      .delete()
+      .eq("deal_id", dealId);
+    if (delError) throw new Error(`Salespeople update failed: ${delError.message}`);
+
+    const activeSplits = splits.filter((s) => s.salesperson_id);
+    if (activeSplits.length === 0) return;
+
+    const { error: spError } = await supabase.from("deal_salespeople").insert(
+      activeSplits.map((s) => ({
+        deal_id: dealId,
+        salesperson_id: s.salesperson_id,
+        share_percent: parseFloat(s.share) || 0,
+      }))
+    );
+    if (spError) throw new Error(`Salespeople update failed: ${spError.message}`);
+  }
+
   // ── Payload builder ───────────────────────────────────────────────────────────
   function buildPayload() {
     return {
@@ -318,6 +376,7 @@ export default function UpdatePendingForm({
         .eq("id", dealId);
 
       if (error) throw new Error(error.message);
+      await saveSalespeople(supabase);
       setSaved(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err: unknown) {
@@ -365,12 +424,19 @@ export default function UpdatePendingForm({
     if (!age.trim()) errs.push("Age is required");
 
     // Salespeople
-    if (salespeopleCount < 1) {
+    const activeSplits = splits.filter((s) => s.salesperson_id);
+    if (activeSplits.length < 1) {
       errs.push("At least one salesperson is required");
-    } else if (Math.abs(shareSum - 1) >= 0.001) {
-      errs.push(
-        `Salesperson splits must total 100% (currently ${Math.round(shareSum * 100)}%)`
+    } else {
+      const shareTotal = activeSplits.reduce(
+        (sum, s) => sum + (parseFloat(s.share) || 0),
+        0
       );
+      if (Math.abs(shareTotal - 100) >= 0.1) {
+        errs.push(
+          `Salesperson splits must total 100% (currently ${Math.round(shareTotal)}%)`
+        );
+      }
     }
 
     // Trades
@@ -461,6 +527,7 @@ export default function UpdatePendingForm({
         .eq("id", dealId);
 
       if (error) throw new Error(error.message);
+      await saveSalespeople(supabase);
       setClosed(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
       setTimeout(() => router.push("/app/deals"), 2000);
@@ -589,6 +656,7 @@ export default function UpdatePendingForm({
                 value={saleDate}
                 onChange={(e) => setSaleDate(e.target.value)}
                 disabled={isLocked}
+                className={emptyCls(saleDate, isLocked)}
               />
             </div>
             <div className="space-y-1">
@@ -596,8 +664,8 @@ export default function UpdatePendingForm({
               <Input
                 value={customerLastName}
                 onChange={(e) => setCustomerLastName(e.target.value)}
-                placeholder="Smith"
                 disabled={isLocked}
+                className={emptyCls(customerLastName, isLocked)}
               />
             </div>
             <div className="space-y-1">
@@ -605,8 +673,8 @@ export default function UpdatePendingForm({
               <Input
                 value={stockNumber}
                 onChange={(e) => setStockNumber(e.target.value)}
-                placeholder="12345"
                 disabled={isLocked}
+                className={emptyCls(stockNumber, isLocked)}
               />
             </div>
           </div>
@@ -619,7 +687,7 @@ export default function UpdatePendingForm({
                 value={departmentId}
                 onChange={(e) => setDepartmentId(e.target.value)}
                 disabled={isLocked}
-                className={SEL}
+                className={cn(SEL, emptyCls(departmentId, isLocked))}
               >
                 <option value="">Select department</option>
                 {departments.map((d) => (
@@ -642,24 +710,80 @@ export default function UpdatePendingForm({
               </p>
             </div>
           </div>
+        </CardContent>
+      </Card>
 
-          {/* Row 3: Salespeople summary | Status */}
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="space-y-1">
-              <label className={LBL}>Salespeople</label>
-              <p className="flex h-10 items-center text-sm text-slate-600">
-                {salespeopleCount === 0
-                  ? "None assigned"
-                  : `${salespeopleCount} · ${Math.round(shareSum * 100)}% allocated`}
-              </p>
-            </div>
-            <div className="space-y-1">
-              <label className={LBL}>Status</label>
-              <div className="flex h-10 items-center">
-                <StatusBadge status={dealStatus} />
+      {/* ── Salesperson(s) ───────────────────────────────────────────────────── */}
+      <Card className="app-panel border-[#e7ebf3] shadow-none">
+        <CardHeader className="border-[#edf1f7]">
+          <CardTitle className="text-lg">Salesperson(s)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {splits.map((split, idx) => (
+            <div key={idx} className="flex items-end gap-2">
+              <div className="min-w-0 flex-1 space-y-1">
+                {idx === 0 && <label className={LBL}>Salesperson *</label>}
+                <select
+                  value={split.salesperson_id}
+                  onChange={(e) => updateSplit(idx, "salesperson_id", e.target.value)}
+                  disabled={isLocked}
+                  className={cn(SEL, emptyCls(split.salesperson_id, isLocked))}
+                >
+                  <option value="">
+                    {salespeople.length === 0
+                      ? "No active salespeople for this store"
+                      : "Select salesperson"}
+                  </option>
+                  {salespeople.map((sp) => (
+                    <option key={sp.id} value={sp.id}>
+                      {sp.name}
+                    </option>
+                  ))}
+                </select>
               </div>
+              <div className="w-28 space-y-1">
+                {idx === 0 && <label className={LBL}>Split %</label>}
+                <div className="relative">
+                  <Input
+                    type="number"
+                    value={split.share}
+                    onChange={(e) => updateSplit(idx, "share", e.target.value)}
+                    min={0}
+                    max={100}
+                    disabled={isLocked}
+                    className={cn("pr-7", emptyCls(split.share, isLocked))}
+                  />
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
+                    %
+                  </span>
+                </div>
+              </div>
+              {splits.length > 1 && !isLocked && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeSplit(idx)}
+                  className="shrink-0 text-slate-400 hover:text-red-500"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
             </div>
-          </div>
+          ))}
+
+          {!isLocked && splits.length < 2 && salespeople.length > 1 && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={addSplit}
+              className="mt-1"
+            >
+              <PlusCircle className="mr-1.5 h-3.5 w-3.5" />
+              Split with second salesperson
+            </Button>
+          )}
         </CardContent>
       </Card>
 
@@ -715,9 +839,8 @@ export default function UpdatePendingForm({
                   onBlur={() => {
                     if (vin.trim().length === 17) handleDecodeVin();
                   }}
-                  placeholder="1GCUYDED0MZ123456"
                   disabled={isLocked || decoding}
-                  className="font-mono"
+                  className={`font-mono ${emptyCls(vin, isLocked)}`}
                 />
                 <Button
                   type="button"
@@ -739,8 +862,8 @@ export default function UpdatePendingForm({
               <Input
                 value={trim}
                 onChange={(e) => setTrim(e.target.value)}
-                placeholder="LT Trail Boss"
                 disabled={isLocked}
+                className={emptyCls(trim, isLocked)}
               />
             </div>
           </div>
@@ -756,8 +879,8 @@ export default function UpdatePendingForm({
                   <Input
                     value={displayMake}
                     onChange={(e) => setDisplayMake(e.target.value)}
-                    placeholder="e.g. Chevrolet"
                     disabled={isLocked}
+                    className={emptyCls(displayMake, isLocked)}
                   />
                   <p className="text-xs text-amber-600">
                     ⚠ Not in vehicle list — verify or ask an admin to add it
@@ -776,7 +899,7 @@ export default function UpdatePendingForm({
                     setModelIsManual(false);
                   }}
                   disabled={isLocked}
-                  className={SEL}
+                  className={cn(SEL, emptyCls(makeId, isLocked))}
                 >
                   <option value="">Select make</option>
                   {vehicleMakes.map((m) => (
@@ -796,8 +919,8 @@ export default function UpdatePendingForm({
                   <Input
                     value={displayModel}
                     onChange={(e) => setDisplayModel(e.target.value)}
-                    placeholder="e.g. Silverado 1500"
                     disabled={isLocked}
+                    className={emptyCls(displayModel, isLocked)}
                   />
                   {modelIsManual && !makeIsManual && (
                     <p className="text-xs text-amber-600">
@@ -815,7 +938,7 @@ export default function UpdatePendingForm({
                     setDisplayModel(found?.name ?? "");
                   }}
                   disabled={isLocked || !makeId}
-                  className={SEL}
+                  className={cn(SEL, emptyCls(modelId, isLocked))}
                 >
                   <option value="">
                     {makeId ? "Select model" : "Select make first"}
@@ -838,9 +961,9 @@ export default function UpdatePendingForm({
                 type="number"
                 value={odometer}
                 onChange={(e) => setOdometer(e.target.value)}
-                placeholder="12450"
                 min={0}
                 disabled={isLocked}
+                className={emptyCls(odometer, isLocked)}
               />
             </div>
           </div>
@@ -853,7 +976,7 @@ export default function UpdatePendingForm({
                 value={color}
                 onChange={(e) => setColor(e.target.value)}
                 disabled={isLocked}
-                className={SEL}
+                className={cn(SEL, emptyCls(color, isLocked))}
               >
                 <option value="">Select color</option>
                 {COLORS.map((c) => (
@@ -869,7 +992,7 @@ export default function UpdatePendingForm({
                 value={bodyStyle}
                 onChange={(e) => setBodyStyle(e.target.value)}
                 disabled={isLocked}
-                className={SEL}
+                className={cn(SEL, emptyCls(bodyStyle, isLocked))}
               >
                 <option value="">Select body style</option>
                 {BODY_STYLES.map((b) => (
@@ -885,7 +1008,7 @@ export default function UpdatePendingForm({
                 value={drivetrain}
                 onChange={(e) => setDrivetrain(e.target.value)}
                 disabled={isLocked}
-                className={SEL}
+                className={cn(SEL, emptyCls(drivetrain, isLocked))}
               >
                 <option value="">Select drivetrain</option>
                 {DRIVETRAINS.map((d) => (
@@ -913,7 +1036,7 @@ export default function UpdatePendingForm({
                 value={acquisitionSource}
                 onChange={(e) => setAcquisitionSource(e.target.value)}
                 disabled={isLocked}
-                className={SEL}
+                className={cn(SEL, emptyCls(acquisitionSource, isLocked))}
               >
                 <option value="">
                   {acquisitionSources.length === 0
@@ -933,7 +1056,7 @@ export default function UpdatePendingForm({
                 value={financeType}
                 onChange={(e) => setFinanceType(e.target.value)}
                 disabled={isLocked}
-                className={SEL}
+                className={cn(SEL, emptyCls(financeType, isLocked))}
               >
                 <option value="">None</option>
                 <option value="prime">Prime</option>
@@ -948,7 +1071,7 @@ export default function UpdatePendingForm({
                 value={financeManagerId}
                 onChange={(e) => setFinanceManagerId(e.target.value)}
                 disabled={isLocked || financeManagers.length === 0}
-                className={SEL}
+                className={cn(SEL, emptyCls(financeManagerId, isLocked))}
               >
                 <option value="">
                   {financeManagers.length === 0
@@ -979,8 +1102,8 @@ export default function UpdatePendingForm({
                 type="number"
                 value={frontProfit}
                 onChange={(e) => setFrontProfit(e.target.value)}
-                placeholder="1200"
                 disabled={isLocked}
+                className={emptyCls(frontProfit, isLocked)}
               />
             </div>
             <div className="space-y-1">
@@ -989,8 +1112,8 @@ export default function UpdatePendingForm({
                 type="number"
                 value={backProfit}
                 onChange={(e) => setBackProfit(e.target.value)}
-                placeholder="900"
                 disabled={isLocked}
+                className={emptyCls(backProfit, isLocked)}
               />
             </div>
             <div className="space-y-1">
@@ -999,8 +1122,8 @@ export default function UpdatePendingForm({
                 type="number"
                 value={salePrice}
                 onChange={(e) => setSalePrice(e.target.value)}
-                placeholder="52500"
                 disabled={isLocked}
+                className={emptyCls(salePrice, isLocked)}
               />
             </div>
           </div>
@@ -1011,9 +1134,9 @@ export default function UpdatePendingForm({
                 type="number"
                 value={age}
                 onChange={(e) => setAge(e.target.value)}
-                placeholder="14"
                 min={0}
                 disabled={isLocked}
+                className={emptyCls(age, isLocked)}
               />
             </div>
           </div>

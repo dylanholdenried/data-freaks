@@ -32,6 +32,7 @@ type DealRow = {
 };
 
 type SpRow = { salesperson_id: string; share_percent: number };
+type SalespersonOption = { id: string; name: string };
 type VehicleMakeRow = { id: string; name: string };
 type VehicleModelRow = { id: string; name: string; make_id: string };
 type DeptOption = { id: string; name: string };
@@ -111,6 +112,7 @@ export default async function EditDealPage({ params }: { params: { id: string } 
     fmResult,
     deptResult,
     spResult,
+    storeSpResult,
     tradesResult,
     vMakesResult,
     vModelsResult,
@@ -137,6 +139,12 @@ export default async function EditDealPage({ params }: { params: { id: string } 
         .select("salesperson_id,share_percent")
         .eq("deal_id", deal.id),
       supabase
+        .from("salespeople")
+        .select("id,name")
+        .eq("store_id", deal.store_id)
+        .eq("active", true)
+        .order("name"),
+      supabase
         .from("trades")
         .select("year,make,model,acv,exit_strategy")
         .eq("deal_id", deal.id),
@@ -158,10 +166,22 @@ export default async function EditDealPage({ params }: { params: { id: string } 
   const departments = (deptResult.data ?? []) as DeptOption[];
 
   const dealSalespeople = (spResult.data ?? []) as SpRow[];
-  const salespeopleCount = dealSalespeople.length;
-  // share_percent is a whole number in DB (100 = 100%); form expects decimal 1.0 = 100%
-  const shareSum =
-    dealSalespeople.reduce((sum, s) => sum + (s.share_percent ?? 0), 0) / 100;
+  let salespeople = (storeSpResult.data ?? []) as SalespersonOption[];
+
+  // Keep inactive salespeople who are already on the deal selectable
+  const missingIds = dealSalespeople
+    .map((s) => s.salesperson_id)
+    .filter((id) => !salespeople.some((sp) => sp.id === id));
+  if (missingIds.length > 0) {
+    const { data: missingSp } = await supabase
+      .from("salespeople")
+      .select("id,name")
+      .in("id", missingIds);
+    salespeople = [
+      ...salespeople,
+      ...((missingSp ?? []) as SalespersonOption[]),
+    ];
+  }
 
   const trades = (tradesResult.data ?? []) as TradeRow[];
   const vehicleMakes = (vMakesResult.data ?? []) as VehicleMakeRow[];
@@ -202,8 +222,8 @@ export default async function EditDealPage({ params }: { params: { id: string } 
       vehicleMakes={vehicleMakes}
       vehicleModels={vehicleModels}
       departmentMakes={departmentMakes}
-      salespeopleCount={salespeopleCount}
-      shareSum={shareSum}
+      salespeople={salespeople}
+      initialSplits={dealSalespeople}
       trades={trades}
     />
   );

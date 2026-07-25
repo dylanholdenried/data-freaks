@@ -261,7 +261,7 @@ export default function DashboardClient({
     };
 
     // ── Salesperson leaderboard ──────────────────────────────────────────────
-    // Fractional credit: each person gets share_percent of units and gross.
+    // Fractional credit: share_percent is whole-number percent (100 = 100%).
     // Scoped via scopedDealMap — only deals in the selected store(s) count.
     const scopedDealMap = new Map(scopedDeals.map((d) => [d.id, d]));
     const spAcc = new Map<
@@ -278,16 +278,17 @@ export default function DashboardClient({
         deal.status === "closed";
       if (!isBooked) continue;
       const isClosed = deal.status === "closed";
+      const share = (ds.share_percent ?? 0) / 100;
       const acc = spAcc.get(ds.salesperson_id) ?? {
         bookedUnits: 0,
         closedUnits: 0,
         totalGross: 0,
       };
-      acc.bookedUnits += ds.share_percent;
+      acc.bookedUnits += share;
       if (isClosed) {
-        acc.closedUnits += ds.share_percent;
+        acc.closedUnits += share;
         acc.totalGross +=
-          ((deal.front_profit ?? 0) + (deal.back_profit ?? 0)) * ds.share_percent;
+          ((deal.front_profit ?? 0) + (deal.back_profit ?? 0)) * share;
       }
       spAcc.set(ds.salesperson_id, acc);
     }
