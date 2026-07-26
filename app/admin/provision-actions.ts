@@ -4,27 +4,13 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdminServiceClient } from "@/app/admin/admin-data";
 import { sendActivationEmail } from "@/lib/email/resend";
+import {
+  DEFAULT_DEPARTMENTS,
+  type ProvisionDraftPayload,
+  type ProvisionStoreInput,
+} from "@/app/admin/provision-types";
 
-export type ProvisionStoreInput = {
-  /** Existing store id when updating a draft; omit for new stores */
-  id?: string;
-  name: string;
-  departments: string[];
-};
-
-export type ProvisionDraftPayload = {
-  groupName: string;
-  plan: "free" | "paid" | "premium";
-  website?: string | null;
-  adminFirstName: string;
-  adminLastName: string;
-  adminEmail: string;
-  adminPhone?: string | null;
-  stores: ProvisionStoreInput[];
-};
-
-const DEFAULT_DEPARTMENTS = ["New", "Used", "F&I"];
-
+export type { ProvisionDraftPayload, ProvisionStoreInput };
 function revalidateProvision(requestId: string, groupId?: string | null) {
   revalidatePath("/admin/requests");
   revalidatePath(`/admin/requests/${requestId}/provision`);
@@ -419,5 +405,3 @@ export async function activateAutoGroup(requestId: string): Promise<{ emailWarni
 
   redirect(`/admin/groups/${request.dealer_group_id}?activated=1`);
 }
-
-export { DEFAULT_DEPARTMENTS };

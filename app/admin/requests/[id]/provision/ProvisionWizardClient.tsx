@@ -8,11 +8,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   activateAutoGroup,
-  DEFAULT_DEPARTMENTS,
   saveProvisionDraft,
+} from "@/app/admin/provision-actions";
+import {
+  DEFAULT_DEPARTMENTS,
   type ProvisionDraftPayload,
   type ProvisionStoreInput,
-} from "@/app/admin/provision-actions";
+} from "@/app/admin/provision-types";
 
 export type ProvisionPageRequest = {
   id: string;
