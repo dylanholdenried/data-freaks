@@ -16,50 +16,55 @@ const signupSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  // Service-role client: must use auth.admin.createUser (not auth.signUp).
+  // signUp attaches a user session on this client, so later inserts run as the
+  // new user and hit profiles RLS (no public insert policy).
   const supabase = createSupabaseServiceClient();
 
   try {
     const body = await req.json();
     const parsed = signupSchema.parse(body);
+    const email = parsed.email.trim().toLowerCase();
 
-    // 1) Create auth user
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-      email: parsed.email,
+    // 1) Create auth user without switching the service client session
+    const { data: createData, error: createError } = await supabase.auth.admin.createUser({
+      email,
       password: parsed.password,
-      options: {
-        data: {
-          first_name: parsed.first_name,
-          last_name: parsed.last_name
-        },
-        emailRedirectTo: process.env.NEXT_PUBLIC_SITE_URL
-          ? `${process.env.NEXT_PUBLIC_SITE_URL}/app`
-          : undefined
+      email_confirm: true,
+      user_metadata: {
+        first_name: parsed.first_name,
+        last_name: parsed.last_name
       }
     });
 
-    if (signUpError) {
-      return NextResponse.json({ error: signUpError.message }, { status: 400 });
+    if (createError) {
+      return NextResponse.json({ error: createError.message }, { status: 400 });
     }
 
-    const user = signUpData.user;
+    const user = createData.user;
     if (!user) {
       return NextResponse.json({ error: "User was not created" }, { status: 400 });
     }
 
-    // 2) Create pending profile (no dealer_group_id yet)
-    const { error: profileError } = await supabase.from("profiles").insert({
-      // Supports legacy schema where profiles.id references auth.users.id
-      id: user.id,
-      user_id: user.id,
-      email: parsed.email,
-      first_name: parsed.first_name,
-      last_name: parsed.last_name,
-      role: "store_admin",
-      status: "invited"
-    });
+    // 2) Create pending profile (no dealer_group_id yet) — service role bypasses RLS
+    const { error: profileError } = await supabase.from("profiles").upsert(
+      {
+        // Supports legacy schema where profiles.id references auth.users.id
+        id: user.id,
+        user_id: user.id,
+        email,
+        first_name: parsed.first_name,
+        last_name: parsed.last_name,
+        role: "store_admin",
+        status: "invited"
+      },
+      { onConflict: "user_id" }
+    );
 
     if (profileError) {
       console.error("Error creating profile", profileError);
+      // Roll back orphaned auth user so retry can succeed
+      await supabase.auth.admin.deleteUser(user.id).catch(() => undefined);
       return NextResponse.json(
         { error: `Profile insert failed: ${profileError.message}` },
         { status: 500 }
@@ -70,7 +75,7 @@ export async function POST(req: Request) {
     const { error: requestError } = await supabase.from("dealer_group_requests").insert({
       first_name: parsed.first_name,
       last_name: parsed.last_name,
-      email: parsed.email,
+      email,
       phone: null,
       dealer_group_name:
         parsed.dealer_group_mode === "existing"

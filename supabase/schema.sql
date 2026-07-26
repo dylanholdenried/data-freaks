@@ -463,6 +463,15 @@ on public.profiles
 for update
 using (user_id = auth.uid() or id = auth.uid());
 
+drop policy if exists "profiles_insert_own" on public.profiles;
+create policy "profiles_insert_own"
+on public.profiles
+for insert
+with check (
+  auth.uid() = user_id
+  or auth.uid() = id
+);
+
 drop policy if exists "profiles_platform_admin_all" on public.profiles;
 create policy "profiles_platform_admin_all"
 on public.profiles
