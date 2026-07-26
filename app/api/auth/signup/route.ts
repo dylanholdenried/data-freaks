@@ -93,7 +93,7 @@ export async function POST(req: Request) {
     if (requestError) {
       console.error("Error creating dealer_group_request", requestError);
       // Roll back auth + profile so the email can be reused on retry
-      await supabase.from("profiles").delete().eq("user_id", user.id).catch(() => undefined);
+      await supabase.from("profiles").delete().eq("user_id", user.id);
       await supabase.auth.admin.deleteUser(user.id).catch(() => undefined);
       return NextResponse.json(
         { error: `Request insert failed: ${requestError.message}` },
