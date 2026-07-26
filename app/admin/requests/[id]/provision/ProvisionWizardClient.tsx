@@ -88,7 +88,8 @@ export default function ProvisionWizardClient({ request, profile, group, initial
       return initialStores.map((s) => ({
         id: s.id,
         name: s.name,
-        departments: s.departments.map((d) => d.name),
+        departments:
+          s.departments.length > 0 ? s.departments.map((d) => d.name) : [...DEFAULT_DEPARTMENTS],
       }));
     }
     const count = Math.max(1, request.number_of_stores || 1);
@@ -105,12 +106,33 @@ export default function ProvisionWizardClient({ request, profile, group, initial
     setStores((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
   }
 
-  function setDepartmentsText(index: number, text: string) {
-    const departments = text
-      .split(",")
-      .map((d) => d.trim())
-      .filter(Boolean);
-    updateStore(index, { departments });
+  function updateDepartment(storeIndex: number, deptIndex: number, value: string) {
+    setStores((prev) =>
+      prev.map((store, i) => {
+        if (i !== storeIndex) return store;
+        const departments = [...store.departments];
+        departments[deptIndex] = value;
+        return { ...store, departments };
+      })
+    );
+  }
+
+  function addDepartment(storeIndex: number) {
+    setStores((prev) =>
+      prev.map((store, i) =>
+        i === storeIndex ? { ...store, departments: [...store.departments, ""] } : store
+      )
+    );
+  }
+
+  function removeDepartment(storeIndex: number, deptIndex: number) {
+    setStores((prev) =>
+      prev.map((store, i) => {
+        if (i !== storeIndex) return store;
+        const departments = store.departments.filter((_, di) => di !== deptIndex);
+        return { ...store, departments: departments.length > 0 ? departments : [""] };
+      })
+    );
   }
 
   function buildPayload(): ProvisionDraftPayload {
@@ -122,7 +144,12 @@ export default function ProvisionWizardClient({ request, profile, group, initial
       adminLastName,
       adminEmail,
       adminPhone,
-      stores: stores.filter((s) => s.name.trim()),
+      stores: stores
+        .filter((s) => s.name.trim())
+        .map((s) => ({
+          ...s,
+          departments: s.departments.map((d) => d.trim()).filter(Boolean),
+        })),
     };
   }
 
@@ -146,12 +173,9 @@ export default function ProvisionWizardClient({ request, profile, group, initial
     startTransition(async () => {
       try {
         await saveProvisionDraft(request.id, buildPayload());
-        await activateAutoGroup(request.id);
+        const result = await activateAutoGroup(request.id);
+        router.push(result.redirectTo);
       } catch (err: any) {
-        // redirect() throws a NEXT_REDIRECT error in some Next versions — ignore those
-        if (err?.digest?.startsWith?.("NEXT_REDIRECT") || err?.message === "NEXT_REDIRECT") {
-          return;
-        }
         setError(err?.message || "Failed to activate");
       }
     });
@@ -284,7 +308,7 @@ export default function ProvisionWizardClient({ request, profile, group, initial
         </CardHeader>
         <CardContent className="space-y-4">
           {stores.map((store, index) => (
-            <div key={store.id || `new-${index}`} className="rounded-lg border border-border p-3 space-y-2">
+            <div key={store.id || `new-${index}`} className="space-y-3 rounded-lg border border-border p-3">
               <div className="flex flex-wrap items-end gap-2">
                 <label className="min-w-[200px] flex-1 space-y-1 text-sm">
                   <span className="text-xs font-medium text-muted-foreground">Store name</span>
@@ -300,20 +324,38 @@ export default function ProvisionWizardClient({ request, profile, group, initial
                     variant="ghost"
                     onClick={() => setStores((prev) => prev.filter((_, i) => i !== index))}
                   >
-                    Remove
+                    Remove store
                   </Button>
                 ) : null}
               </div>
-              <label className="block space-y-1 text-sm">
-                <span className="text-xs font-medium text-muted-foreground">
-                  Departments (comma-separated)
-                </span>
-                <Input
-                  value={store.departments.join(", ")}
-                  onChange={(e) => setDepartmentsText(index, e.target.value)}
-                  placeholder="New, Used, F&I"
-                />
-              </label>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-muted-foreground">Departments</span>
+                  <Button type="button" size="sm" variant="outline" onClick={() => addDepartment(index)}>
+                    Add department
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {store.departments.map((dept, deptIndex) => (
+                    <div key={`${index}-dept-${deptIndex}`} className="flex items-center gap-2">
+                      <Input
+                        value={dept}
+                        onChange={(e) => updateDepartment(index, deptIndex, e.target.value)}
+                        placeholder={`Department ${deptIndex + 1}`}
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => removeDepartment(index, deptIndex)}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           ))}
         </CardContent>

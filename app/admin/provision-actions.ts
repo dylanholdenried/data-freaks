@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { requireAdminServiceClient } from "@/app/admin/admin-data";
 import { sendActivationEmail } from "@/lib/email/resend";
 import {
@@ -276,7 +275,7 @@ export async function saveProvisionDraft(requestId: string, payload: ProvisionDr
   return { dealerGroupId, storeCount: storeIdByTemp.length };
 }
 
-export async function activateAutoGroup(requestId: string): Promise<{ emailWarning?: string }> {
+export async function activateAutoGroup(requestId: string): Promise<{ redirectTo: string }> {
   const supabase = await requireAdminServiceClient();
 
   const { data: request, error: requestError } = await supabase
@@ -397,11 +396,11 @@ export async function activateAutoGroup(requestId: string): Promise<{ emailWarni
 
   revalidateProvision(requestId, request.dealer_group_id);
 
-  if (emailWarning) {
-    redirect(
-      `/admin/groups/${request.dealer_group_id}?activated=1&emailError=${encodeURIComponent(emailWarning)}`
-    );
-  }
+  const redirectTo = emailWarning
+    ? `/admin/groups/${request.dealer_group_id}?activated=1&emailError=${encodeURIComponent(emailWarning)}`
+    : `/admin/groups/${request.dealer_group_id}?activated=1`;
 
-  redirect(`/admin/groups/${request.dealer_group_id}?activated=1`);
+  // Return a URL for the client to navigate — calling redirect() from a
+  // client-invoked server action surfaces as a cryptic render error in production.
+  return { redirectTo };
 }
