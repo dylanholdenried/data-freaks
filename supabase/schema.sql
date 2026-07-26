@@ -166,6 +166,8 @@ create table public.profiles (
   dealer_group_id uuid references public.dealer_groups(id),
   status user_status not null default 'active',
   is_impersonating boolean not null default false,
+  onboarding_welcome_seen_at timestamptz,
+  onboarding_checklist jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -204,14 +206,19 @@ create table public.dealer_group_requests (
   number_of_stores integer,
   website text,
   requested_user_id uuid references auth.users(id),
+  dealer_group_id uuid references public.dealer_groups(id),
   status dealer_group_status not null default 'pending',
   notes text,
+  provisioned_at timestamptz,
+  activated_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 create index dealer_group_requests_status_idx on public.dealer_group_requests(status);
 create index dealer_group_requests_email_idx on public.dealer_group_requests(email);
+create index dealer_group_requests_requested_user_id_idx on public.dealer_group_requests(requested_user_id);
+create index dealer_group_requests_dealer_group_id_idx on public.dealer_group_requests(dealer_group_id);
 
 -- ===========================
 -- STORES / DEPARTMENTS / ACCESS

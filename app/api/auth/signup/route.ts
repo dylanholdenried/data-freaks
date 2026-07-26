@@ -70,7 +70,6 @@ export async function POST(req: Request) {
     }
 
     // 3) Register dealer group request (new or existing).
-    // requested_user_id may be absent on legacy production DBs — keep the link in notes.
     const { error: requestError } = await supabase.from("dealer_group_requests").insert({
       first_name: parsed.first_name,
       last_name: parsed.last_name,
@@ -83,6 +82,7 @@ export async function POST(req: Request) {
       title: parsed.title ?? null,
       number_of_stores: parsed.number_of_stores ?? null,
       website: parsed.website ?? null,
+      requested_user_id: user.id,
       status: "pending",
       notes:
         parsed.dealer_group_mode === "existing"

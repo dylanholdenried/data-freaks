@@ -13,6 +13,7 @@ import { signOut } from "./actions";
 import AppMobileMenu from "./AppMobileMenu";
 import AppSidebarNav from "./AppSidebarNav";
 import AutoGroupSwitcher from "./AutoGroupSwitcher";
+import WelcomeOnboardingModal from "./WelcomeOnboardingModal";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const supabase = createSupabaseServerClient();
@@ -26,7 +27,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("first_name,last_name,role,status,dealer_group_id")
+    .select("first_name,last_name,role,status,dealer_group_id,onboarding_welcome_seen_at")
     .or(profileMatchAuthUserId(session.user.id))
     .maybeSingle();
 
@@ -36,8 +37,11 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
   const isPlatformAdmin = profile.role === "platform_admin";
   const groups = isPlatformAdmin ? await listDealerGroupsForAdmin() : [];
-  const selectedGroupId = isPlatformAdmin ? await getEffectiveDealerGroupId(profile) : profile.dealer_group_id;
+  const selectedGroupId = isPlatformAdmin
+    ? await getEffectiveDealerGroupId(profile)
+    : profile.dealer_group_id;
   const selectedGroupName = groups.find((g) => g.id === selectedGroupId)?.name;
+  const showWelcome = profile.role === "group_admin" && !profile.onboarding_welcome_seen_at;
 
   return (
     <div className="app-canvas flex min-h-screen">
@@ -105,6 +109,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         </header>
         <div className="min-w-0 w-full flex-1 px-5 py-6 lg:px-8">{children}</div>
       </div>
+      <WelcomeOnboardingModal firstName={profile.first_name} show={Boolean(showWelcome)} />
     </div>
   );
 }

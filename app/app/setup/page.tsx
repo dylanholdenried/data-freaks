@@ -19,7 +19,7 @@ export default async function SetupPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, dealer_group_id, role")
+    .select("id, dealer_group_id, role, onboarding_checklist")
     .or(profileMatchAuthUserId(session!.user.id))
     .maybeSingle();
 
@@ -35,6 +35,14 @@ export default async function SetupPage() {
   const now = new Date();
   const initialYear = now.getUTCFullYear();
   const initialMonth = now.getUTCMonth() + 1;
+  const showOnboardingChecklist = profile.role === "group_admin";
+  const onboardingChecklist =
+    (profile.onboarding_checklist as {
+      salespeople?: boolean;
+      finance_managers?: boolean;
+      acquisition_sources?: boolean;
+      goals?: boolean;
+    }) || {};
 
   if (storeIds.length === 0) {
     return (
@@ -47,6 +55,8 @@ export default async function SetupPage() {
         initialGoals={[]}
         initialYear={initialYear}
         initialMonth={initialMonth}
+        onboardingChecklist={onboardingChecklist}
+        showOnboardingChecklist={showOnboardingChecklist}
       />
     );
   }
@@ -103,6 +113,8 @@ export default async function SetupPage() {
       initialGoals={initialGoals}
       initialYear={initialYear}
       initialMonth={initialMonth}
+      onboardingChecklist={onboardingChecklist}
+      showOnboardingChecklist={showOnboardingChecklist}
     />
   );
 }

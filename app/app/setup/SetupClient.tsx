@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CheckCircle2, PlusCircle, Building2, UserMinus, UserCheck } from "lucide-react";
+import { updateOnboardingChecklist } from "@/app/app/onboarding-actions";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -24,6 +25,13 @@ interface Props {
   initialGoals: GoalRow[];
   initialYear: number;
   initialMonth: number;
+  onboardingChecklist?: {
+    salespeople?: boolean;
+    finance_managers?: boolean;
+    acquisition_sources?: boolean;
+    goals?: boolean;
+  };
+  showOnboardingChecklist?: boolean;
 }
 
 // ── Style constants (matches NewDealForm) ─────────────────────────────────────
@@ -517,7 +525,37 @@ export default function SetupClient({
   initialGoals,
   initialYear,
   initialMonth,
+  onboardingChecklist = {},
+  showOnboardingChecklist = false,
 }: Props) {
+  const [pending, startTransition] = useTransition();
+  const inferred = useMemo(
+    () => ({
+      salespeople: salespeople.some((s) => s.active !== false) || Boolean(onboardingChecklist.salespeople),
+      finance_managers:
+        financeManagers.some((s) => s.active !== false) || Boolean(onboardingChecklist.finance_managers),
+      acquisition_sources:
+        acquisitionSources.length > 0 || Boolean(onboardingChecklist.acquisition_sources),
+      goals: initialGoals.length > 0 || Boolean(onboardingChecklist.goals),
+    }),
+    [salespeople, financeManagers, acquisitionSources, initialGoals, onboardingChecklist]
+  );
+
+  const checklistItems = [
+    { key: "salespeople" as const, label: "Add salespeople" },
+    { key: "finance_managers" as const, label: "Add finance managers" },
+    { key: "acquisition_sources" as const, label: "Add acquisition sources" },
+    { key: "goals" as const, label: "Set monthly department goals" },
+  ];
+
+  const allDone = checklistItems.every((item) => inferred[item.key]);
+
+  function markDone(key: (typeof checklistItems)[number]["key"]) {
+    startTransition(async () => {
+      await updateOnboardingChecklist({ [key]: true });
+    });
+  }
+
   return (
     <div className="space-y-6">
       {/* Page header */}
@@ -528,6 +566,45 @@ export default function SetupClient({
           Manage stores, monthly goals, salespeople, acquisition sources, and finance managers.
         </p>
       </section>
+
+      {showOnboardingChecklist && !allDone ? (
+        <Card className="border-blue-200 bg-blue-50/60 shadow-none">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base text-slate-900">Finish group setup</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {checklistItems.map((item) => {
+              const done = inferred[item.key];
+              return (
+                <div
+                  key={item.key}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-blue-100 bg-white px-3 py-2"
+                >
+                  <div className="flex items-center gap-2 text-sm">
+                    <CheckCircle2
+                      className={`h-4 w-4 ${done ? "text-emerald-500" : "text-slate-300"}`}
+                    />
+                    <span className={done ? "text-slate-500 line-through" : "text-slate-800"}>
+                      {item.label}
+                    </span>
+                  </div>
+                  {!done ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={pending}
+                      onClick={() => markDone(item.key)}
+                    >
+                      Mark done
+                    </Button>
+                  ) : null}
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* Section 1: Stores (read-only) */}
       <Card className="app-panel border-[#e7ebf3] shadow-none">

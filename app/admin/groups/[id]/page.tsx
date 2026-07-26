@@ -18,7 +18,10 @@ import { openStoreViewForGroupAction } from "@/app/app/group-actions";
 import { requireAdminServiceClient } from "@/app/admin/admin-data";
 import StoreAccessFields, { PhoneField } from "./StoreAccessFields";
 
-type PageProps = { params: { id: string } };
+type PageProps = {
+  params: { id: string };
+  searchParams?: { activated?: string; emailError?: string };
+};
 
 async function getGroupDetail(id: string) {
   const supabase = await requireAdminServiceClient();
@@ -77,7 +80,7 @@ async function getGroupDetail(id: string) {
   };
 }
 
-export default async function AdminGroupDetailPage({ params }: PageProps) {
+export default async function AdminGroupDetailPage({ params, searchParams }: PageProps) {
   const { id } = params;
   const detail = await getGroupDetail(id);
   if (!detail) notFound();
@@ -85,9 +88,24 @@ export default async function AdminGroupDetailPage({ params }: PageProps) {
   const { group, stores, users, accessByProfile } = detail;
   const storeOptions = stores.map((s) => ({ id: s.id, name: s.name }));
   const storeNameById = new Map(stores.map((s) => [s.id, s.name]));
+  const activated = searchParams?.activated === "1";
+  const emailError = searchParams?.emailError
+    ? decodeURIComponent(searchParams.emailError)
+    : null;
 
   return (
     <div className="space-y-6">
+      {activated ? (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+          Auto group activated. The group admin can sign in at /login.
+          {emailError ? (
+            <span className="mt-1 block text-amber-800">
+              Activation email could not be sent: {emailError}. Add RESEND_API_KEY / EMAIL_FROM and
+              retry from the request if needed.
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <Link href="/admin/groups" className="text-xs font-medium text-blue-600 hover:underline">

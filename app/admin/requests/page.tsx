@@ -1,15 +1,19 @@
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requireAdminServiceClient } from "@/app/admin/admin-data";
+import { rejectDealerGroupRequest } from "@/app/admin/provision-actions";
 import { revalidatePath } from "next/cache";
 
 async function getRequests() {
   const supabase = await requireAdminServiceClient();
   const { data, error } = await supabase
     .from("dealer_group_requests")
-    .select("id, first_name, last_name, email, dealer_group_name, number_of_stores, website, status, created_at")
+    .select(
+      "id, first_name, last_name, email, dealer_group_name, number_of_stores, website, status, created_at, dealer_group_id"
+    )
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -20,16 +24,9 @@ async function getRequests() {
   return data ?? [];
 }
 
-async function updateRequestStatus(id: string, status: "active" | "rejected") {
+async function rejectRequest(id: string) {
   "use server";
-  const supabase = await requireAdminServiceClient();
-
-  const { error } = await supabase.from("dealer_group_requests").update({ status }).eq("id", id);
-  if (error) {
-    console.error("Error updating dealer_group_request", error);
-    throw new Error(error.message);
-  }
-
+  await rejectDealerGroupRequest(id);
   revalidatePath("/admin/requests");
 }
 
@@ -42,8 +39,7 @@ export default async function AdminRequestsPage() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Dealer group requests</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Review inbound applications and mark them as approved or rejected. Group setup is still manual
-            in V1.
+            Start setup to provision the auto group, then activate to email the group admin.
           </p>
         </div>
       </div>
@@ -104,20 +100,25 @@ export default async function AdminRequestsPage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    {r.status === "pending" && (
-                      <div className="flex justify-end gap-2">
-                        <form action={updateRequestStatus.bind(null, r.id, "active")}>
-                          <Button size="sm" variant="outline">
-                            Approve
-                          </Button>
-                        </form>
-                        <form action={updateRequestStatus.bind(null, r.id, "rejected")}>
+                    <div className="flex justify-end gap-2">
+                      {(r.status === "pending" || (r.status === "pending" && r.dealer_group_id)) && (
+                        <Button asChild size="sm" variant="outline">
+                          <Link href={`/admin/requests/${r.id}/provision`}>Start setup</Link>
+                        </Button>
+                      )}
+                      {r.status === "pending" && (
+                        <form action={rejectRequest.bind(null, r.id)}>
                           <Button size="sm" variant="ghost">
                             Reject
                           </Button>
                         </form>
-                      </div>
-                    )}
+                      )}
+                      {r.status === "active" && r.dealer_group_id ? (
+                        <Button asChild size="sm" variant="outline">
+                          <Link href={`/admin/groups/${r.dealer_group_id}`}>View group</Link>
+                        </Button>
+                      ) : null}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
