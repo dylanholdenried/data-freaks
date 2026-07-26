@@ -46,20 +46,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "User was not created" }, { status: 400 });
     }
 
-    // 2) Create pending profile (no dealer_group_id yet) — service role bypasses RLS
-    const { error: profileError } = await supabase.from("profiles").upsert(
-      {
-        // Supports legacy schema where profiles.id references auth.users.id
-        id: user.id,
-        user_id: user.id,
-        email,
-        first_name: parsed.first_name,
-        last_name: parsed.last_name,
-        role: "store_admin",
-        status: "invited"
-      },
-      { onConflict: "user_id" }
-    );
+    // 2) Create pending profile (no dealer_group_id yet) — service role bypasses RLS.
+    // Use insert (not upsert on user_id): production may lack a unique constraint on user_id.
+    const { error: profileError } = await supabase.from("profiles").insert({
+      // Supports legacy schema where profiles.id references auth.users.id
+      id: user.id,
+      user_id: user.id,
+      email,
+      first_name: parsed.first_name,
+      last_name: parsed.last_name,
+      role: "store_admin",
+      status: "invited"
+    });
 
     if (profileError) {
       console.error("Error creating profile", profileError);
