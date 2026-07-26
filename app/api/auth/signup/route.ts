@@ -69,7 +69,8 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3) Register dealer group request (new or existing)
+    // 3) Register dealer group request (new or existing).
+    // requested_user_id may be absent on legacy production DBs — keep the link in notes.
     const { error: requestError } = await supabase.from("dealer_group_requests").insert({
       first_name: parsed.first_name,
       last_name: parsed.last_name,
@@ -82,16 +83,18 @@ export async function POST(req: Request) {
       title: parsed.title ?? null,
       number_of_stores: parsed.number_of_stores ?? null,
       website: parsed.website ?? null,
-      requested_user_id: user.id,
       status: "pending",
       notes:
         parsed.dealer_group_mode === "existing"
-          ? `Requested access to existing group: ${parsed.existing_group_id ?? "no ID provided"}`
-          : "New dealer group request via signup"
+          ? `Requested access to existing group: ${parsed.existing_group_id ?? "no ID provided"}; auth_user_id=${user.id}`
+          : `New dealer group request via signup; auth_user_id=${user.id}`
     });
 
     if (requestError) {
       console.error("Error creating dealer_group_request", requestError);
+      // Roll back auth + profile so the email can be reused on retry
+      await supabase.from("profiles").delete().eq("user_id", user.id).catch(() => undefined);
+      await supabase.auth.admin.deleteUser(user.id).catch(() => undefined);
       return NextResponse.json(
         { error: `Request insert failed: ${requestError.message}` },
         { status: 500 }
