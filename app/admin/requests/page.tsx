@@ -1,11 +1,12 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { requireAdminServiceClient } from "@/app/admin/admin-data";
+import { revalidatePath } from "next/cache";
 
 async function getRequests() {
-  const supabase = createSupabaseServerClient();
+  const supabase = await requireAdminServiceClient();
   const { data, error } = await supabase
     .from("dealer_group_requests")
     .select("id, first_name, last_name, email, dealer_group_name, number_of_stores, website, status, created_at")
@@ -21,9 +22,15 @@ async function getRequests() {
 
 async function updateRequestStatus(id: string, status: "active" | "rejected") {
   "use server";
-  const supabase = createSupabaseServerClient();
+  const supabase = await requireAdminServiceClient();
 
-  await supabase.from("dealer_group_requests").update({ status }).eq("id", id);
+  const { error } = await supabase.from("dealer_group_requests").update({ status }).eq("id", id);
+  if (error) {
+    console.error("Error updating dealer_group_request", error);
+    throw new Error(error.message);
+  }
+
+  revalidatePath("/admin/requests");
 }
 
 export default async function AdminRequestsPage() {
@@ -121,4 +128,3 @@ export default async function AdminRequestsPage() {
     </div>
   );
 }
-
