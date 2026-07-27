@@ -230,6 +230,9 @@ export default function UpdatePendingForm({
   const [closing, setClosing] = useState(false);
   const [closeErrors, setCloseErrors] = useState<string[]>([]);
   const [closed, setClosed] = useState(false);
+  const [showLostConfirm, setShowLostConfirm] = useState(false);
+  const [markingLost, setMarkingLost] = useState(false);
+  const [markedLost, setMarkedLost] = useState(false);
 
   // ── VIN Decoder ───────────────────────────────────────────────────────────────
   async function handleDecodeVin() {
@@ -541,28 +544,99 @@ export default function UpdatePendingForm({
     }
   }
 
-  // isLocked reflects the deal's actual persisted status, not just session state.
-  // closed/unwound deals are read-only; Stage 5 adds a Reopen action.
-  const isLocked =
-    dealStatus === "closed" || dealStatus === "unwound" || closed;
+  // ── Mark Lost (status: dead) ──────────────────────────────────────────────────
+  async function handleMarkLost() {
+    setShowLostConfirm(false);
+    setMarkingLost(true);
+    setSaved(false);
+    setErrors([]);
+    setCloseErrors([]);
 
-  const busy = saving || closing || closed;
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { error } = await supabase
+        .from("deals")
+        .update({ ...buildPayload(), status: "dead" })
+        .eq("id", dealId);
+
+      if (error) throw new Error(error.message);
+      await saveSalespeople(supabase);
+      setMarkedLost(true);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      setTimeout(() => router.push("/app/deals"), 2000);
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : "An unexpected error occurred. Please try again.";
+      setErrors([`Mark lost failed: ${msg}`]);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } finally {
+      setMarkingLost(false);
+    }
+  }
+
+  // isLocked reflects the deal's actual persisted status, not just session state.
+  // closed/unwound/dead deals are read-only; Stage 5 adds a Reopen action.
+  const isLocked =
+    dealStatus === "closed" ||
+    dealStatus === "unwound" ||
+    dealStatus === "dead" ||
+    closed ||
+    markedLost;
+
+  const busy = saving || closing || closed || markingLost || markedLost;
+
+  function renderActionButtons() {
+    return (
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleSave}
+          disabled={busy}
+          className="min-w-[140px]"
+        >
+          {saving ? "Saving…" : "Save Progress"}
+        </Button>
+        <Button
+          type="button"
+          onClick={handleClose}
+          disabled={busy}
+          className="min-w-[140px] bg-green-700 hover:bg-green-800"
+        >
+          {closing ? "Closing…" : "Close Deal"}
+        </Button>
+        <Button
+          type="button"
+          onClick={() => setShowLostConfirm(true)}
+          disabled={busy}
+          className="min-w-[140px] bg-red-600 hover:bg-red-700"
+        >
+          {markingLost ? "Marking…" : "Mark Lost"}
+        </Button>
+      </div>
+    );
+  }
 
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
       {/* Page header */}
       <section className="app-panel p-5">
-        <p className="app-kicker">Transaction Intake</p>
-        <div className="mt-1 flex items-center gap-3">
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
-            Update Deal
-          </h1>
-          <StatusBadge status={dealStatus} />
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <p className="app-kicker">Transaction Intake</p>
+            <div className="mt-1 flex items-center gap-3">
+              <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+                Update Deal
+              </h1>
+              <StatusBadge status={markedLost ? "dead" : dealStatus} />
+            </div>
+            <p className="mt-1 text-sm text-slate-500">
+              Fill economics and close when ready.
+            </p>
+          </div>
+          {!isLocked && renderActionButtons()}
         </div>
-        <p className="mt-1 text-sm text-slate-500">
-          Fill economics and close when ready.
-        </p>
       </section>
 
       {/* ── Close success banner ─────────────────────────────────────────────── */}
@@ -579,6 +653,27 @@ export default function UpdatePendingForm({
             <a
               href="/app/deals"
               className="mt-1 inline-block text-xs text-green-700 underline hover:text-green-900"
+            >
+              Go to Sales Registry →
+            </a>
+          </div>
+        </div>
+      )}
+
+      {/* ── Mark lost success banner ─────────────────────────────────────────── */}
+      {markedLost && (
+        <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-slate-600" />
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-slate-800">Deal marked lost</p>
+            <p className="mt-0.5 text-sm text-slate-600">
+              Stock{" "}
+              <span className="font-mono font-semibold">#{stockNumber}</span>{" "}
+              has been marked Lost. Redirecting to Sales Registry…
+            </p>
+            <a
+              href="/app/deals"
+              className="mt-1 inline-block text-xs text-slate-600 underline hover:text-slate-900"
             >
               Go to Sales Registry →
             </a>
@@ -1145,24 +1240,37 @@ export default function UpdatePendingForm({
 
       {/* ── Action bar ───────────────────────────────────────────────────────── */}
       {!isLocked && (
-        <div className="flex items-center justify-end gap-3 pb-6">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleSave}
-            disabled={busy}
-            className="min-w-[160px]"
-          >
-            {saving ? "Saving…" : "Save Progress"}
-          </Button>
-          <Button
-            type="button"
-            onClick={handleClose}
-            disabled={busy}
-            className="min-w-[160px] bg-green-700 hover:bg-green-800"
-          >
-            {closing ? "Closing…" : "Close Deal"}
-          </Button>
+        <div className="pb-6">
+          {renderActionButtons()}
+        </div>
+      )}
+
+      {/* ── Mark Lost confirmation ───────────────────────────────────────────── */}
+      {showLostConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-semibold tracking-tight text-slate-900">
+              Are you sure you want to mark this deal lost?
+            </h2>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={markingLost}
+                onClick={() => setShowLostConfirm(false)}
+              >
+                No, Go Back
+              </Button>
+              <Button
+                type="button"
+                disabled={markingLost}
+                onClick={handleMarkLost}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {markingLost ? "Marking…" : "Yes, Mark Lost"}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>
