@@ -22,6 +22,7 @@ export const DEAL_IMPORT_HEADERS = [
   "front_profit",
   "back_profit",
   "sale_price",
+  "list_price",
   "salesperson_1",
   "salesperson_1_share",
   "salesperson_2",
@@ -92,6 +93,7 @@ export const dealImportRowSchema = z
     front_profit: requiredNumber("front_profit"),
     back_profit: requiredNumber("back_profit"),
     sale_price: requiredNumber("sale_price"),
+    list_price: nonEmpty,
     salesperson_1: nonEmpty,
     salesperson_1_share: requiredNumber("salesperson_1_share"),
     salesperson_2: emptyToUndefined,
@@ -110,6 +112,18 @@ export const dealImportRowSchema = z
     notes: emptyToUndefined,
   })
   .superRefine((row, ctx) => {
+    const listRaw = row.list_price.trim();
+    const listUpper = listRaw.toUpperCase();
+    if (listUpper !== "NA" && listUpper !== "N/A") {
+      if (!Number.isFinite(Number(listRaw))) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "list_price must be a number or NA",
+          path: ["list_price"],
+        });
+      }
+    }
+
     const share1 = row.salesperson_1_share;
     const hasSp2 = row.salesperson_2 != null || row.salesperson_2_share != null;
     if (hasSp2) {
@@ -242,6 +256,8 @@ export type NormalizedDealImportRow = {
   front_profit: number;
   back_profit: number;
   sale_price: number;
+  list_price: number | null;
+  list_price_na: boolean;
   salesperson_1: string;
   salesperson_1_share: number;
   salesperson_2: string | null;
@@ -264,6 +280,10 @@ export function toNormalizedDealImportRow(
       ? Number(parsed.salesperson_2_share)
       : null;
 
+  const listRaw = parsed.list_price.trim();
+  const listUpper = listRaw.toUpperCase();
+  const listPriceNa = listUpper === "NA" || listUpper === "N/A";
+
   return {
     sale_date: parsed.sale_date,
     customer_last_name: parsed.customer_last_name,
@@ -285,6 +305,8 @@ export function toNormalizedDealImportRow(
     front_profit: parsed.front_profit,
     back_profit: parsed.back_profit,
     sale_price: parsed.sale_price,
+    list_price: listPriceNa ? null : Number(listRaw),
+    list_price_na: listPriceNa,
     salesperson_1: parsed.salesperson_1,
     salesperson_1_share: parsed.salesperson_1_share,
     salesperson_2: parsed.salesperson_2 ?? null,
@@ -325,6 +347,7 @@ export const DEAL_IMPORT_EXAMPLE_ROW: Record<DealImportHeader, string> = {
   front_profit: "1200.00",
   back_profit: "800.00",
   sale_price: "28500.00",
+  list_price: "29900.00",
   salesperson_1: "John Sales",
   salesperson_1_share: "100",
   salesperson_2: "",

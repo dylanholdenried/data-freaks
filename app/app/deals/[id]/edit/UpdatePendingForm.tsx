@@ -16,6 +16,7 @@ type TradeRow = {
   make: string | null;
   model: string | null;
   acv: number | null;
+  allowance: number | null;
   exit_strategy: string | null;
 };
 
@@ -52,6 +53,8 @@ interface Props {
   initialFrontProfit: number | null;
   initialBackProfit: number | null;
   initialSalePrice: number | null;
+  initialListPrice: number | null;
+  initialListPriceNa: boolean;
   initialAge: number | null;
   // Dropdown options
   acquisitionSources: { id: string; name: string }[];
@@ -127,6 +130,8 @@ export default function UpdatePendingForm({
   initialFrontProfit,
   initialBackProfit,
   initialSalePrice,
+  initialListPrice,
+  initialListPriceNa,
   initialAge,
   acquisitionSources,
   financeManagers,
@@ -221,6 +226,10 @@ export default function UpdatePendingForm({
   const [frontProfit, setFrontProfit] = useState(numStr(initialFrontProfit));
   const [backProfit, setBackProfit] = useState(numStr(initialBackProfit));
   const [salePrice, setSalePrice] = useState(numStr(initialSalePrice));
+  const [listPriceNa, setListPriceNa] = useState(initialListPriceNa);
+  const [listPrice, setListPrice] = useState(
+    initialListPriceNa ? "" : numStr(initialListPrice)
+  );
   const [age, setAge] = useState(numStr(initialAge));
 
   // ── UI state ──────────────────────────────────────────────────────────────────
@@ -360,6 +369,12 @@ export default function UpdatePendingForm({
       front_profit: frontProfit.trim() !== "" ? parseFloat(frontProfit) : null,
       back_profit: backProfit.trim() !== "" ? parseFloat(backProfit) : null,
       sale_price: salePrice.trim() !== "" ? parseFloat(salePrice) : null,
+      list_price_na: listPriceNa,
+      list_price: listPriceNa
+        ? null
+        : listPrice.trim() !== ""
+          ? parseFloat(listPrice)
+          : null,
       age: age.trim() ? parseInt(age, 10) : null,
     };
   }
@@ -424,6 +439,13 @@ export default function UpdatePendingForm({
     if (backProfit.trim() === "")
       errs.push("Back gross is required (enter 0 if zero)");
     if (!salePrice.trim()) errs.push("Sale price is required");
+    if (listPriceNa) {
+      // NA voids lost gross — allowed
+    } else if (!listPrice.trim()) {
+      errs.push("List price is required (enter a number or select NA)");
+    } else if (!Number.isFinite(parseFloat(listPrice))) {
+      errs.push("List price must be a number");
+    }
     if (!age.trim()) errs.push("Age is required");
 
     // Salespeople
@@ -1223,6 +1245,39 @@ export default function UpdatePendingForm({
             </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-1 sm:col-span-2">
+              <label className={LBL}>List Price</label>
+              <div className="flex flex-wrap items-center gap-3">
+                <Input
+                  type="number"
+                  value={listPrice}
+                  onChange={(e) => {
+                    setListPrice(e.target.value);
+                    if (e.target.value.trim()) setListPriceNa(false);
+                  }}
+                  disabled={isLocked || listPriceNa}
+                  className={cn(
+                    "max-w-xs",
+                    listPriceNa ? "" : emptyCls(listPrice, isLocked)
+                  )}
+                  placeholder={listPriceNa ? "NA" : undefined}
+                />
+                <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={listPriceNa}
+                    disabled={isLocked}
+                    onChange={(e) => {
+                      const na = e.target.checked;
+                      setListPriceNa(na);
+                      if (na) setListPrice("");
+                    }}
+                    className="h-4 w-4 rounded border-slate-300"
+                  />
+                  NA (unavailable — voids lost gross)
+                </label>
+              </div>
+            </div>
             <div className="space-y-1">
               <label className={LBL}>Age (days in stock)</label>
               <Input

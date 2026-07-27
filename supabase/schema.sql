@@ -353,6 +353,8 @@ create table public.deals (
   front_profit numeric(12,2),
   back_profit numeric(12,2),
   sale_price numeric(12,2),
+  list_price numeric(12,2),
+  list_price_na boolean not null default false,
   odometer integer,
   age integer,
   drivetrain text,

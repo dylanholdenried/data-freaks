@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarRange, LayoutDashboard, ListOrdered, Settings2, Shield } from "lucide-react";
+import {
+  CalendarRange,
+  LayoutDashboard,
+  ListOrdered,
+  Settings2,
+  Shield,
+  CircleDollarSign,
+} from "lucide-react";
 
 const navLink =
   "flex items-center gap-2 rounded-lg px-3 py-2 text-slate-300 hover:bg-white/10 hover:text-white";
@@ -10,6 +17,7 @@ const navLinkActive = `${navLink} bg-blue-500/25 font-medium text-white`;
 
 const links = [
   { href: "/app/dashboard", label: "Dashboard", icon: LayoutDashboard, match: (p: string) => p.startsWith("/app/dashboard") },
+  { href: "/app/profit-center", label: "Profit Center", icon: CircleDollarSign, match: (p: string) => p.startsWith("/app/profit-center") },
   { href: "/app/deals", label: "Sales Registry", icon: ListOrdered, match: (p: string) => p === "/app/deals" || p.startsWith("/app/deals/") },
   { href: "/app/setup", label: "Setup & Config", icon: Settings2, match: (p: string) => p.startsWith("/app/setup") },
   { href: "/app/calendar", label: "Pace Calendar", icon: CalendarRange, match: (p: string) => p.startsWith("/app/calendar") },

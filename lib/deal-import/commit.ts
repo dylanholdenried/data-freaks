@@ -227,6 +227,8 @@ async function commitDealImportBatchJs(
         front_profit: n.front_profit,
         back_profit: n.back_profit,
         sale_price: n.sale_price,
+        list_price: n.list_price_na ? null : n.list_price,
+        list_price_na: n.list_price_na,
         entered_by: b.uploaded_by,
       };
 

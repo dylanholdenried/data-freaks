@@ -29,6 +29,8 @@ type DealRow = {
   front_profit: number | null;
   back_profit: number | null;
   sale_price: number | null;
+  list_price: number | null;
+  list_price_na: boolean;
   age: number | null;
 };
 
@@ -43,6 +45,7 @@ type TradeRow = {
   make: string | null;
   model: string | null;
   acv: number | null;
+  allowance: number | null;
   exit_strategy: string | null;
 };
 
@@ -77,7 +80,7 @@ export default async function EditDealPage({ params }: { params: { id: string } 
         "vehicle_year,vehicle_make,vehicle_model," +
         "vin,trim,color,body_style,drivetrain,odometer," +
         "acquisition_source,finance_type,finance_manager_id," +
-        "front_profit,back_profit,sale_price,age"
+        "front_profit,back_profit,sale_price,list_price,list_price_na,age"
     )
     .eq("id", params.id)
     .maybeSingle();
@@ -141,7 +144,7 @@ export default async function EditDealPage({ params }: { params: { id: string } 
         .order("name"),
       supabase
         .from("trades")
-        .select("year,make,model,acv,exit_strategy")
+        .select("year,make,model,acv,allowance,exit_strategy")
         .eq("deal_id", deal.id),
       supabase
         .from("vehicle_makes")
@@ -211,6 +214,8 @@ export default async function EditDealPage({ params }: { params: { id: string } 
       initialFrontProfit={deal.front_profit}
       initialBackProfit={deal.back_profit}
       initialSalePrice={deal.sale_price}
+      initialListPrice={deal.list_price}
+      initialListPriceNa={deal.list_price_na ?? false}
       initialAge={deal.age}
       acquisitionSources={acquisitionSources}
       financeManagers={financeManagers}
