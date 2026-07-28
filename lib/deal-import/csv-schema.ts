@@ -304,15 +304,13 @@ export type NormalizedDealImportRow = {
 
 function isClosedComplete(
   parsed: z.infer<typeof dealImportRowSchema>,
-  hasTrade: "yes" | "no",
-  listPriceNa: boolean,
-  listPrice: number | null
+  hasTrade: "yes" | "no"
 ): boolean {
+  // color, list_price, and trade_exit_strategy are optional for import-as-closed
   const requiredStrings = [
     parsed.customer_last_name,
     parsed.vin,
     parsed.trim,
-    parsed.color,
     parsed.body_style,
     parsed.drivetrain,
     parsed.acquisition_source,
@@ -326,7 +324,6 @@ function isClosedComplete(
   if (parsed.front_profit == null || parsed.back_profit == null || parsed.sale_price == null) {
     return false;
   }
-  if (!listPriceNa && listPrice == null) return false;
 
   if (parsed.salesperson_1_share == null) return false;
   const share1 = Number(parsed.salesperson_1_share);
@@ -348,15 +345,16 @@ function isClosedComplete(
       !parsed.trade_make ||
       !parsed.trade_model ||
       !parsed.trade_acv ||
-      !parsed.trade_allowance ||
-      !parsed.trade_exit_strategy
+      !parsed.trade_allowance
     ) {
       return false;
     }
     if (!/^-?\d+$/.test(parsed.trade_year)) return false;
     if (!Number.isFinite(Number(parsed.trade_acv))) return false;
     if (!Number.isFinite(Number(parsed.trade_allowance))) return false;
+    // trade_exit_strategy optional; if present must be a valid enum value
     if (
+      parsed.trade_exit_strategy != null &&
       !TRADE_EXIT_STRATEGIES.includes(
         parsed.trade_exit_strategy.toLowerCase() as (typeof TRADE_EXIT_STRATEGIES)[number]
       )
@@ -382,6 +380,12 @@ export function toNormalizedDealImportRow(
   const hasTradeRaw = (parsed.has_trade ?? "no").toLowerCase();
   const hasTrade: "yes" | "no" = hasTradeRaw === "yes" ? "yes" : "no";
 
+  const tradeExitOk =
+    parsed.trade_exit_strategy == null ||
+    TRADE_EXIT_STRATEGIES.includes(
+      parsed.trade_exit_strategy.toLowerCase() as (typeof TRADE_EXIT_STRATEGIES)[number]
+    );
+
   const tradeComplete =
     hasTrade === "yes" &&
     parsed.trade_year != null &&
@@ -392,22 +396,14 @@ export function toNormalizedDealImportRow(
     Number.isFinite(Number(parsed.trade_acv)) &&
     parsed.trade_allowance != null &&
     Number.isFinite(Number(parsed.trade_allowance)) &&
-    parsed.trade_exit_strategy != null &&
-    TRADE_EXIT_STRATEGIES.includes(
-      parsed.trade_exit_strategy.toLowerCase() as (typeof TRADE_EXIT_STRATEGIES)[number]
-    );
+    tradeExitOk;
 
   const share2 =
     parsed.salesperson_2 != null && parsed.salesperson_2_share != null
       ? Number(parsed.salesperson_2_share)
       : null;
 
-  const status: "pending" | "closed" = isClosedComplete(
-    parsed,
-    hasTrade,
-    listPriceNa,
-    listPrice
-  )
+  const status: "pending" | "closed" = isClosedComplete(parsed, hasTrade)
     ? "closed"
     : "pending";
 

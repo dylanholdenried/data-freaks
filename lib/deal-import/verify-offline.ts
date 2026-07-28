@@ -4,7 +4,9 @@
  */
 import {
   buildTemplateCsv,
+  DEAL_IMPORT_EXAMPLE_ROW,
   DEAL_IMPORT_HEADERS,
+  type DealImportHeader,
   parseFlexibleSaleDate,
 } from "./csv-schema";
 import { parseDealImportCsv } from "./parse";
@@ -54,6 +56,67 @@ assert(incomplete.rows[0].normalized?.status === "pending", "blank fields → pe
 assert(incomplete.rows[0].normalized?.sale_date === "2025-08-01", "flexible date normalized");
 assert(incomplete.rows[0].normalized?.customer_last_name == null, "blank last name → null");
 assert(incomplete.rows[0].normalized?.vin == null, "blank vin → null");
+
+/** Build a CSV from the example row with selected fields blanked. */
+function csvWithBlanks(blankHeaders: DealImportHeader[]): string {
+  const row = { ...DEAL_IMPORT_EXAMPLE_ROW };
+  for (const h of blankHeaders) row[h] = "";
+  const body = DEAL_IMPORT_HEADERS.map((h) => {
+    const v = row[h];
+    return v.includes(",") ? `"${v}"` : v;
+  }).join(",");
+  return `${DEAL_IMPORT_HEADERS.join(",")}\n${body}\n`;
+}
+
+const closedNoColorListExit = parseDealImportCsv(
+  csvWithBlanks(["color", "list_price", "trade_exit_strategy"])
+);
+assert(
+  closedNoColorListExit.rows[0].errors.length === 0,
+  `closed-optional blanks should parse: ${closedNoColorListExit.rows[0].errors.join("; ")}`
+);
+assert(
+  closedNoColorListExit.rows[0].normalized?.status === "closed",
+  "blank color + list_price + trade_exit_strategy (no trade) → still closed"
+);
+assert(closedNoColorListExit.rows[0].normalized?.color == null, "blank color → null");
+assert(closedNoColorListExit.rows[0].normalized?.list_price == null, "blank list_price → null");
+assert(
+  closedNoColorListExit.rows[0].normalized?.list_price_na === false,
+  "blank list_price is not NA"
+);
+
+const tradeRow = { ...DEAL_IMPORT_EXAMPLE_ROW };
+tradeRow.color = "";
+tradeRow.list_price = "";
+tradeRow.has_trade = "yes";
+tradeRow.trade_year = "2018";
+tradeRow.trade_make = "Honda";
+tradeRow.trade_model = "Civic";
+tradeRow.trade_acv = "5000";
+tradeRow.trade_allowance = "4000";
+tradeRow.trade_exit_strategy = "";
+const tradeCsv = `${DEAL_IMPORT_HEADERS.join(",")}\n${DEAL_IMPORT_HEADERS.map((h) => {
+  const v = tradeRow[h];
+  return v.includes(",") ? `"${v}"` : v;
+}).join(",")}\n`;
+const closedTradeNoExitParsed = parseDealImportCsv(tradeCsv);
+assert(
+  closedTradeNoExitParsed.rows[0].errors.length === 0,
+  `trade without exit should parse: ${closedTradeNoExitParsed.rows[0].errors.join("; ")}`
+);
+assert(
+  closedTradeNoExitParsed.rows[0].normalized?.status === "closed",
+  "has_trade=yes without trade_exit_strategy → still closed"
+);
+assert(
+  closedTradeNoExitParsed.rows[0].normalized?.trade_complete === true,
+  "trade without exit_strategy is still complete enough to insert"
+);
+assert(
+  closedTradeNoExitParsed.rows[0].normalized?.trade_exit_strategy == null,
+  "blank trade_exit_strategy → null"
+);
 
 const badDate = parseDealImportCsv(
   [

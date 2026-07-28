@@ -1,5 +1,6 @@
 import { PRICE_BANDS, priceBandForSalePrice } from "./priceBands";
 import { dealTradeHold, lostGross, mean, sum } from "./metrics";
+import { inferTruckClass, TRUCK_CLASS_LABELS } from "./truckClass";
 
 export type ProfitDeal = {
   id: string;
@@ -38,6 +39,7 @@ export type Dimension =
   | "price"
   | "acquisition"
   | "body_style"
+  | "truck_class"
   | "salesperson";
 
 export type RollupRow = {
@@ -105,6 +107,10 @@ function dimensionKey(
     case "body_style": {
       const bs = deal.body_style?.trim() || "(Unknown)";
       return [{ key: bs.toLowerCase(), label: bs }];
+    }
+    case "truck_class": {
+      const label = inferTruckClass(deal.vehicle_make, deal.vehicle_model);
+      return [{ key: label.toLowerCase(), label }];
     }
     case "salesperson": {
       const splits = ctx.dealSalespeople.filter((s) => s.deal_id === deal.id);
@@ -235,6 +241,17 @@ export function aggregateByDimension(
     rows.push(...ordered, ...orphans);
   }
 
+  // Truck class: fixed order 1500 → 2500 → 3500 → 4500+ → (No class)
+  if (dim === "truck_class") {
+    const byKey = new Map(rows.map((r) => [r.key, r]));
+    const ordered: RollupRow[] = TRUCK_CLASS_LABELS.map((label) => {
+      const key = label.toLowerCase();
+      return byKey.get(key) ?? buildRow(key, label, [], ctx);
+    });
+    rows.length = 0;
+    rows.push(...ordered);
+  }
+
   const total = buildRow("__total__", "Total", ctx.deals, ctx, { isTotal: true });
   return { rows, total };
 }
@@ -247,6 +264,7 @@ export type ProfitFilters = {
   priceBandId: string | "all";
   acquisition: string | "all";
   bodyStyle: string | "all";
+  truckClass: string | "all";
   salespersonId: string | "all";
   financeType: string | "all";
 };
@@ -275,6 +293,11 @@ export function filterDeals(
     if (filters.bodyStyle !== "all") {
       const bs = d.body_style?.trim() || "(Unknown)";
       if (bs !== filters.bodyStyle) return false;
+    }
+    if (filters.truckClass !== "all") {
+      if (inferTruckClass(d.vehicle_make, d.vehicle_model) !== filters.truckClass) {
+        return false;
+      }
     }
     if (filters.financeType !== "all") {
       if ((d.finance_type ?? "").toLowerCase() !== filters.financeType) return false;

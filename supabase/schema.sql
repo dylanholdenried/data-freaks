@@ -393,7 +393,7 @@ create table public.trades (
   trade_model text not null,
   trade_acv numeric(12,2) not null,
   trade_allowance numeric(12,2) not null,
-  exit_strategy trade_exit_strategy not null,
+  exit_strategy trade_exit_strategy,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

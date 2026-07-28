@@ -20,6 +20,7 @@ import {
 } from "@/lib/profit-center/dateRange";
 import { PRICE_BANDS } from "@/lib/profit-center/priceBands";
 import { columnExtent, heatmapStyle, type HeatPolarity } from "@/lib/profit-center/heatmap";
+import { TRUCK_CLASS_LABELS } from "@/lib/profit-center/truckClass";
 import { cn } from "@/lib/utils";
 
 type Store = { id: string; name: string };
@@ -34,6 +35,7 @@ const DIMENSIONS: { id: Dimension; label: string }[] = [
   { id: "price", label: "Sale Price" },
   { id: "acquisition", label: "Acquisition" },
   { id: "body_style", label: "Body Style" },
+  { id: "truck_class", label: "Truck Class" },
   { id: "salesperson", label: "Salesperson" },
 ];
 
@@ -237,6 +239,7 @@ export default function ProfitCenterClient({
     priceBandId: "all",
     acquisition: "all",
     bodyStyle: "all",
+    truckClass: "all",
     salespersonId: "all",
     financeType: "all",
   });
@@ -581,6 +584,20 @@ export default function ProfitCenterClient({
           </select>
           <select
             className={SEL}
+            value={filters.truckClass}
+            onChange={(e) =>
+              setFilters((f) => ({ ...f, truckClass: e.target.value }))
+            }
+          >
+            <option value="all">All truck classes</option>
+            {TRUCK_CLASS_LABELS.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <select
+            className={SEL}
             value={filters.salespersonId}
             onChange={(e) =>
               setFilters((f) => ({ ...f, salespersonId: e.target.value }))
@@ -621,6 +638,7 @@ export default function ProfitCenterClient({
               priceBandId: "all",
               acquisition: "all",
               bodyStyle: "all",
+              truckClass: "all",
               salespersonId: "all",
               financeType: "all",
             })

@@ -10,7 +10,7 @@ export const COLORS = [
 
 export const BODY_STYLES = [
   "Sedan", "SUV", "Truck", "Cargo Van", "Minivan",
-  "Hatchback", "Coupe", "Convertible", "Wagon", "Cab/Chassis",
+  "Hatchback", "Coupe", "Convertible",
 ];
 
 export const DRIVETRAINS = ["FWD", "RWD", "AWD", "4WD"];
@@ -22,13 +22,11 @@ export function mapBodyStyle(raw: string): string {
   if (s.includes("sport utility") || s.includes("suv") || s.includes("mpv"))
     return "SUV";
   if (s.includes("pickup") || s.includes("truck")) return "Truck";
-  if (s.includes("cab chassis") || s.includes("incomplete")) return "Cab/Chassis";
   if (s.includes("minivan")) return "Minivan";
   if (s.includes("van")) return "Cargo Van";
   if (s.includes("hatchback") || s.includes("liftback")) return "Hatchback";
   if (s.includes("convertible") || s.includes("cabriolet")) return "Convertible";
   if (s.includes("coupe")) return "Coupe";
-  if (s.includes("wagon")) return "Wagon";
   if (s.includes("sedan") || s.includes("saloon")) return "Sedan";
   return "";
 }
