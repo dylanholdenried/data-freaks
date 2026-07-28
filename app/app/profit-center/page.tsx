@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
+import { fetchAllByIds, fetchAllRows } from "@/lib/supabase/fetch-all";
 import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import { getAccessibleStores } from "@/lib/store-access";
 import {
@@ -98,41 +99,48 @@ export default async function ProfitCenterPage({
   }
 
   const [dealsRes, spRes] = await Promise.all([
-    supabase
-      .from("deals")
-      .select(
-        "id,sale_date,store_id,vehicle_year,vehicle_make,vehicle_model,body_style," +
-          "acquisition_source,finance_type,front_profit,back_profit,sale_price," +
-          "list_price,list_price_na,age"
-      )
-      .in("store_id", storeIds)
-      .eq("status", "closed")
-      .gte("sale_date", range.from)
-      .lte("sale_date", range.to),
+    fetchAllRows<ProfitDeal>((from, to) =>
+      supabase
+        .from("deals")
+        .select(
+          "id,sale_date,store_id,vehicle_year,vehicle_make,vehicle_model,body_style," +
+            "acquisition_source,finance_type,front_profit,back_profit,sale_price," +
+            "list_price,list_price_na,age"
+        )
+        .in("store_id", storeIds)
+        .eq("status", "closed")
+        .gte("sale_date", range.from)
+        .lte("sale_date", range.to)
+        .order("sale_date", { ascending: true })
+        .range(from, to)
+    ),
     supabase
       .from("salespeople")
       .select("id,name,store_id")
       .in("store_id", storeIds),
   ]);
 
-  let deals = (dealsRes.data ?? []) as unknown as ProfitDeal[];
+  let deals = dealsRes.data;
 
   // Fallback if migration not yet applied (list_price columns missing)
   if (dealsRes.error?.message?.includes("list_price")) {
-    const fallback = await supabase
-      .from("deals")
-      .select(
-        "id,sale_date,store_id,vehicle_year,vehicle_make,vehicle_model,body_style," +
-          "acquisition_source,finance_type,front_profit,back_profit,sale_price,age"
-      )
-      .in("store_id", storeIds)
-      .eq("status", "closed")
-      .gte("sale_date", range.from)
-      .lte("sale_date", range.to);
-    deals = ((fallback.data ?? []) as unknown as Omit<
-      ProfitDeal,
-      "list_price" | "list_price_na"
-    >[]).map((d) => ({
+    const fallback = await fetchAllRows<
+      Omit<ProfitDeal, "list_price" | "list_price_na">
+    >((from, to) =>
+      supabase
+        .from("deals")
+        .select(
+          "id,sale_date,store_id,vehicle_year,vehicle_make,vehicle_model,body_style," +
+            "acquisition_source,finance_type,front_profit,back_profit,sale_price,age"
+        )
+        .in("store_id", storeIds)
+        .eq("status", "closed")
+        .gte("sale_date", range.from)
+        .lte("sale_date", range.to)
+        .order("sale_date", { ascending: true })
+        .range(from, to)
+    );
+    deals = fallback.data.map((d) => ({
       ...d,
       list_price: null,
       list_price_na: true,
@@ -148,23 +156,24 @@ export default async function ProfitCenterPage({
   }
 
   const dealIds = deals.map((d) => d.id);
-  let trades: ProfitTrade[] = [];
-  let dealSalespeople: ProfitDealSalesperson[] = [];
-
-  if (dealIds.length > 0) {
-    const [tradesRes, dspRes] = await Promise.all([
+  const [tradesRes, dspRes] = await Promise.all([
+    fetchAllByIds<ProfitTrade>(dealIds, (idChunk, from, to) =>
       supabase
         .from("trades")
         .select("deal_id,acv,allowance")
-        .in("deal_id", dealIds),
+        .in("deal_id", idChunk)
+        .range(from, to)
+    ),
+    fetchAllByIds<ProfitDealSalesperson>(dealIds, (idChunk, from, to) =>
       supabase
         .from("deal_salespeople")
         .select("deal_id,salesperson_id,share_percent")
-        .in("deal_id", dealIds),
-    ]);
-    trades = (tradesRes.data ?? []) as ProfitTrade[];
-    dealSalespeople = (dspRes.data ?? []) as ProfitDealSalesperson[];
-  }
+        .in("deal_id", idChunk)
+        .range(from, to)
+    ),
+  ]);
+  const trades = tradesRes.data;
+  const dealSalespeople = dspRes.data;
 
   const salespeople = (spRes.data ?? []) as Salesperson[];
 

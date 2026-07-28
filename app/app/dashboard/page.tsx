@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
+import { fetchAllByIds, fetchAllRows } from "@/lib/supabase/fetch-all";
 import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import { getAccessibleStores } from "@/lib/store-access";
 import DashboardClient from "./DashboardClient";
@@ -69,12 +70,16 @@ export default async function DashboardPage() {
   // Parallel: deals, departments, calendar, salespeople (no active filter — inactive reps'
   // historical deals must still resolve their name)
   const [dealsRes, deptsRes, calRes, spRes] = await Promise.all([
-    supabase
-      .from("deals")
-      .select("id,status,front_profit,back_profit,store_id,department_id")
-      .in("store_id", storeIds)
-      .gte("sale_date", firstOfMonth)
-      .lte("sale_date", lastOfMonth),
+    fetchAllRows<Deal>((from, to) =>
+      supabase
+        .from("deals")
+        .select("id,status,front_profit,back_profit,store_id,department_id")
+        .in("store_id", storeIds)
+        .gte("sale_date", firstOfMonth)
+        .lte("sale_date", lastOfMonth)
+        .order("id", { ascending: true })
+        .range(from, to)
+    ),
     supabase
       .from("departments")
       .select("id,name,store_id")
@@ -93,7 +98,7 @@ export default async function DashboardPage() {
       .order("name"),
   ]);
 
-  const deals = (dealsRes.data ?? []) as unknown as Deal[];
+  const deals = dealsRes.data;
   const departments = (deptsRes.data ?? []) as unknown as Department[];
   const calendarDays = (calRes.data ?? []) as unknown as CalendarDay[];
   const salespeople = (spRes.data ?? []) as unknown as Salesperson[];
@@ -117,15 +122,15 @@ export default async function DashboardPage() {
             goals = (res.data ?? []) as unknown as Goal[];
           })
       : Promise.resolve(),
-    dealIds.length > 0
-      ? supabase
-          .from("deal_salespeople")
-          .select("deal_id,salesperson_id,share_percent")
-          .in("deal_id", dealIds)
-          .then((res) => {
-            dealSalespeople = (res.data ?? []) as unknown as DealSalesperson[];
-          })
-      : Promise.resolve(),
+    fetchAllByIds<DealSalesperson>(dealIds, (idChunk, from, to) =>
+      supabase
+        .from("deal_salespeople")
+        .select("deal_id,salesperson_id,share_percent")
+        .in("deal_id", idChunk)
+        .range(from, to)
+    ).then((res) => {
+      dealSalespeople = res.data;
+    }),
   ]);
 
   return (

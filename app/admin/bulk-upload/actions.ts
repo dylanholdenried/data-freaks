@@ -9,6 +9,7 @@ import {
   unwindDealImportBatch,
 } from "@/lib/deal-import/commit";
 import { buildTemplateCsv } from "@/lib/deal-import/csv-schema";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 
 export type BatchPreview = {
   batchId: string;
@@ -213,13 +214,18 @@ export async function createBatchFromCsv(input: {
     supabase.from("finance_managers").select("id,name").eq("store_id", storeId),
     supabase.from("acquisition_sources").select("id,name").eq("store_id", storeId),
     supabase.from("department_makes").select("department_id,make"),
-    supabase.from("deals").select("stock_number").eq("store_id", storeId),
+    fetchAllRows<{ stock_number: string }>((from, to) =>
+      supabase
+        .from("deals")
+        .select("stock_number")
+        .eq("store_id", storeId)
+        .order("id", { ascending: true })
+        .range(from, to)
+    ),
   ]);
 
   const existingStockNumbers = new Set(
-    ((dealsResult.data ?? []) as { stock_number: string }[]).map((d) =>
-      d.stock_number.trim().toLowerCase()
-    )
+    dealsResult.data.map((d) => d.stock_number.trim().toLowerCase())
   );
 
   const validated = validateImportRows(parsedRows, {
