@@ -39,13 +39,20 @@ export async function commitDealImportBatch(
     };
   }
 
-  // RPC missing or failed — use JS fallback only when function is absent
+  // Missing optional deals columns on older DBs — fall through to JS insert path
+  // which retries without trade_status / other optional fields.
+  const schemaMismatch =
+    error.message.includes("does not exist") ||
+    error.message.includes("trade_status") ||
+    error.message.includes("dealer_group_id");
+
+  // RPC missing or failed — use JS fallback only when function is absent or schema lags
   const missingFn =
     error.message.includes("Could not find the function") ||
     error.message.includes("commit_deal_import_batch") ||
     error.code === "PGRST202";
 
-  if (!missingFn) {
+  if (!missingFn && !schemaMismatch) {
     throw new Error(`Commit failed: ${error.message}`);
   }
 
