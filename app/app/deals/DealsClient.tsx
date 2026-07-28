@@ -12,7 +12,8 @@ type Deal = {
   sale_date: string;
   status: string;
   customer_last_name: string | null;
-  stock_number: string;
+  stock_number: string | null;
+  vin: string | null;
   vehicle_year: number;
   vehicle_make: string;
   vehicle_model: string;
@@ -260,8 +261,9 @@ export default function DealsClient({
       if (financeTypeFilter && deal.finance_type !== financeTypeFilter) return false;
       if (
         search &&
-        !deal.stock_number.toLowerCase().includes(search) &&
-        !(deal.customer_last_name ?? "").toLowerCase().includes(search)
+        !(deal.stock_number ?? "").toLowerCase().includes(search) &&
+        !(deal.customer_last_name ?? "").toLowerCase().includes(search) &&
+        !(deal.vin ?? "").toLowerCase().includes(search)
       )
         return false;
       return true;
@@ -274,7 +276,7 @@ export default function DealsClient({
           val = a.sale_date.localeCompare(b.sale_date);
           break;
         case "stock_number":
-          val = a.stock_number.localeCompare(b.stock_number);
+          val = (a.stock_number ?? "").localeCompare(b.stock_number ?? "");
           break;
         case "customer_last_name":
           val = (a.customer_last_name ?? "").localeCompare(b.customer_last_name ?? "");
@@ -472,7 +474,7 @@ export default function DealsClient({
           type="search"
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
-          placeholder="Search stock # or customer last name…"
+          placeholder="Search stock #, VIN, or customer last name…"
           className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
         />
       </section>
@@ -540,7 +542,7 @@ export default function DealsClient({
 
                   {/* Stock # — always visible, grid cell 2 */}
                   <span className="font-mono text-sm font-semibold text-blue-700">
-                    {deal.stock_number}
+                    {deal.stock_number || "—"}
                   </span>
 
                   {/* Customer — always visible, grid cell 3 */}

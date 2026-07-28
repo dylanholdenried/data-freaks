@@ -12,7 +12,8 @@ type Deal = {
   sale_date: string;
   status: string;
   customer_last_name: string | null;
-  stock_number: string;
+  stock_number: string | null;
+  vin: string | null;
   vehicle_year: number;
   vehicle_make: string;
   vehicle_model: string;
@@ -83,7 +84,7 @@ export default async function DealsPage() {
       supabase
         .from("deals")
         .select(
-          "id,sale_date,status,customer_last_name,stock_number," +
+          "id,sale_date,status,customer_last_name,stock_number,vin," +
             "vehicle_year,vehicle_make,vehicle_model," +
             "store_id,department_id," +
             "front_profit,back_profit,finance_type,finance_manager_id"
