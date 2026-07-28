@@ -19,16 +19,16 @@ alter table public.deal_import_batches
 -- Best-effort backfill: match committed rows to deals by store + stock_number
 update public.deal_import_rows r
 set deal_id = d.id
-from public.deal_import_batches b
-join public.deals d
-  on d.store_id = b.store_id
- and lower(d.stock_number) = lower(nullif(trim(coalesce(r.normalized->>'stock_number', '')), ''))
+from public.deal_import_batches b,
+     public.deals d
 where r.batch_id = b.id
   and b.status = 'committed'
   and r.is_valid = true
   and r.deal_id is null
   and r.normalized is not null
-  and nullif(trim(coalesce(r.normalized->>'stock_number', '')), '') is not null;
+  and d.store_id = b.store_id
+  and nullif(trim(coalesce(r.normalized->>'stock_number', '')), '') is not null
+  and lower(d.stock_number) = lower(trim(r.normalized->>'stock_number'));
 
 -- Commit RPC: record deal_id on each staged row (no dealer_group_id; includes trade_status)
 create or replace function public.commit_deal_import_batch(p_batch_id uuid)
