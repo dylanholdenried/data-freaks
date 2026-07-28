@@ -210,10 +210,16 @@ export default function DealsClient({
     }
   }
 
-  // ── Available years from data ─────────────────────────────────────────────
+  // ── Available years: deal data + a fixed recent window (so historical months are selectable) ──
   const availableYears = useMemo(() => {
-    const ys = new Set(deals.map((d) => parseInt(d.sale_date.slice(0, 4), 10)));
+    const ys = new Set<number>();
     ys.add(initialYear);
+    for (let i = 1; i <= 5; i++) ys.add(initialYear - i);
+    for (const d of deals) {
+      if (!d.sale_date || d.sale_date.length < 4) continue;
+      const y = parseInt(d.sale_date.slice(0, 4), 10);
+      if (Number.isFinite(y)) ys.add(y);
+    }
     return Array.from(ys).sort((a, b) => b - a);
   }, [deals, initialYear]);
 
