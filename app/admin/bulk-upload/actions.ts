@@ -300,42 +300,52 @@ export async function cancelBatch(batchId: string): Promise<void> {
 
 export async function confirmBatch(
   batchId: string
-): Promise<{ inserted: number; created_refs: number }> {
-  const { supabase } = await requireAdminContext();
+): Promise<
+  | { ok: true; inserted: number; created_refs: number }
+  | { ok: false; error: string }
+> {
+  try {
+    const { supabase } = await requireAdminContext();
 
-  const { data: batch, error } = await supabase
-    .from("deal_import_batches")
-    .select("id,status,error_count,valid_count,dealer_group_id,store_id")
-    .eq("id", batchId)
-    .maybeSingle();
+    const { data: batch, error } = await supabase
+      .from("deal_import_batches")
+      .select("id,status,error_count,valid_count,dealer_group_id,store_id")
+      .eq("id", batchId)
+      .maybeSingle();
 
-  if (error || !batch) throw new Error("Batch not found");
+    if (error || !batch) return { ok: false, error: "Batch not found" };
 
-  const b = batch as {
-    id: string;
-    status: string;
-    error_count: number;
-    valid_count: number;
-    dealer_group_id: string;
-    store_id: string;
-  };
+    const b = batch as {
+      id: string;
+      status: string;
+      error_count: number;
+      valid_count: number;
+      dealer_group_id: string;
+      store_id: string;
+    };
 
-  if (b.status !== "pending_review") {
-    throw new Error("Batch is not pending review");
+    if (b.status !== "pending_review") {
+      return { ok: false, error: "Batch is not pending review" };
+    }
+    if (b.error_count > 0) {
+      return { ok: false, error: "Cannot confirm a batch with validation errors" };
+    }
+    if (b.valid_count <= 0) {
+      return { ok: false, error: "Batch has no valid rows to import" };
+    }
+
+    // Critical: re-verify store ownership immediately before commit
+    await assertStoreInGroup(supabase, b.dealer_group_id, b.store_id);
+
+    const result = await commitDealImportBatch(supabase, batchId);
+    revalidatePath("/admin/bulk-upload");
+    revalidatePath("/app/deals");
+    revalidatePath("/app/dashboard");
+    return { ok: true, inserted: result.inserted, created_refs: result.created_refs };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Confirm failed",
+    };
   }
-  if (b.error_count > 0) {
-    throw new Error("Cannot confirm a batch with validation errors");
-  }
-  if (b.valid_count <= 0) {
-    throw new Error("Batch has no valid rows to import");
-  }
-
-  // Critical: re-verify store ownership immediately before commit
-  await assertStoreInGroup(supabase, b.dealer_group_id, b.store_id);
-
-  const result = await commitDealImportBatch(supabase, batchId);
-  revalidatePath("/admin/bulk-upload");
-  revalidatePath("/app/deals");
-  revalidatePath("/app/dashboard");
-  return { inserted: result.inserted, created_refs: result.created_refs };
 }

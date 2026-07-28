@@ -213,8 +213,8 @@ async function commitDealImportBatchJs(
 
       const dealStatus = n.status === "closed" ? "closed" : "pending";
 
+      // Live deals table has no dealer_group_id — group is implied via store_id.
       const dealPayload: Record<string, unknown> = {
-        dealer_group_id: b.dealer_group_id,
         store_id: b.store_id,
         department_id: res.department_id,
         status: dealStatus,

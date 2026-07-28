@@ -113,7 +113,11 @@ export default function BulkUploadClient({ groups, stores }: Props) {
     startTransition(async () => {
       try {
         const res = await confirmBatch(preview.batchId);
-        setResult(res);
+        if (!res.ok) {
+          setError(res.error);
+          return;
+        }
+        setResult({ inserted: res.inserted, created_refs: res.created_refs });
         setStep("done");
       } catch (err) {
         setError(err instanceof Error ? err.message : "Confirm failed");
