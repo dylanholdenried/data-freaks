@@ -11,7 +11,7 @@ type Deal = {
   id: string;
   sale_date: string;
   status: string;
-  customer_last_name: string;
+  customer_last_name: string | null;
   stock_number: string;
   vehicle_year: number;
   vehicle_make: string;
@@ -255,7 +255,7 @@ export default function DealsClient({
       if (
         search &&
         !deal.stock_number.toLowerCase().includes(search) &&
-        !deal.customer_last_name.toLowerCase().includes(search)
+        !(deal.customer_last_name ?? "").toLowerCase().includes(search)
       )
         return false;
       return true;
@@ -271,7 +271,7 @@ export default function DealsClient({
           val = a.stock_number.localeCompare(b.stock_number);
           break;
         case "customer_last_name":
-          val = a.customer_last_name.localeCompare(b.customer_last_name);
+          val = (a.customer_last_name ?? "").localeCompare(b.customer_last_name ?? "");
           break;
         case "status":
           val = a.status.localeCompare(b.status);
@@ -539,7 +539,7 @@ export default function DealsClient({
 
                   {/* Customer — always visible, grid cell 3 */}
                   <span className="min-w-0 truncate text-sm font-medium text-slate-800">
-                    {deal.customer_last_name}
+                    {deal.customer_last_name || "—"}
                   </span>
 
                   {/* Vehicle — always visible, grid cell 4 (1fr) */}

@@ -13,7 +13,7 @@ type DealRow = {
   department_id: string;
   sale_date: string;
   stock_number: string;
-  customer_last_name: string;
+  customer_last_name: string | null;
   vehicle_year: number;
   vehicle_make: string;
   vehicle_model: string;
@@ -194,7 +194,7 @@ export default async function EditDealPage({ params }: { params: { id: string } 
       dealId={deal.id}
       dealStatus={deal.status}
       stockNumber={deal.stock_number}
-      customerLastName={deal.customer_last_name}
+      customerLastName={deal.customer_last_name ?? ""}
       vehicleYear={deal.vehicle_year}
       vehicleMake={deal.vehicle_make}
       vehicleModel={deal.vehicle_model}

@@ -45,7 +45,8 @@ function findByName<T extends { id: string; name: string }>(
 
 /**
  * Validate parsed rows against store-scoped reference data.
- * Departments must already exist. Salespeople / F&I / sources may be created on confirm.
+ * Departments must already exist. Salespeople / F&I / sources may be created on confirm
+ * when names are present.
  */
 export function validateImportRows(
   parsedRows: ParsedCsvRow[],
@@ -99,16 +100,22 @@ export function validateImportRows(
       );
     }
 
+    if (n.status === "pending") {
+      warnings.push("Incomplete row — will import as pending");
+    }
+
     const create_salespeople: string[] = [];
     let salesperson_1_id: string | null = null;
     let salesperson_2_id: string | null = null;
 
-    const sp1 = findByName(refs.salespeople, n.salesperson_1);
-    if (sp1) {
-      salesperson_1_id = sp1.id;
-    } else {
-      create_salespeople.push(n.salesperson_1);
-      warnings.push(`Will create salesperson "${n.salesperson_1}"`);
+    if (n.salesperson_1) {
+      const sp1 = findByName(refs.salespeople, n.salesperson_1);
+      if (sp1) {
+        salesperson_1_id = sp1.id;
+      } else {
+        create_salespeople.push(n.salesperson_1);
+        warnings.push(`Will create salesperson "${n.salesperson_1}"`);
+      }
     }
 
     if (n.salesperson_2) {
@@ -125,19 +132,23 @@ export function validateImportRows(
 
     let finance_manager_id: string | null = null;
     let create_finance_manager: string | null = null;
-    const fm = findByName(refs.financeManagers, n.finance_manager);
-    if (fm) {
-      finance_manager_id = fm.id;
-    } else {
-      create_finance_manager = n.finance_manager;
-      warnings.push(`Will create finance manager "${n.finance_manager}"`);
+    if (n.finance_manager) {
+      const fm = findByName(refs.financeManagers, n.finance_manager);
+      if (fm) {
+        finance_manager_id = fm.id;
+      } else {
+        create_finance_manager = n.finance_manager;
+        warnings.push(`Will create finance manager "${n.finance_manager}"`);
+      }
     }
 
     let create_acquisition_source: string | null = null;
-    const src = findByName(refs.acquisitionSources, n.acquisition_source);
-    if (!src) {
-      create_acquisition_source = n.acquisition_source;
-      warnings.push(`Will create acquisition source "${n.acquisition_source}"`);
+    if (n.acquisition_source) {
+      const src = findByName(refs.acquisitionSources, n.acquisition_source);
+      if (!src) {
+        create_acquisition_source = n.acquisition_source;
+        warnings.push(`Will create acquisition source "${n.acquisition_source}"`);
+      }
     }
 
     if (department) {

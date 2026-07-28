@@ -154,9 +154,9 @@ export default function BulkUploadClient({ groups, stores }: Props) {
           Bulk Deal Upload
         </h1>
         <p className="mt-1 max-w-2xl text-sm text-slate-500">
-          Import historical closed deals for one store at a time. Group and store are locked from
-          the selectors below — never taken from the CSV. Confirm the preview before anything is
-          written to Supabase.
+          Import deals for one store at a time. Incomplete rows import as pending; fully complete
+          rows import as closed. Group and store are locked from the selectors below — never taken
+          from the CSV. Confirm the preview before anything is written to Supabase.
         </p>
       </section>
 
@@ -229,9 +229,12 @@ export default function BulkUploadClient({ groups, stores }: Props) {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-slate-600">
-              Use the standard template. Excel workbooks must be saved as CSV before upload. Every
-              row must be a fully closed deal (no empty required fields). Status is forced to{" "}
-              <span className="font-medium">closed</span> on import.
+              Use the standard template. Excel workbooks must be saved as CSV before upload. Blank
+              optional fields are allowed — those rows import as{" "}
+              <span className="font-medium">pending</span>. Only rows with every closed-deal field
+              filled import as <span className="font-medium">closed</span>. Sale dates accept{" "}
+              <span className="font-medium">YYYY-MM-DD</span>, <span className="font-medium">M/D/YY</span>
+              , or <span className="font-medium">M/D/YYYY</span>.
             </p>
             <div className="flex flex-wrap gap-3">
               <Button
@@ -396,7 +399,7 @@ export default function BulkUploadClient({ groups, stores }: Props) {
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
               <div>
                 <p className="font-medium">
-                  Inserted {result.inserted} closed deal
+                  Inserted {result.inserted} deal
                   {result.inserted === 1 ? "" : "s"} into {preview.dealerGroupName} /{" "}
                   {preview.storeName}
                 </p>

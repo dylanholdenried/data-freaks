@@ -340,7 +340,7 @@ create table public.deals (
   trade_status trade_status not null default 'no_trade',
   finance finance_type,
 
-  customer_last_name text not null,
+  customer_last_name text,
   sale_date date not null,
   stock_number text not null,
   vehicle_year integer not null,

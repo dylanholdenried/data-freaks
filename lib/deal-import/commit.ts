@@ -136,6 +136,7 @@ async function commitDealImportBatchJs(
   for (const row of rows as StagedRow[]) {
     const res = row.resolved;
     for (const name of res.create_salespeople ?? []) {
+      if (!name?.trim()) continue;
       const key = name.trim().toLowerCase();
       if (nameToSpId.has(key)) continue;
       const { data, error } = await supabase
@@ -186,10 +187,14 @@ async function commitDealImportBatchJs(
       const n = row.normalized;
       const res = row.resolved;
 
-      const sp1Id =
+      let sp1Id: string | null =
         res.salesperson_1_id ??
-        nameToSpId.get(n.salesperson_1.trim().toLowerCase());
-      if (!sp1Id) throw new Error(`Row ${row.row_number}: salesperson not found`);
+        (n.salesperson_1
+          ? nameToSpId.get(n.salesperson_1.trim().toLowerCase()) ?? null
+          : null);
+      if (n.salesperson_1 && !sp1Id) {
+        throw new Error(`Row ${row.row_number}: salesperson not found`);
+      }
 
       let sp2Id: string | null = res.salesperson_2_id;
       if (n.salesperson_2 && !sp2Id) {
@@ -197,16 +202,22 @@ async function commitDealImportBatchJs(
         if (!sp2Id) throw new Error(`Row ${row.row_number}: salesperson 2 not found`);
       }
 
-      const fmId =
+      let fmId: string | null =
         res.finance_manager_id ??
-        nameToFmId.get(n.finance_manager.trim().toLowerCase());
-      if (!fmId) throw new Error(`Row ${row.row_number}: finance manager not found`);
+        (n.finance_manager
+          ? nameToFmId.get(n.finance_manager.trim().toLowerCase()) ?? null
+          : null);
+      if (n.finance_manager && !fmId) {
+        throw new Error(`Row ${row.row_number}: finance manager not found`);
+      }
+
+      const dealStatus = n.status === "closed" ? "closed" : "pending";
 
       const dealPayload: Record<string, unknown> = {
         dealer_group_id: b.dealer_group_id,
         store_id: b.store_id,
         department_id: res.department_id,
-        status: "closed",
+        status: dealStatus,
         trade_status: n.has_trade === "yes" ? "has_trade" : "no_trade",
         customer_last_name: n.customer_last_name,
         sale_date: n.sale_date,
@@ -254,20 +265,26 @@ async function commitDealImportBatchJs(
 
       const dealId = insertedDealIds[insertedDealIds.length - 1];
 
-      const splits = [
-        { deal_id: dealId, salesperson_id: sp1Id, share_percent: n.salesperson_1_share },
-      ];
-      if (sp2Id && n.salesperson_2_share != null) {
-        splits.push({
-          deal_id: dealId,
-          salesperson_id: sp2Id,
-          share_percent: n.salesperson_2_share,
-        });
+      if (sp1Id && n.salesperson_1_share != null) {
+        const splits = [
+          {
+            deal_id: dealId,
+            salesperson_id: sp1Id,
+            share_percent: n.salesperson_1_share,
+          },
+        ];
+        if (sp2Id && n.salesperson_2_share != null) {
+          splits.push({
+            deal_id: dealId,
+            salesperson_id: sp2Id,
+            share_percent: n.salesperson_2_share,
+          });
+        }
+        const { error: spError } = await supabase.from("deal_salespeople").insert(splits);
+        if (spError) throw new Error(`Row ${row.row_number}: ${spError.message}`);
       }
-      const { error: spError } = await supabase.from("deal_salespeople").insert(splits);
-      if (spError) throw new Error(`Row ${row.row_number}: ${spError.message}`);
 
-      if (n.has_trade === "yes") {
+      if (n.has_trade === "yes" && n.trade_complete) {
         const { error: tradeError } = await supabase.from("trades").insert({
           deal_id: dealId,
           year: n.trade_year,

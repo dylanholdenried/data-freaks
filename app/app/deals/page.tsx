@@ -10,7 +10,7 @@ type Deal = {
   id: string;
   sale_date: string;
   status: string;
-  customer_last_name: string;
+  customer_last_name: string | null;
   stock_number: string;
   vehicle_year: number;
   vehicle_make: string;
