@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 import { requireAdminContext } from "@/app/admin/admin-data";
 import { parseDealImportCsv } from "@/lib/deal-import/parse";
 import { validateImportRows } from "@/lib/deal-import/validate";
-import { commitDealImportBatch } from "@/lib/deal-import/commit";
+import {
+  commitDealImportBatch,
+  unwindDealImportBatch,
+} from "@/lib/deal-import/commit";
 import { buildTemplateCsv } from "@/lib/deal-import/csv-schema";
 
 export type BatchPreview = {
@@ -30,6 +33,23 @@ export type BatchPreview = {
   willCreate: string[];
 };
 
+export type ImportBatchHistoryItem = {
+  id: string;
+  fileName: string;
+  status: string;
+  rowCount: number;
+  validCount: number;
+  errorCount: number;
+  createdAt: string;
+  committedAt: string | null;
+  unwoundAt: string | null;
+  dealerGroupId: string;
+  dealerGroupName: string;
+  storeId: string;
+  storeName: string;
+  linkedDealCount: number;
+};
+
 async function assertStoreInGroup(
   supabase: Awaited<ReturnType<typeof requireAdminContext>>["supabase"],
   dealerGroupId: string,
@@ -53,15 +73,98 @@ async function assertStoreInGroup(
 export async function getBulkUploadBootstrap() {
   const { supabase } = await requireAdminContext();
 
-  const [{ data: groups }, { data: stores }] = await Promise.all([
+  const [{ data: groups }, { data: stores }, history] = await Promise.all([
     supabase.from("dealer_groups").select("id,name").order("name"),
     supabase.from("stores").select("id,name,dealer_group_id").order("name"),
+    listImportBatches(),
   ]);
 
   return {
     groups: (groups ?? []) as { id: string; name: string }[],
     stores: (stores ?? []) as { id: string; name: string; dealer_group_id: string }[],
+    history,
   };
+}
+
+export async function listImportBatches(): Promise<ImportBatchHistoryItem[]> {
+  const { supabase } = await requireAdminContext();
+
+  const { data: batches, error } = await supabase
+    .from("deal_import_batches")
+    .select(
+      "id,file_name,status,row_count,valid_count,error_count,created_at,committed_at,unwound_at,dealer_group_id,store_id"
+    )
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (error) {
+    // Older DBs may not have unwound_at yet
+    const fallback = await supabase
+      .from("deal_import_batches")
+      .select(
+        "id,file_name,status,row_count,valid_count,error_count,created_at,committed_at,dealer_group_id,store_id"
+      )
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (fallback.error || !fallback.data) return [];
+    return mapHistoryRows(supabase, fallback.data as Record<string, unknown>[]);
+  }
+
+  return mapHistoryRows(supabase, (batches ?? []) as Record<string, unknown>[]);
+}
+
+async function mapHistoryRows(
+  supabase: Awaited<ReturnType<typeof requireAdminContext>>["supabase"],
+  batches: Record<string, unknown>[]
+): Promise<ImportBatchHistoryItem[]> {
+  if (batches.length === 0) return [];
+
+  const groupIds = [...new Set(batches.map((b) => b.dealer_group_id as string))];
+  const storeIds = [...new Set(batches.map((b) => b.store_id as string))];
+  const batchIds = batches.map((b) => b.id as string);
+
+  const [{ data: groups }, { data: stores }] = await Promise.all([
+    supabase.from("dealer_groups").select("id,name").in("id", groupIds),
+    supabase.from("stores").select("id,name").in("id", storeIds),
+  ]);
+
+  let linkedRows: { batch_id: string; deal_id: string }[] = [];
+  const linkedRes = await supabase
+    .from("deal_import_rows")
+    .select("batch_id,deal_id")
+    .in("batch_id", batchIds)
+    .not("deal_id", "is", null);
+  if (!linkedRes.error) {
+    linkedRows = (linkedRes.data ?? []) as { batch_id: string; deal_id: string }[];
+  }
+
+  const groupName = new Map(
+    ((groups ?? []) as { id: string; name: string }[]).map((g) => [g.id, g.name])
+  );
+  const storeName = new Map(
+    ((stores ?? []) as { id: string; name: string }[]).map((s) => [s.id, s.name])
+  );
+  const linkedCount = new Map<string, number>();
+  for (const row of linkedRows) {
+    linkedCount.set(row.batch_id, (linkedCount.get(row.batch_id) ?? 0) + 1);
+  }
+
+  return batches.map((b) => ({
+    id: b.id as string,
+    fileName: (b.file_name as string) || "upload.csv",
+    status: b.status as string,
+    rowCount: b.row_count as number,
+    validCount: b.valid_count as number,
+    errorCount: b.error_count as number,
+    createdAt: b.created_at as string,
+    committedAt: (b.committed_at as string | null) ?? null,
+    unwoundAt: (b.unwound_at as string | null) ?? null,
+    dealerGroupId: b.dealer_group_id as string,
+    dealerGroupName: groupName.get(b.dealer_group_id as string) ?? "Unknown",
+    storeId: b.store_id as string,
+    storeName: storeName.get(b.store_id as string) ?? "Unknown",
+    linkedDealCount: linkedCount.get(b.id as string) ?? 0,
+  }));
 }
 
 export async function getTemplateCsvAction(): Promise<string> {
@@ -346,6 +449,46 @@ export async function confirmBatch(
     return {
       ok: false,
       error: err instanceof Error ? err.message : "Confirm failed",
+    };
+  }
+}
+
+export async function unwindBatch(
+  batchId: string
+): Promise<{ ok: true; deleted: number } | { ok: false; error: string }> {
+  try {
+    const { supabase } = await requireAdminContext();
+
+    const { data: batch, error } = await supabase
+      .from("deal_import_batches")
+      .select("id,status,dealer_group_id,store_id")
+      .eq("id", batchId)
+      .maybeSingle();
+
+    if (error || !batch) return { ok: false, error: "Batch not found" };
+
+    const b = batch as {
+      id: string;
+      status: string;
+      dealer_group_id: string;
+      store_id: string;
+    };
+
+    if (b.status !== "committed") {
+      return { ok: false, error: "Only committed batches can be unwound" };
+    }
+
+    await assertStoreInGroup(supabase, b.dealer_group_id, b.store_id);
+
+    const result = await unwindDealImportBatch(supabase, batchId);
+    revalidatePath("/admin/bulk-upload");
+    revalidatePath("/app/deals");
+    revalidatePath("/app/dashboard");
+    return { ok: true, deleted: result.deleted };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Unwind failed",
     };
   }
 }

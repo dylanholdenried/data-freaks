@@ -272,6 +272,12 @@ async function commitDealImportBatchJs(
 
       const dealId = insertedDealIds[insertedDealIds.length - 1];
 
+      await supabase
+        .from("deal_import_rows")
+        .update({ deal_id: dealId })
+        .eq("batch_id", batchId)
+        .eq("row_number", row.row_number);
+
       if (sp1Id && n.salesperson_1_share != null) {
         const splits = [
           {
@@ -333,4 +339,120 @@ async function commitDealImportBatchJs(
   }
 
   return { batch_id: batchId, inserted, created_refs: createdRefs };
+}
+
+export type UnwindBatchResult = {
+  batch_id: string;
+  deleted: number;
+};
+
+/**
+ * Delete deals created by a committed import batch and mark the batch unwound.
+ */
+export async function unwindDealImportBatch(
+  supabase: SupabaseClient,
+  batchId: string
+): Promise<UnwindBatchResult> {
+  const { data, error } = await supabase.rpc("unwind_deal_import_batch", {
+    p_batch_id: batchId,
+  });
+
+  if (!error) {
+    const result = data as UnwindBatchResult | null;
+    if (!result || typeof result.deleted !== "number") {
+      throw new Error("Unwind failed: unexpected response from database");
+    }
+    return {
+      batch_id: result.batch_id ?? batchId,
+      deleted: result.deleted,
+    };
+  }
+
+  const missingFn =
+    error.message.includes("Could not find the function") ||
+    error.message.includes("unwind_deal_import_batch") ||
+    error.code === "PGRST202";
+
+  if (!missingFn) {
+    throw new Error(`Unwind failed: ${error.message}`);
+  }
+
+  return unwindDealImportBatchJs(supabase, batchId);
+}
+
+async function unwindDealImportBatchJs(
+  supabase: SupabaseClient,
+  batchId: string
+): Promise<UnwindBatchResult> {
+  const { data: batch, error: batchError } = await supabase
+    .from("deal_import_batches")
+    .select("id,status,store_id")
+    .eq("id", batchId)
+    .maybeSingle();
+
+  if (batchError || !batch) throw new Error("Import batch not found");
+
+  const b = batch as { id: string; status: string; store_id: string };
+  if (b.status !== "committed") {
+    throw new Error(`Only committed batches can be unwound (status=${b.status})`);
+  }
+
+  const { data: rows, error: rowsError } = await supabase
+    .from("deal_import_rows")
+    .select("deal_id,normalized,is_valid")
+    .eq("batch_id", batchId)
+    .eq("is_valid", true);
+
+  if (rowsError) throw new Error(rowsError.message);
+
+  const typedRows = (rows ?? []) as {
+    deal_id: string | null;
+    normalized: { stock_number?: string } | null;
+    is_valid: boolean;
+  }[];
+
+  let dealIds = typedRows.map((r) => r.deal_id).filter((id): id is string => !!id);
+
+  if (dealIds.length === 0) {
+    const stocks = typedRows
+      .map((r) => r.normalized?.stock_number?.trim().toLowerCase())
+      .filter((s): s is string => !!s);
+    if (stocks.length > 0) {
+      const { data: deals, error: dealsError } = await supabase
+        .from("deals")
+        .select("id,stock_number")
+        .eq("store_id", b.store_id);
+      if (dealsError) throw new Error(dealsError.message);
+      const stockSet = new Set(stocks);
+      dealIds = ((deals ?? []) as { id: string; stock_number: string }[])
+        .filter((d) => stockSet.has(d.stock_number.trim().toLowerCase()))
+        .map((d) => d.id);
+    }
+  }
+
+  let deleted = 0;
+  if (dealIds.length > 0) {
+    const { error: delError, count } = await supabase
+      .from("deals")
+      .delete({ count: "exact" })
+      .in("id", dealIds)
+      .eq("store_id", b.store_id);
+    if (delError) throw new Error(delError.message);
+    deleted = count ?? dealIds.length;
+  }
+
+  await supabase
+    .from("deal_import_rows")
+    .update({ deal_id: null })
+    .eq("batch_id", batchId)
+    .not("deal_id", "is", null);
+
+  const { error: updateError } = await supabase
+    .from("deal_import_batches")
+    .update({ status: "unwound", unwound_at: new Date().toISOString() })
+    .eq("id", batchId);
+
+  if (updateError) throw new Error(updateError.message);
+
+  return { batch_id: batchId, deleted };
 }

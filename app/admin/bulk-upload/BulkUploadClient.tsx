@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -8,10 +9,12 @@ import {
   confirmBatch,
   createBatchFromCsv,
   getTemplateCsvAction,
+  unwindBatch,
   type BatchPreview,
+  type ImportBatchHistoryItem,
 } from "./actions";
 import { openStoreViewForGroupAction } from "@/app/app/group-actions";
-import { AlertTriangle, CheckCircle2, Download, Loader2, Upload } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, Loader2, RotateCcw, Upload } from "lucide-react";
 
 type Group = { id: string; name: string };
 type Store = { id: string; name: string; dealer_group_id: string };
@@ -19,11 +22,41 @@ type Store = { id: string; name: string; dealer_group_id: string };
 type Props = {
   groups: Group[];
   stores: Store[];
+  history: ImportBatchHistoryItem[];
 };
 
 type Step = "select" | "preview" | "done";
 
-export default function BulkUploadClient({ groups, stores }: Props) {
+function formatWhen(iso: string | null) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function statusLabel(status: string) {
+  switch (status) {
+    case "committed":
+      return "Committed";
+    case "pending_review":
+      return "Pending review";
+    case "cancelled":
+      return "Cancelled";
+    case "unwound":
+      return "Unwound";
+    default:
+      return status;
+  }
+}
+
+export default function BulkUploadClient({ groups, stores, history: initialHistory }: Props) {
+  const router = useRouter();
   const [step, setStep] = useState<Step>("select");
   const [groupId, setGroupId] = useState("");
   const [storeId, setStoreId] = useState("");
@@ -32,7 +65,9 @@ export default function BulkUploadClient({ groups, stores }: Props) {
     null
   );
   const [error, setError] = useState<string | null>(null);
+  const [historyMessage, setHistoryMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [unwindingId, setUnwindingId] = useState<string | null>(null);
 
   const groupStores = useMemo(
     () => stores.filter((s) => s.dealer_group_id === groupId),
@@ -119,6 +154,7 @@ export default function BulkUploadClient({ groups, stores }: Props) {
         }
         setResult({ inserted: res.inserted, created_refs: res.created_refs });
         setStep("done");
+        router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Confirm failed");
       }
@@ -133,8 +169,37 @@ export default function BulkUploadClient({ groups, stores }: Props) {
         await cancelBatch(preview.batchId);
         setPreview(null);
         setStep("select");
+        router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Cancel failed");
+      }
+    });
+  }
+
+  function handleUnwind(batch: ImportBatchHistoryItem) {
+    const ok = window.confirm(
+      `Unwind this upload?\n\n${batch.fileName}\n${batch.dealerGroupName} / ${batch.storeName}\n\nThis permanently deletes the deals created by this import from the Sales Registry. Roster items (salespeople / F&I) are kept.`
+    );
+    if (!ok) return;
+
+    setHistoryMessage(null);
+    setError(null);
+    setUnwindingId(batch.id);
+    startTransition(async () => {
+      try {
+        const res = await unwindBatch(batch.id);
+        if (!res.ok) {
+          setError(res.error);
+          return;
+        }
+        setHistoryMessage(
+          `Unwound upload — deleted ${res.deleted} deal${res.deleted === 1 ? "" : "s"}.`
+        );
+        router.refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unwind failed");
+      } finally {
+        setUnwindingId(null);
       }
     });
   }
@@ -159,14 +224,20 @@ export default function BulkUploadClient({ groups, stores }: Props) {
         </h1>
         <p className="mt-1 max-w-2xl text-sm text-slate-500">
           Import deals for one store at a time. Incomplete rows import as pending; fully complete
-          rows import as closed. Group and store are locked from the selectors below — never taken
-          from the CSV. Confirm the preview before anything is written to Supabase.
+          rows import as closed. Confirm the preview before anything is written to Supabase. Use
+          Upload history below to review past imports or unwind a committed upload.
         </p>
       </section>
 
       {error ? (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           {error}
+        </div>
+      ) : null}
+
+      {historyMessage ? (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          {historyMessage}
         </div>
       ) : null}
 
@@ -217,9 +288,6 @@ export default function BulkUploadClient({ groups, stores }: Props) {
                 <p className="mt-0.5 text-base font-semibold">
                   {selectedGroup.name} / {selectedStore.name}
                 </p>
-                <p className="mt-1 text-xs text-amber-800">
-                  dealer_group_id and store_id are set only from this selection.
-                </p>
               </div>
             ) : null}
           </CardContent>
@@ -233,12 +301,10 @@ export default function BulkUploadClient({ groups, stores }: Props) {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-slate-600">
-              Use the standard template. Excel workbooks must be saved as CSV before upload. Blank
-              optional fields are allowed — those rows import as{" "}
-              <span className="font-medium">pending</span>. Only rows with every closed-deal field
-              filled import as <span className="font-medium">closed</span>. Sale dates accept{" "}
-              <span className="font-medium">YYYY-MM-DD</span>, <span className="font-medium">M/D/YY</span>
-              , or <span className="font-medium">M/D/YYYY</span>.
+              Use the standard template. Blank optional fields import as{" "}
+              <span className="font-medium">pending</span>; complete rows as{" "}
+              <span className="font-medium">closed</span>. Dates accept YYYY-MM-DD, M/D/YY, or
+              M/D/YYYY.
             </p>
             <div className="flex flex-wrap gap-3">
               <Button
@@ -319,9 +385,7 @@ export default function BulkUploadClient({ groups, stores }: Props) {
             {preview.errorCount > 0 ? (
               <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                <p>
-                  Fix the CSV and re-upload. Confirm is disabled until every row is valid.
-                </p>
+                <p>Fix the CSV and re-upload. Confirm is disabled until every row is valid.</p>
               </div>
             ) : null}
 
@@ -380,12 +444,7 @@ export default function BulkUploadClient({ groups, stores }: Props) {
                 )}
                 Confirm import
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleCancel}
-                disabled={pending}
-              >
+              <Button type="button" variant="outline" onClick={handleCancel} disabled={pending}>
                 Cancel batch
               </Button>
             </div>
@@ -429,6 +488,98 @@ export default function BulkUploadClient({ groups, stores }: Props) {
           </CardContent>
         </Card>
       ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Upload history</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-slate-600">
+            Recent import batches. Unwind permanently deletes deals from that upload (trades and
+            notes cascade). Salespeople / F&amp;I created during import are kept.
+          </p>
+          {initialHistory.length === 0 ? (
+            <p className="text-sm text-slate-500">No uploads yet.</p>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-slate-200">
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                  <tr>
+                    <th className="px-3 py-2">Uploaded</th>
+                    <th className="px-3 py-2">File</th>
+                    <th className="px-3 py-2">Store</th>
+                    <th className="px-3 py-2">Rows</th>
+                    <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {initialHistory.map((b) => (
+                    <tr key={b.id} className="border-t border-slate-100">
+                      <td className="whitespace-nowrap px-3 py-2 text-slate-600">
+                        {formatWhen(b.createdAt)}
+                      </td>
+                      <td className="px-3 py-2 font-medium text-slate-800">{b.fileName}</td>
+                      <td className="px-3 py-2 text-slate-600">
+                        {b.dealerGroupName} / {b.storeName}
+                      </td>
+                      <td className="px-3 py-2 tabular-nums text-slate-600">
+                        {b.validCount}/{b.rowCount}
+                        {b.linkedDealCount > 0 ? (
+                          <span className="ml-1 text-xs text-slate-400">
+                            ({b.linkedDealCount} linked)
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-2">
+                        <span
+                          className={
+                            b.status === "committed"
+                              ? "text-emerald-700"
+                              : b.status === "unwound"
+                                ? "text-amber-700"
+                                : b.status === "cancelled"
+                                  ? "text-slate-500"
+                                  : "text-slate-700"
+                          }
+                        >
+                          {statusLabel(b.status)}
+                        </span>
+                        {b.status === "committed" && b.committedAt ? (
+                          <div className="text-xs text-slate-400">{formatWhen(b.committedAt)}</div>
+                        ) : null}
+                        {b.status === "unwound" && b.unwoundAt ? (
+                          <div className="text-xs text-slate-400">{formatWhen(b.unwoundAt)}</div>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-2">
+                        {b.status === "committed" ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={pending || unwindingId === b.id}
+                            onClick={() => handleUnwind(b)}
+                          >
+                            {unwindingId === b.id ? (
+                              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                            )}
+                            Unwind
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-slate-400">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
