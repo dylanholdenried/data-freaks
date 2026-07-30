@@ -775,6 +775,236 @@ main:has(.da-landing) + footer {
   flex-wrap: wrap;
 }
 
+/* login */
+.da-login-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+}
+
+.da-nav-current {
+  color: var(--da-text);
+}
+
+.da-login-main {
+  position: relative;
+  isolation: isolate;
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 78px 24px 96px;
+  overflow: hidden;
+}
+
+.da-login-glow {
+  position: absolute;
+  z-index: -1;
+  top: -220px;
+  left: 50%;
+  width: 900px;
+  height: 680px;
+  transform: translateX(-50%);
+  background:
+    radial-gradient(circle at 72% 35%, rgba(74, 158, 255, 0.1), transparent 34%),
+    radial-gradient(circle at 35% 46%, rgba(255, 176, 32, 0.09), transparent 38%);
+  filter: blur(8px);
+  pointer-events: none;
+}
+
+.da-login-page .da-login-shell {
+  width: min(100%, 1050px);
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(420px, 1fr);
+  align-items: center;
+  gap: 80px;
+}
+
+.da-login-copy h1 {
+  max-width: 520px;
+  font-size: 48px;
+}
+
+.da-login-copy > p {
+  max-width: 490px;
+  color: var(--da-muted);
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+.da-login-proof {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 28px;
+  color: var(--da-muted);
+  font-family: var(--da-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+}
+
+.da-login-proof-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--da-green);
+  box-shadow: 0 0 16px rgba(46, 204, 113, 0.65);
+  flex: 0 0 auto;
+}
+
+.da-login-card {
+  overflow: hidden;
+  border: 1px solid var(--da-line);
+  border-radius: 10px;
+  background: var(--da-panel);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.45);
+}
+
+.da-login-card-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--da-line);
+  background: var(--da-panel-2);
+  color: var(--da-muted);
+  font-family: var(--da-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.da-login-card-body {
+  padding: 34px;
+}
+
+.da-login-card-heading {
+  margin-bottom: 25px;
+}
+
+.da-login-card-heading .da-sec-eyebrow {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.da-login-page .da-login-card-heading h2 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.da-login-error {
+  margin-bottom: 18px;
+  padding: 11px 13px;
+  border: 1px solid rgba(255, 92, 92, 0.35);
+  border-radius: 6px;
+  background: rgba(255, 92, 92, 0.08);
+  color: #ff8c8c;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.da-login-form {
+  display: grid;
+  gap: 16px;
+}
+
+.da-login-form label {
+  display: grid;
+  gap: 7px;
+}
+
+.da-login-form label > span {
+  color: var(--da-muted);
+  font-family: var(--da-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.da-login-form input {
+  width: 100%;
+  height: 47px;
+  padding: 0 14px;
+  border: 1px solid var(--da-line);
+  border-radius: 6px;
+  outline: none;
+  background: var(--da-bg);
+  color: var(--da-text);
+  font-family: var(--da-body);
+  font-size: 14px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.da-login-form input::placeholder {
+  color: #586171;
+}
+
+.da-login-form input:focus {
+  border-color: var(--da-blue);
+  box-shadow: 0 0 0 3px var(--da-blue-dim);
+}
+
+.da-login-submit {
+  width: 100%;
+  margin-top: 2px;
+  text-align: center;
+}
+
+.da-login-submit:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.da-login-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 27px 0 23px;
+  color: var(--da-muted);
+  font-family: var(--da-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+}
+
+.da-login-divider::before,
+.da-login-divider::after {
+  content: "";
+  width: 100%;
+  height: 1px;
+  background: var(--da-line);
+}
+
+.da-login-note {
+  margin-top: 20px;
+  color: var(--da-muted);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.da-login-signup {
+  margin-top: 16px;
+  color: var(--da-muted);
+  font-family: var(--da-mono);
+  font-size: 12px;
+  text-align: center;
+}
+
+.da-login-signup a {
+  color: var(--da-amber);
+  font-weight: 500;
+}
+
+.da-login-signup a:hover {
+  color: #ffc24d;
+}
+
+.da-login-footer {
+  margin-top: auto;
+}
+
 /* responsive */
 @media (max-width: 960px) {
   .da-hero {
@@ -807,6 +1037,26 @@ main:has(.da-landing) + footer {
   .da-founder-grid {
     grid-template-columns: 1fr;
     gap: 36px;
+  }
+
+  .da-login-page .da-login-shell {
+    width: min(100%, 560px);
+    grid-template-columns: 1fr;
+    gap: 46px;
+  }
+
+  .da-login-copy {
+    text-align: center;
+  }
+
+  .da-login-copy h1,
+  .da-login-copy > p {
+    margin-right: auto;
+    margin-left: auto;
+  }
+
+  .da-login-proof {
+    justify-content: center;
   }
 }
 
@@ -843,6 +1093,35 @@ main:has(.da-landing) + footer {
   }
 
   .da-hero-ctas .da-btn {
+    text-align: center;
+  }
+
+  .da-login-main {
+    padding: 52px 20px 70px;
+  }
+
+  .da-login-page .da-login-shell {
+    gap: 36px;
+  }
+
+  .da-login-copy h1 {
+    font-size: 34px;
+  }
+
+  .da-login-copy > p {
+    font-size: 15px;
+  }
+
+  .da-login-card-body {
+    padding: 26px 20px;
+  }
+
+  .da-login-card-bar {
+    font-size: 9.5px;
+  }
+
+  .da-login-footer .da-foot-in {
+    justify-content: center;
     text-align: center;
   }
 }

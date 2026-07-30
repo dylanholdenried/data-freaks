@@ -1,10 +1,38 @@
 "use client";
 
 import { useState } from "react";
+import { Archivo, IBM_Plex_Mono, Inter } from "next/font/google";
 import { z } from "zod";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+const archivo = Archivo({
+  subsets: ["latin"],
+  weight: ["500", "600", "700", "800"],
+  variable: "--font-da-display",
+  display: "swap",
+});
+
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-da-body",
+  display: "swap",
+});
+
+const ibmPlexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-da-mono",
+  display: "swap",
+});
+
+const tickerItems = [
+  ["2021 SILVERADO 1500 LT", "+$4,850", "21 DAYS", true],
+  ["2019 EQUINOX LT", "+$3,975", "14 DAYS", true],
+  ["2018 RAM 1500 BIG HORN", "+$4,210", "33 DAYS", true],
+  ["2022 MALIBU LT", "−$640", "88 DAYS · RED-LIGHT", false],
+  ["2020 TRAVERSE LS", "+$3,480", "19 DAYS", true],
+  ["2017 F-150 XLT", "+$5,120", "26 DAYS", true],
+] as const;
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -76,88 +104,152 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="border-b border-border bg-white/70 backdrop-blur">
-        <div className="container flex h-16 items-center justify-between">
-          <a href="/" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold">
-              DF
-            </div>
-            <span className="text-sm font-semibold tracking-tight">DealerACQ</span>
+    <div
+      className={`da-landing da-login-page ${archivo.variable} ${inter.variable} ${ibmPlexMono.variable}`}
+    >
+      <div className="da-tape" aria-hidden="true">
+        <div className="da-tape-inner">
+          {[...tickerItems, ...tickerItems].map(([vehicle, gross, days, up], index) => (
+            <span className="da-tape-item" key={`${vehicle}-${index}`}>
+              {vehicle} · <b className={up ? "da-up" : "da-dn"}>{gross}</b> · {days}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <nav className="da-nav">
+        <div className="da-wrap da-nav-in">
+          <a className="da-logo" href="/">
+            Dealer<span className="da-acq">ACQ</span>
           </a>
-          <nav className="flex items-center gap-4 text-sm">
-            <a href="/demo" className="text-muted-foreground hover:text-foreground">
+          <div className="da-nav-links">
+            <a href="/#how">How it works</a>
+            <a href="/#pricing">Pricing</a>
+            <a href="/#founder">Who built it</a>
+          </div>
+          <div className="da-nav-actions">
+            <a className="da-nav-text" href="/demo">
               View Demo
             </a>
-            <a href="/signup" className="text-muted-foreground hover:text-foreground">
-              Sign up
-            </a>
-            <a href="/login" className="text-foreground font-medium">
+            <a className="da-nav-text da-nav-current" href="/login" aria-current="page">
               Log in
             </a>
-          </nav>
+            <a className="da-btn da-btn-amber" href="/signup">
+              Sign up
+            </a>
+          </div>
         </div>
-      </header>
+      </nav>
 
-      <div className="container flex min-h-[60vh] items-center justify-center py-10">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold">Sign in to DealerACQ</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
+      <main className="da-login-main">
+        <div className="da-login-glow" aria-hidden="true" />
+        <section className="da-login-shell" aria-labelledby="login-heading">
+          <div className="da-login-copy">
+            <div className="da-eyebrow">Secure dealer access</div>
+            <h1 id="login-heading">
+              Welcome back to <span className="da-hl">DealerACQ.</span>
+            </h1>
+            <p>
+              Sign in to log deals, track gross and pace, and turn your store&apos;s history into
+              acquisition intelligence.
+            </p>
+            <div className="da-login-proof">
+              <span className="da-login-proof-dot" />
+              Your data stays private to your dealer group
+            </div>
+          </div>
+
+          <div className="da-login-card">
+            <div className="da-login-card-bar">
+              <span>DEALERACQ · AUTHENTICATION</span>
+              <div className="da-term-dots" aria-hidden="true">
+                <span className="da-dot da-dot-a" />
+                <span className="da-dot da-dot-b" />
+                <span className="da-dot" />
+              </div>
+            </div>
+            <div className="da-login-card-body">
+              <div className="da-login-card-heading">
+                <span className="da-sec-eyebrow">Account login</span>
+                <h2>Sign in to DealerACQ</h2>
+              </div>
+
+              {error && (
+                <div className="da-login-error" role="alert">
+                  {error}
+                </div>
+              )}
+
             <form
-              className="space-y-3"
+              className="da-login-form"
               onSubmit={(e) => {
                 e.preventDefault();
                 handleSubmit(new FormData(e.currentTarget));
               }}
             >
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Email</label>
-                <Input name="email" type="email" required autoComplete="email" />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Password</label>
-                <Input name="password" type="password" required autoComplete="current-password" />
-              </div>
-              {error && <p className="text-sm text-destructive">{error}</p>}
-              <Button type="submit" className="w-full" disabled={submitting}>
+              <label>
+                <span>Email</span>
+                <input
+                  name="email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  placeholder="you@dealership.com"
+                />
+              </label>
+              <label>
+                <span>Password</span>
+                <input
+                  name="password"
+                  type="password"
+                  required
+                  autoComplete="current-password"
+                  placeholder="Enter your password"
+                />
+              </label>
+              <button type="submit" className="da-btn da-btn-amber da-login-submit" disabled={submitting}>
                 {submitting ? "Signing in..." : "Sign in"}
-              </Button>
+              </button>
             </form>
 
-            <div className="h-px bg-border" />
+              <div className="da-login-divider">
+                <span>OR USE A MAGIC LINK</span>
+              </div>
 
             <form
-              className="space-y-3"
+              className="da-login-form"
               onSubmit={(e) => {
                 e.preventDefault();
                 handleMagicLink(new FormData(e.currentTarget));
               }}
             >
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Magic link</label>
-                <Input name="magic_email" type="email" placeholder="Email for one-click sign-in" />
-              </div>
-              <Button type="submit" variant="outline" className="w-full" disabled={submitting}>
+              <label>
+                <span>Magic link</span>
+                <input name="magic_email" type="email" placeholder="Email for one-click sign-in" />
+              </label>
+              <button type="submit" className="da-btn da-btn-ghost da-login-submit" disabled={submitting}>
                 Send magic link
-              </Button>
+              </button>
             </form>
 
-            <p className="text-xs text-muted-foreground">
-              Google sign-in and password reset can be enabled via Supabase Auth settings. This screen is
-              wired to the same project keys.
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Need an account?{" "}
-              <a href="/signup" className="font-medium text-primary underline-offset-4 hover:underline">
-                Request access
-              </a>
-              .
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+              <p className="da-login-note">
+                Google sign-in and password reset can be enabled via Supabase Auth settings. This
+                screen is wired to the same project keys.
+              </p>
+              <p className="da-login-signup">
+                Need an account? <a href="/signup">Request access →</a>
+              </p>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer className="da-footer da-login-footer">
+        <div className="da-wrap da-foot-in">
+          <span>© 2026 DealerACQ · dealeracq.com</span>
+          <span>BUY THE RIGHT CARS. PROVE IT WITH DATA.</span>
+        </div>
+      </footer>
     </div>
   );
 }
