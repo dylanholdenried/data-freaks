@@ -3,6 +3,7 @@
 import { useEffect, useId, useState } from "react";
 import Link from "next/link";
 import { Menu, X } from "lucide-react";
+import { canAccessAppNav, type PlanTier } from "@/lib/plan-access";
 import AutoGroupSwitcher, { type AutoGroupOption } from "./AutoGroupSwitcher";
 
 const linkClass =
@@ -10,6 +11,8 @@ const linkClass =
 
 const links = [
   { href: "/app/dashboard", label: "Dashboard" },
+  { href: "/app/profit-center", label: "Profit Center" },
+  { href: "/app/inventory-command", label: "Inventory Command" },
   { href: "/app/deals", label: "Sales Registry" },
   { href: "/app/deals/new", label: "Log Transaction" },
   { href: "/app/setup", label: "Setup & Config" },
@@ -20,13 +23,16 @@ export default function AppMobileMenu({
   isPlatformAdmin = false,
   groups = [],
   selectedGroupId = null,
+  plan = "log",
 }: {
   isPlatformAdmin?: boolean;
   groups?: AutoGroupOption[];
   selectedGroupId?: string | null;
+  plan?: PlanTier | string | null;
 }) {
   const [open, setOpen] = useState(false);
   const titleId = useId();
+  const visible = links.filter((l) => canAccessAppNav(plan, l.href));
 
   useEffect(() => {
     if (!open) return;
@@ -99,7 +105,7 @@ export default function AppMobileMenu({
               </div>
             ) : null}
             <nav className="flex-1 overflow-y-auto p-3">
-              {links.map(({ href, label }) => (
+              {visible.map(({ href, label }) => (
                 <Link key={href} href={href} className={linkClass} prefetch onClick={close}>
                   {label}
                 </Link>

@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { requireAdminServiceClient } from "@/app/admin/admin-data";
 
-type PlanTier = "free" | "paid" | "premium";
+type PlanTier = "log" | "analyze" | "advise";
 type AppRole = "group_admin" | "store_admin";
 type UserStatus = "invited" | "active" | "disabled";
 
@@ -25,7 +25,7 @@ export async function createAutoGroup(formData: FormData) {
     throw new Error("Group name is required");
   }
 
-  const plan = (String(formData.get("plan") || "free") as PlanTier) || "free";
+  const plan = (String(formData.get("plan") || "log") as PlanTier) || "log";
 
   const { data, error } = await supabase
     .from("dealer_groups")
@@ -54,7 +54,7 @@ export async function updateAutoGroup(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
   if (!name) throw new Error("Group name is required");
 
-  const plan = String(formData.get("plan") || "free") as PlanTier;
+  const plan = String(formData.get("plan") || "log") as PlanTier;
 
   const { error } = await supabase.from("dealer_groups").update({ name, plan }).eq("id", id);
 

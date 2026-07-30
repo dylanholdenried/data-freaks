@@ -9,7 +9,7 @@ export type ProvisionStoreInput = {
 
 export type ProvisionDraftPayload = {
   groupName: string;
-  plan: "free" | "paid" | "premium";
+  plan: "log" | "analyze" | "advise";
   website?: string | null;
   adminFirstName: string;
   adminLastName: string;

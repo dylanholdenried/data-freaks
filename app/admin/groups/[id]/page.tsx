@@ -153,9 +153,9 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
                 defaultValue={group.plan}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
-                <option value="free">Free</option>
-                <option value="paid">Paid</option>
-                <option value="premium">Premium</option>
+                <option value="log">Log</option>
+                <option value="analyze">Analyze</option>
+                <option value="advise">Advise</option>
               </select>
             </div>
             <div className="sm:col-span-3">

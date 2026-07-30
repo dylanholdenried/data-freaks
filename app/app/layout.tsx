@@ -43,6 +43,16 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const selectedGroupName = groups.find((g) => g.id === selectedGroupId)?.name;
   const showWelcome = profile.role === "group_admin" && !profile.onboarding_welcome_seen_at;
 
+  let groupPlan: string | null = null;
+  if (selectedGroupId) {
+    const { data: groupRow } = await supabase
+      .from("dealer_groups")
+      .select("plan")
+      .eq("id", selectedGroupId)
+      .maybeSingle();
+    groupPlan = groupRow?.plan ?? null;
+  }
+
   return (
     <div className="app-canvas flex min-h-screen">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[248px] overflow-y-auto bg-gradient-to-b from-[#071735] via-[#05142e] to-[#031127] text-white lg:flex lg:flex-col">
@@ -62,7 +72,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
             <AutoGroupSwitcher groups={groups} selectedGroupId={selectedGroupId} />
           </div>
         ) : null}
-        <AppSidebarNav isPlatformAdmin={isPlatformAdmin} />
+        <AppSidebarNav isPlatformAdmin={isPlatformAdmin} plan={groupPlan} />
         <div className="mt-auto space-y-3 p-3">
           <Link
             href="/app/deals/new"
@@ -93,6 +103,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
                 isPlatformAdmin={isPlatformAdmin}
                 groups={groups}
                 selectedGroupId={selectedGroupId}
+                plan={groupPlan}
               />
             </div>
             <div className="flex items-center gap-3 text-xs text-slate-500">

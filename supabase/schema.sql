@@ -8,7 +8,7 @@
 do $$
 begin
   if not exists (select 1 from pg_type where typname = 'plan_tier') then
-    create type plan_tier as enum ('free', 'paid', 'premium');
+    create type plan_tier as enum ('log', 'analyze', 'advise');
   end if;
 end$$;
 
@@ -183,7 +183,7 @@ create table public.dealer_groups (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   website text,
-  plan plan_tier not null default 'free',
+  plan plan_tier not null default 'log',
   status dealer_group_status not null default 'pending',
   number_of_stores integer,
   is_demo boolean not null default false,

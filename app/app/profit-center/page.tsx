@@ -3,6 +3,7 @@ import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { fetchAllByIds, fetchAllRows } from "@/lib/supabase/fetch-all";
 import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import { getAccessibleStores } from "@/lib/store-access";
+import { canAccessProfitCenter } from "@/lib/plan-access";
 import {
   resolveDateRange,
   type DatePreset,
@@ -13,6 +14,7 @@ import type {
   ProfitTrade,
 } from "@/lib/profit-center/aggregate";
 import SelectAutoGroupEmptyState from "../SelectAutoGroupEmptyState";
+import PlanNoAccessState from "../PlanNoAccessState";
 import ProfitCenterClient from "./ProfitCenterClient";
 
 type Store = { id: string; name: string };
@@ -54,6 +56,22 @@ export default async function ProfitCenterPage({
 
   if (!dealerGroupId || !profile) {
     return <SelectAutoGroupEmptyState />;
+  }
+
+  const { data: group } = await supabase
+    .from("dealer_groups")
+    .select("plan")
+    .eq("id", dealerGroupId)
+    .maybeSingle();
+
+  if (!canAccessProfitCenter(group?.plan)) {
+    return (
+      <PlanNoAccessState
+        title="Profit Center"
+        description="Gross and turn analytics by make, model, price band, acquisition source, and salesperson leaderboards are available on the Analyze plan and above."
+        requiredPlan="Analyze"
+      />
+    );
   }
 
   const stores = (await getAccessibleStores(supabase, profile)) as Store[];

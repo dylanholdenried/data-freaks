@@ -7,7 +7,7 @@ values (
   '00000000-0000-0000-0000-000000000001',
   'Freak Auto Group',
   'https://demo.datafreaks.app',
-  'paid',
+  'analyze',
   'active',
   2,
   true,

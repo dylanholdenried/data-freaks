@@ -72,8 +72,8 @@ export default function ProvisionWizardClient({ request, profile, group, initial
   const [message, setMessage] = useState<string | null>(null);
 
   const [groupName, setGroupName] = useState(group?.name || request.dealer_group_name);
-  const [plan, setPlan] = useState<"free" | "paid" | "premium">(
-    (group?.plan as "free" | "paid" | "premium") || "free"
+  const [plan, setPlan] = useState<"log" | "analyze" | "advise">(
+    (group?.plan as "log" | "analyze" | "advise") || "log"
   );
   const [website, setWebsite] = useState(group?.website || request.website || "");
   const [adminFirstName, setAdminFirstName] = useState(
@@ -252,11 +252,11 @@ export default function ProvisionWizardClient({ request, profile, group, initial
             <select
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               value={plan}
-              onChange={(e) => setPlan(e.target.value as "free" | "paid" | "premium")}
+              onChange={(e) => setPlan(e.target.value as "log" | "analyze" | "advise")}
             >
-              <option value="free">free</option>
-              <option value="paid">paid</option>
-              <option value="premium">premium</option>
+              <option value="log">Log</option>
+              <option value="analyze">Analyze</option>
+              <option value="advise">Advise</option>
             </select>
           </label>
           <label className="space-y-1 text-sm">
