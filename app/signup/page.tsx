@@ -61,7 +61,7 @@ export default function SignupPage() {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold">
               DF
             </div>
-            <span className="text-sm font-semibold tracking-tight">Data Freaks</span>
+            <span className="text-sm font-semibold tracking-tight">DealerACQ</span>
           </a>
           <nav className="flex items-center gap-4 text-sm">
             <a href="/demo" className="text-muted-foreground hover:text-foreground">
@@ -80,7 +80,7 @@ export default function SignupPage() {
       <div className="container flex min-h-[60vh] items-center justify-center py-10">
         <Card className="w-full max-w-xl">
           <CardHeader>
-            <CardTitle className="text-lg font-semibold">Create your Data Freaks login</CardTitle>
+            <CardTitle className="text-lg font-semibold">Create your DealerACQ login</CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
             {success ? (
@@ -89,7 +89,7 @@ export default function SignupPage() {
                   Account created. Your access is currently pending.
                 </p>
                 <p>
-                  We&apos;ve registered your request with the Data Freaks team. Once your dealer group is
+                  We&apos;ve registered your request with the DealerACQ team. Once your dealer group is
                   configured and approved, you&apos;ll be able to sign in at{" "}
                   <span className="font-medium text-foreground">/login</span> and access the sales log.
                 </p>
@@ -151,7 +151,7 @@ export default function SignupPage() {
                         value="existing"
                         className="h-3 w-3"
                       />
-                      <span>Request access to an existing Data Freaks group</span>
+                      <span>Request access to an existing DealerACQ group</span>
                     </label>
                   </div>
                   <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -199,7 +199,7 @@ export default function SignupPage() {
                 <div className="flex items-center justify-between pt-2">
                   <p className="text-xs text-muted-foreground">
                     Your account will be created immediately and marked as{" "}
-                    <span className="font-medium text-foreground">pending</span> until a Data Freaks admin
+                    <span className="font-medium text-foreground">pending</span> until a DealerACQ admin
                     approves access.
                   </p>
                   <Button type="submit" disabled={submitting}>

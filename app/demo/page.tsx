@@ -231,7 +231,7 @@ export default async function DemoPage() {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold">
               DF
             </div>
-            <span className="text-sm font-semibold tracking-tight">Data Freaks</span>
+            <span className="text-sm font-semibold tracking-tight">DealerACQ</span>
           </a>
           <nav className="flex items-center gap-4 text-sm">
             <a href="/demo" className="text-foreground font-medium">
@@ -251,7 +251,7 @@ export default async function DemoPage() {
         <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm md:flex-row md:items-end md:justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
-              Data Freaks Demo
+              DealerACQ Demo
             </h1>
             <p className="mt-1 text-sm text-slate-500">
               Freak Chevrolet CDJR · Demo environment

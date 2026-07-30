@@ -83,7 +83,7 @@ export default function LoginPage() {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold">
               DF
             </div>
-            <span className="text-sm font-semibold tracking-tight">Data Freaks</span>
+            <span className="text-sm font-semibold tracking-tight">DealerACQ</span>
           </a>
           <nav className="flex items-center gap-4 text-sm">
             <a href="/demo" className="text-muted-foreground hover:text-foreground">
@@ -102,7 +102,7 @@ export default function LoginPage() {
       <div className="container flex min-h-[60vh] items-center justify-center py-10">
         <Card className="w-full max-w-md">
           <CardHeader>
-            <CardTitle className="text-lg font-semibold">Sign in to Data Freaks</CardTitle>
+            <CardTitle className="text-lg font-semibold">Sign in to DealerACQ</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             <form
