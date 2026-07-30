@@ -1,10 +1,38 @@
 "use client";
 
 import { useState } from "react";
+import { Archivo, IBM_Plex_Mono, Inter } from "next/font/google";
 import { z } from "zod";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+const archivo = Archivo({
+  subsets: ["latin"],
+  weight: ["500", "600", "700", "800"],
+  variable: "--font-da-display",
+  display: "swap",
+});
+
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-da-body",
+  display: "swap",
+});
+
+const ibmPlexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-da-mono",
+  display: "swap",
+});
+
+const tickerItems = [
+  ["2021 SILVERADO 1500 LT", "+$4,850", "21 DAYS", true],
+  ["2019 EQUINOX LT", "+$3,975", "14 DAYS", true],
+  ["2018 RAM 1500 BIG HORN", "+$4,210", "33 DAYS", true],
+  ["2022 MALIBU LT", "−$640", "88 DAYS · RED-LIGHT", false],
+  ["2020 TRAVERSE LS", "+$3,480", "19 DAYS", true],
+  ["2017 F-150 XLT", "+$5,120", "26 DAYS", true],
+] as const;
 
 const signupSchema = z.object({
   first_name: z.string().min(1),
@@ -54,163 +82,228 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="border-b border-border bg-white/70 backdrop-blur">
-        <div className="container flex h-16 items-center justify-between">
-          <a href="/" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold">
-              DF
-            </div>
-            <span className="text-sm font-semibold tracking-tight">DealerACQ</span>
+    <div
+      className={`da-landing da-login-page da-signup-page ${archivo.variable} ${inter.variable} ${ibmPlexMono.variable}`}
+    >
+      <div className="da-tape" aria-hidden="true">
+        <div className="da-tape-inner">
+          {[...tickerItems, ...tickerItems].map(([vehicle, gross, days, up], index) => (
+            <span className="da-tape-item" key={`${vehicle}-${index}`}>
+              {vehicle} · <b className={up ? "da-up" : "da-dn"}>{gross}</b> · {days}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <nav className="da-nav">
+        <div className="da-wrap da-nav-in">
+          <a className="da-logo" href="/">
+            Dealer<span className="da-acq">ACQ</span>
           </a>
-          <nav className="flex items-center gap-4 text-sm">
-            <a href="/demo" className="text-muted-foreground hover:text-foreground">
+          <div className="da-nav-links">
+            <a href="/#how">How it works</a>
+            <a href="/#pricing">Pricing</a>
+            <a href="/#founder">Who built it</a>
+          </div>
+          <div className="da-nav-actions">
+            <a className="da-nav-text" href="/demo">
               View Demo
             </a>
-            <a href="/signup" className="text-foreground font-medium">
-              Sign up
-            </a>
-            <a href="/login" className="text-muted-foreground hover:text-foreground">
+            <a className="da-nav-text" href="/login">
               Log in
             </a>
-          </nav>
+            <a className="da-btn da-btn-amber" href="/signup" aria-current="page">
+              Sign up
+            </a>
+          </div>
         </div>
-      </header>
+      </nav>
 
-      <div className="container flex min-h-[60vh] items-center justify-center py-10">
-        <Card className="w-full max-w-xl">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold">Create your DealerACQ login</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            {success ? (
-              <div className="space-y-2 text-sm text-muted-foreground">
-                <p className="font-medium text-foreground">
-                  Account created. Your access is currently pending.
-                </p>
-                <p>
-                  We&apos;ve registered your request with the DealerACQ team. Once your dealer group is
-                  configured and approved, you&apos;ll be able to sign in at{" "}
-                  <span className="font-medium text-foreground">/login</span> and access the sales log.
-                </p>
+      <main className="da-login-main da-signup-main">
+        <div className="da-login-glow" aria-hidden="true" />
+        <section className="da-signup-shell" aria-labelledby="signup-heading">
+          <div className="da-login-copy da-signup-copy">
+            <div className="da-eyebrow">Start logging free</div>
+            <h1 id="signup-heading">
+              Put your deal history <span className="da-hl">to work.</span>
+            </h1>
+            <p>
+              Create your DealerACQ account and start building the clean sales log that powers
+              smarter acquisition decisions.
+            </p>
+            <div className="da-signup-benefits">
+              <div>
+                <span>01</span>
+                Free sales log, forever
               </div>
-            ) : (
-              <form
-                className="space-y-4"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSubmit(new FormData(e.currentTarget));
-                }}
-              >
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground">First name</label>
-                    <Input name="first_name" required />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground">Last name</label>
-                    <Input name="last_name" required />
-                  </div>
-                </div>
+              <div>
+                <span>02</span>
+                Unlimited users
+              </div>
+              <div>
+                <span>03</span>
+                No credit card required
+              </div>
+            </div>
+          </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground">Email</label>
-                    <Input name="email" type="email" required autoComplete="email" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground">Password</label>
-                    <Input name="password" type="password" required autoComplete="new-password" />
-                  </div>
-                </div>
+          <div className="da-login-card da-signup-card">
+            <div className="da-login-card-bar">
+              <span>DEALERACQ · NEW ACCOUNT</span>
+              <div className="da-term-dots" aria-hidden="true">
+                <span className="da-dot da-dot-a" />
+                <span className="da-dot da-dot-b" />
+                <span className="da-dot" />
+              </div>
+            </div>
+            <div className="da-login-card-body da-signup-card-body">
+              <div className="da-login-card-heading">
+                <span className="da-sec-eyebrow">Request access</span>
+                <h2>Create your DealerACQ login</h2>
+              </div>
 
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground">Title / role</label>
-                  <Input name="title" placeholder="Partner, COO, GSM, etc." />
-                </div>
-
-                <fieldset className="space-y-2 rounded-md border border-border bg-white p-3">
-                  <legend className="px-1 text-xs font-medium text-muted-foreground">
-                    Dealer group access
-                  </legend>
-                  <div className="flex flex-col gap-2 text-xs">
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="dealer_group_mode"
-                        value="new"
-                        defaultChecked
-                        className="h-3 w-3"
-                      />
-                      <span>Request a new dealer group</span>
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="dealer_group_mode"
-                        value="existing"
-                        className="h-3 w-3"
-                      />
-                      <span>Request access to an existing DealerACQ group</span>
-                    </label>
-                  </div>
-                  <div className="mt-3 grid gap-3 md:grid-cols-2">
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground">
-                        Dealer group name
-                      </label>
-                      <Input
-                        name="dealer_group_name"
-                        placeholder="Freak Auto Group"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground">
-                        Existing group ID (optional)
-                      </label>
-                      <Input
-                        name="existing_group_id"
-                        placeholder="If you know the internal group ID"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground">
-                        Number of stores
-                      </label>
-                      <Input name="number_of_stores" type="number" min={1} placeholder="e.g. 3" />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground">
-                        Dealer group website
-                      </label>
-                      <Input
-                        name="website"
-                        type="text"
-                        placeholder="exampleautogroup.com"
-                      />
-                    </div>
-                  </div>
-                </fieldset>
-
-                {error && <p className="text-sm text-destructive">{error}</p>}
-
-                <div className="flex items-center justify-between pt-2">
-                  <p className="text-xs text-muted-foreground">
-                    Your account will be created immediately and marked as{" "}
-                    <span className="font-medium text-foreground">pending</span> until a DealerACQ admin
-                    approves access.
+              {success ? (
+                <div className="da-signup-success" role="status">
+                  <div className="da-signup-success-mark">✓</div>
+                  <p className="da-signup-success-title">
+                    Account created. Your access is currently pending.
                   </p>
-                  <Button type="submit" disabled={submitting}>
-                    {submitting ? "Creating..." : "Create account"}
-                  </Button>
+                  <p>
+                    We&apos;ve registered your request with the DealerACQ team. Once your dealer group
+                    is configured and approved, you&apos;ll be able to sign in at{" "}
+                    <a href="/login">/login</a> and access the sales log.
+                  </p>
                 </div>
-              </form>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              ) : (
+                <form
+                  className="da-signup-form"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleSubmit(new FormData(e.currentTarget));
+                  }}
+                >
+                  <div className="da-signup-grid">
+                    <label>
+                      <span>First name</span>
+                      <input name="first_name" required autoComplete="given-name" />
+                    </label>
+                    <label>
+                      <span>Last name</span>
+                      <input name="last_name" required autoComplete="family-name" />
+                    </label>
+                  </div>
+
+                  <div className="da-signup-grid">
+                    <label>
+                      <span>Email</span>
+                      <input
+                        name="email"
+                        type="email"
+                        required
+                        autoComplete="email"
+                        placeholder="you@dealership.com"
+                      />
+                    </label>
+                    <label>
+                      <span>Password</span>
+                      <input
+                        name="password"
+                        type="password"
+                        required
+                        autoComplete="new-password"
+                        placeholder="8 characters minimum"
+                      />
+                    </label>
+                  </div>
+
+                  <label>
+                    <span>Title / role</span>
+                    <input name="title" placeholder="Partner, COO, GSM, etc." />
+                  </label>
+
+                  <fieldset className="da-signup-fieldset">
+                    <legend>Dealer group access</legend>
+                    <div className="da-signup-options">
+                      <label>
+                        <input
+                          type="radio"
+                          name="dealer_group_mode"
+                          value="new"
+                          defaultChecked
+                        />
+                        <span>Request a new dealer group</span>
+                      </label>
+                      <label>
+                        <input type="radio" name="dealer_group_mode" value="existing" />
+                        <span>Request access to an existing DealerACQ group</span>
+                      </label>
+                    </div>
+                    <div className="da-signup-grid">
+                      <label>
+                        <span>Dealer group name</span>
+                        <input name="dealer_group_name" placeholder="Your Auto Group" />
+                      </label>
+                      <label>
+                        <span>Existing group ID (optional)</span>
+                        <input
+                          name="existing_group_id"
+                          placeholder="If you know the internal group ID"
+                        />
+                      </label>
+                    </div>
+                    <div className="da-signup-grid">
+                      <label>
+                        <span>Number of stores</span>
+                        <input name="number_of_stores" type="number" min={1} placeholder="e.g. 3" />
+                      </label>
+                      <label>
+                        <span>Dealer group website</span>
+                        <input
+                          name="website"
+                          type="text"
+                          placeholder="exampleautogroup.com"
+                        />
+                      </label>
+                    </div>
+                  </fieldset>
+
+                  {error && (
+                    <div className="da-login-error" role="alert">
+                      {error}
+                    </div>
+                  )}
+
+                  <div className="da-signup-submit-row">
+                    <p>
+                      Your account will be created immediately and marked as{" "}
+                      <strong>pending</strong> until a DealerACQ admin approves access.
+                    </p>
+                    <button
+                      type="submit"
+                      className="da-btn da-btn-amber da-signup-submit"
+                      disabled={submitting}
+                    >
+                      {submitting ? "Creating..." : "Create account"}
+                    </button>
+                  </div>
+                </form>
+              )}
+              {!success && (
+                <p className="da-login-signup da-signup-login-link">
+                  Already have an account? <a href="/login">Log in →</a>
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer className="da-footer da-login-footer">
+        <div className="da-wrap da-foot-in">
+          <span>© 2026 DealerACQ · dealeracq.com</span>
+          <span>BUY THE RIGHT CARS. PROVE IT WITH DATA.</span>
+        </div>
+      </footer>
     </div>
   );
 }
