@@ -11,17 +11,19 @@ import { SELECTED_DEALER_GROUP_COOKIE } from "@/lib/dealer-group-context";
 async function requirePlatformAdminProfile() {
   const supabase = createSupabaseServerClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (error || !user) {
     redirect("/login");
   }
 
-  const { data: profile } = await supabase
+  const service = createSupabaseServiceClient();
+  const { data: profile } = await service
     .from("profiles")
     .select("role, status, dealer_group_id")
-    .or(profileMatchAuthUserId(session.user.id))
+    .or(profileMatchAuthUserId(user.id))
     .maybeSingle();
 
   if (!profile || profile.status !== "active" || profile.role !== "platform_admin") {

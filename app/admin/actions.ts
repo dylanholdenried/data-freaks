@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { requireAdminServiceClient } from "@/app/admin/admin-data";
+import { sendInviteEmail, sendPasswordResetEmail } from "@/lib/email/resend";
 
 type PlanTier = "log" | "analyze" | "advise";
 type AppRole = "group_admin" | "store_admin";
@@ -15,6 +16,26 @@ function revalidateGroup(groupId?: string) {
   if (groupId) {
     revalidatePath(`/admin/groups/${groupId}`);
   }
+}
+
+function authRedirectBase() {
+  return (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, "");
+}
+
+async function generatePasswordSetupLink(
+  service: ReturnType<typeof createSupabaseServiceClient>,
+  email: string
+): Promise<{ ok: true; actionLink: string } | { ok: false; error: string }> {
+  const redirectTo = `${authRedirectBase()}/auth/callback?next=${encodeURIComponent("/set-password")}`;
+  const { data, error } = await service.auth.admin.generateLink({
+    type: "recovery",
+    email,
+    options: { redirectTo },
+  });
+  if (error || !data?.properties?.action_link) {
+    return { ok: false, error: error?.message || "Could not generate password link" };
+  }
+  return { ok: true, actionLink: data.properties.action_link };
 }
 
 export async function createAutoGroup(formData: FormData) {
@@ -158,43 +179,147 @@ export async function createUserInGroup(formData: FormData) {
     throw new Error("Select at least one store for a store admin");
   }
 
-  const password = randomBytes(24).toString("base64url");
+  // One email → one account. If they already exist, move/update into this group.
+  const { data: existingProfile } = await service
+    .from("profiles")
+    .select("id, user_id, dealer_group_id, role")
+    .eq("email", email)
+    .maybeSingle();
 
-  const { data: authData, error: authError } = await service.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-    user_metadata: { first_name, last_name, phone },
-  });
-
-  if (authError || !authData.user) {
-    throw new Error(`Create auth user failed: ${authError?.message || "unknown error"}`);
+  if (existingProfile?.role === "platform_admin") {
+    throw new Error("Cannot reassign a platform admin from Auto Groups");
   }
 
-  const userId = authData.user.id;
+  let userId: string;
+  let previousGroupId: string | null = null;
+  let createdNewAccount = false;
 
-  const { error: profileError } = await service.from("profiles").upsert(
-    {
-      id: userId,
-      user_id: userId,
+  if (existingProfile) {
+    previousGroupId = existingProfile.dealer_group_id;
+    userId = existingProfile.user_id || existingProfile.id;
+
+    const { error: authError } = await service.auth.admin.updateUserById(userId, {
       email,
-      first_name,
-      last_name,
-      phone,
-      role,
-      status,
-      dealer_group_id,
-    },
-    { onConflict: "user_id" }
-  );
+      user_metadata: { first_name, last_name, phone },
+    });
+    if (authError) {
+      throw new Error(`Update auth user failed: ${authError.message}`);
+    }
 
-  if (profileError) {
-    throw new Error(`Create profile failed: ${profileError.message}`);
+    const { error: profileError } = await service
+      .from("profiles")
+      .update({
+        email,
+        first_name,
+        last_name,
+        phone,
+        role,
+        status,
+        dealer_group_id,
+      })
+      .eq("id", existingProfile.id);
+
+    if (profileError) {
+      throw new Error(`Update profile failed: ${profileError.message}`);
+    }
+  } else {
+    createdNewAccount = true;
+    const password = randomBytes(24).toString("base64url");
+
+    const { data: authData, error: authError } = await service.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { first_name, last_name, phone },
+    });
+
+    if (authError || !authData.user) {
+      // Auth user may exist without a profile (orphaned signup)
+      if (authError?.message?.toLowerCase().includes("already been registered")) {
+        createdNewAccount = false;
+        const { data: listed } = await service.auth.admin.listUsers({ perPage: 1000 });
+        const orphan = (listed?.users ?? []).find((u) => (u.email || "").toLowerCase() === email);
+        if (!orphan) {
+          throw new Error(`Create auth user failed: ${authError.message}`);
+        }
+        userId = orphan.id;
+        const { error: profileError } = await service.from("profiles").insert({
+          id: userId,
+          user_id: userId,
+          email,
+          first_name,
+          last_name,
+          phone,
+          role,
+          status,
+          dealer_group_id,
+        });
+        if (profileError) {
+          throw new Error(`Create profile failed: ${profileError.message}`);
+        }
+      } else {
+        throw new Error(`Create auth user failed: ${authError?.message || "unknown error"}`);
+      }
+    } else {
+      userId = authData.user.id;
+
+      const { error: profileError } = await service.from("profiles").insert({
+        id: userId,
+        user_id: userId,
+        email,
+        first_name,
+        last_name,
+        phone,
+        role,
+        status,
+        dealer_group_id,
+      });
+
+      if (profileError) {
+        throw new Error(`Create profile failed: ${profileError.message}`);
+      }
+    }
   }
 
   await syncUserStoreAccess(service, userId, dealer_group_id, role, storeIds);
 
+  const { data: groupRow } = await service
+    .from("dealer_groups")
+    .select("name")
+    .eq("id", dealer_group_id)
+    .maybeSingle();
+  const groupName = groupRow?.name || "your auto group";
+
+  let emailWarning: string | undefined;
+  const linkResult = await generatePasswordSetupLink(service, email);
+  if (!linkResult.ok) {
+    emailWarning = `Account saved, but invite email failed: ${linkResult.error}`;
+  } else {
+    const emailResult = await sendInviteEmail({
+      to: email,
+      firstName: first_name || "there",
+      groupName,
+      actionLink: linkResult.actionLink,
+    });
+    if (!emailResult.ok) {
+      emailWarning = `Account saved, but invite email failed: ${emailResult.error}`;
+    }
+  }
+
   revalidateGroup(dealer_group_id);
+  if (previousGroupId && previousGroupId !== dealer_group_id) {
+    revalidateGroup(previousGroupId);
+  }
+
+  return {
+    saved: true as const,
+    message: createdNewAccount ? "User Created" : "User Updated",
+    emailWarning,
+    redirectTo:
+      previousGroupId && previousGroupId !== dealer_group_id
+        ? `/admin/groups/${dealer_group_id}`
+        : null,
+  };
 }
 
 export async function updateUserInGroup(formData: FormData) {
@@ -203,6 +328,7 @@ export async function updateUserInGroup(formData: FormData) {
 
   const id = String(formData.get("id") || "").trim();
   const user_id = String(formData.get("user_id") || "").trim();
+  const current_dealer_group_id = String(formData.get("current_dealer_group_id") || "").trim();
   const dealer_group_id = String(formData.get("dealer_group_id") || "").trim();
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const first_name = String(formData.get("first_name") || "").trim() || null;
@@ -215,21 +341,26 @@ export async function updateUserInGroup(formData: FormData) {
     .map((v) => String(v).trim())
     .filter(Boolean);
 
-  if (!id || !user_id || !dealer_group_id || !email) {
+  if (!id || !user_id || !current_dealer_group_id || !dealer_group_id || !email) {
     throw new Error("User id, auth id, email, and group are required");
   }
   if (role !== "group_admin" && role !== "store_admin") {
     throw new Error("Invalid role");
   }
-  if (role === "store_admin" && storeIds.length === 0) {
+
+  const movingGroups = current_dealer_group_id !== dealer_group_id;
+
+  // Store checkboxes on this page only list the current group's stores.
+  // When moving groups as store_admin, assign stores on the destination group page.
+  if (role === "store_admin" && storeIds.length === 0 && !movingGroups) {
     throw new Error("Select at least one store for a store admin");
   }
 
   const { data: existing } = await service
     .from("profiles")
-    .select("role")
+    .select("role, dealer_group_id")
     .eq("id", id)
-    .eq("dealer_group_id", dealer_group_id)
+    .eq("dealer_group_id", current_dealer_group_id)
     .maybeSingle();
 
   if (!existing) {
@@ -237,6 +368,17 @@ export async function updateUserInGroup(formData: FormData) {
   }
   if (existing.role === "platform_admin") {
     throw new Error("Cannot edit platform admins from Auto Groups");
+  }
+
+  if (movingGroups) {
+    const { data: targetGroup } = await service
+      .from("dealer_groups")
+      .select("id")
+      .eq("id", dealer_group_id)
+      .maybeSingle();
+    if (!targetGroup) {
+      throw new Error("Destination auto group not found");
+    }
   }
 
   const { error: authError } = await service.auth.admin.updateUserById(user_id, {
@@ -257,18 +399,27 @@ export async function updateUserInGroup(formData: FormData) {
       phone,
       role,
       status,
+      dealer_group_id,
     })
     .eq("id", id)
-    .eq("dealer_group_id", dealer_group_id);
+    .eq("dealer_group_id", current_dealer_group_id);
 
   if (profileError) {
     throw new Error(`Update profile failed: ${profileError.message}`);
   }
 
-  // Live user_store_access.user_id matches auth/profile user id
-  await syncUserStoreAccess(service, user_id, dealer_group_id, role, storeIds);
+  // When moving groups, ignore store checkboxes from the old page (wrong store ids).
+  await syncUserStoreAccess(service, user_id, dealer_group_id, role, movingGroups ? [] : storeIds);
 
-  revalidateGroup(dealer_group_id);
+  revalidateGroup(current_dealer_group_id);
+  if (movingGroups) {
+    revalidateGroup(dealer_group_id);
+  }
+
+  return {
+    saved: true as const,
+    redirectTo: movingGroups ? `/admin/groups/${dealer_group_id}` : null,
+  };
 }
 
 async function syncUserStoreAccess(
@@ -326,7 +477,9 @@ export async function disableUserInGroup(formData: FormData) {
   const service = createSupabaseServiceClient();
 
   const id = String(formData.get("id") || "").trim();
-  const dealer_group_id = String(formData.get("dealer_group_id") || "").trim();
+  const dealer_group_id = String(
+    formData.get("current_dealer_group_id") || formData.get("dealer_group_id") || ""
+  ).trim();
   if (!id || !dealer_group_id) throw new Error("User id and group are required");
 
   const { data: existing } = await service
@@ -354,4 +507,56 @@ export async function disableUserInGroup(formData: FormData) {
   }
 
   revalidateGroup(dealer_group_id);
+}
+
+export async function sendUserPasswordReset(formData: FormData): Promise<{
+  saved: true;
+  message: string;
+  emailWarning?: string;
+}> {
+  await requireAdminServiceClient();
+  const service = createSupabaseServiceClient();
+
+  const id = String(formData.get("id") || "").trim();
+  const dealer_group_id = String(
+    formData.get("current_dealer_group_id") || formData.get("dealer_group_id") || ""
+  ).trim();
+
+  if (!id || !dealer_group_id) {
+    throw new Error("User id and group are required");
+  }
+
+  const { data: existing } = await service
+    .from("profiles")
+    .select("id, email, first_name, role, status")
+    .eq("id", id)
+    .eq("dealer_group_id", dealer_group_id)
+    .maybeSingle();
+
+  if (!existing) {
+    throw new Error("User not found in this auto group");
+  }
+  if (existing.role === "platform_admin") {
+    throw new Error("Cannot reset password for platform admins from Auto Groups");
+  }
+
+  const linkResult = await generatePasswordSetupLink(service, existing.email);
+  if (!linkResult.ok) {
+    throw new Error(`Password reset failed: ${linkResult.error}`);
+  }
+
+  const emailResult = await sendPasswordResetEmail({
+    to: existing.email,
+    firstName: existing.first_name || "there",
+    actionLink: linkResult.actionLink,
+  });
+
+  if (!emailResult.ok) {
+    throw new Error(`Password reset email failed: ${emailResult.error}`);
+  }
+
+  return {
+    saved: true as const,
+    message: "Password reset email sent",
+  };
 }
