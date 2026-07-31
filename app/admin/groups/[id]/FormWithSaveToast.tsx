@@ -3,12 +3,17 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 
-export type SaveResult = {
-  saved: true;
-  redirectTo?: string | null;
-  message?: string;
-  emailWarning?: string;
-};
+export type SaveResult =
+  | {
+      saved: true;
+      redirectTo?: string | null;
+      message?: string;
+      emailWarning?: string;
+    }
+  | {
+      saved: false;
+      error: string;
+    };
 
 type Props = {
   action: (formData: FormData) => Promise<SaveResult | void>;
@@ -26,7 +31,11 @@ export default function FormWithSaveToast({
   successMessage = "Changes Saved Successfully",
 }: Props) {
   const router = useRouter();
-  const [toast, setToast] = useState<{ text: string; warning?: string } | null>(null);
+  const [toast, setToast] = useState<{
+    text: string;
+    warning?: string;
+    tone: "ok" | "error";
+  } | null>(null);
   const [, startTransition] = useTransition();
   const timerRef = useRef<number | null>(null);
 
@@ -36,10 +45,11 @@ export default function FormWithSaveToast({
     };
   }, []);
 
-  function flashToast(text: string, warning?: string) {
-    setToast({ text, warning });
+  function flashToast(text: string, opts?: { warning?: string; tone?: "ok" | "error" }) {
+    const tone = opts?.tone ?? "ok";
+    setToast({ text, warning: opts?.warning, tone });
     if (timerRef.current) window.clearTimeout(timerRef.current);
-    timerRef.current = window.setTimeout(() => setToast(null), warning ? 6000 : 3500);
+    timerRef.current = window.setTimeout(() => setToast(null), opts?.warning || tone === "error" ? 7000 : 3500);
   }
 
   return (
@@ -48,11 +58,23 @@ export default function FormWithSaveToast({
         <div
           role="status"
           aria-live="polite"
-          className="fixed right-4 top-4 z-50 max-w-sm animate-in fade-in slide-in-from-top-2 rounded-md border border-emerald-300 bg-emerald-600 px-4 py-3 text-sm font-medium text-white shadow-lg"
+          className={
+            toast.tone === "error"
+              ? "fixed right-4 top-4 z-50 max-w-sm animate-in fade-in slide-in-from-top-2 rounded-md border border-red-300 bg-red-600 px-4 py-3 text-sm font-medium text-white shadow-lg"
+              : "fixed right-4 top-4 z-50 max-w-sm animate-in fade-in slide-in-from-top-2 rounded-md border border-emerald-300 bg-emerald-600 px-4 py-3 text-sm font-medium text-white shadow-lg"
+          }
         >
           {toast.text}
           {toast.warning ? (
-            <p className="mt-1 text-xs font-normal text-emerald-100">{toast.warning}</p>
+            <p
+              className={
+                toast.tone === "error"
+                  ? "mt-1 text-xs font-normal text-red-100"
+                  : "mt-1 text-xs font-normal text-emerald-100"
+              }
+            >
+              {toast.warning}
+            </p>
           ) : null}
         </div>
       ) : null}
@@ -60,13 +82,21 @@ export default function FormWithSaveToast({
         className={className}
         action={(formData) => {
           startTransition(async () => {
-            const result = await action(formData);
-            if (!result?.saved) return;
-            flashToast(result.message || successMessage, result.emailWarning);
-            if (result.redirectTo) {
-              router.push(result.redirectTo);
+            try {
+              const result = await action(formData);
+              if (!result) return;
+              if (!result.saved) {
+                flashToast(result.error, { tone: "error" });
+                return;
+              }
+              flashToast(result.message || successMessage, { warning: result.emailWarning });
+              if (result.redirectTo) {
+                router.push(result.redirectTo);
+              }
+              router.refresh();
+            } catch (err: any) {
+              flashToast(err?.message || "Something went wrong", { tone: "error" });
             }
-            router.refresh();
           });
         }}
       >

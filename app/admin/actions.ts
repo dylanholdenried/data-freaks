@@ -509,11 +509,10 @@ export async function disableUserInGroup(formData: FormData) {
   revalidateGroup(dealer_group_id);
 }
 
-export async function sendUserPasswordReset(formData: FormData): Promise<{
-  saved: true;
-  message: string;
-  emailWarning?: string;
-}> {
+export async function sendUserPasswordReset(formData: FormData): Promise<
+  | { saved: true; message: string }
+  | { saved: false; error: string }
+> {
   await requireAdminServiceClient();
   const service = createSupabaseServiceClient();
 
@@ -523,7 +522,7 @@ export async function sendUserPasswordReset(formData: FormData): Promise<{
   ).trim();
 
   if (!id || !dealer_group_id) {
-    throw new Error("User id and group are required");
+    return { saved: false, error: "User id and group are required" };
   }
 
   const { data: existing } = await service
@@ -534,15 +533,15 @@ export async function sendUserPasswordReset(formData: FormData): Promise<{
     .maybeSingle();
 
   if (!existing) {
-    throw new Error("User not found in this auto group");
+    return { saved: false, error: "User not found in this auto group" };
   }
   if (existing.role === "platform_admin") {
-    throw new Error("Cannot reset password for platform admins from Auto Groups");
+    return { saved: false, error: "Cannot reset password for platform admins from Auto Groups" };
   }
 
   const linkResult = await generatePasswordSetupLink(service, existing.email);
   if (!linkResult.ok) {
-    throw new Error(`Password reset failed: ${linkResult.error}`);
+    return { saved: false, error: `Password reset failed: ${linkResult.error}` };
   }
 
   const emailResult = await sendPasswordResetEmail({
@@ -552,7 +551,7 @@ export async function sendUserPasswordReset(formData: FormData): Promise<{
   });
 
   if (!emailResult.ok) {
-    throw new Error(`Password reset email failed: ${emailResult.error}`);
+    return { saved: false, error: `Password reset email failed: ${emailResult.error}` };
   }
 
   return {

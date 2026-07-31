@@ -85,7 +85,11 @@ export default function AddUserModal({ dealerGroupId, stores }: Props) {
                 startTransition(async () => {
                   try {
                     const result = (await createUserInGroup(formData)) as SaveResult | void;
-                    if (!result?.saved) return;
+                    if (!result) return;
+                    if (!result.saved) {
+                      setError(result.error);
+                      return;
+                    }
                     flashToast(result.message || "User Created", result.emailWarning);
                     close();
                     if (result.redirectTo) {
