@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Archivo, IBM_Plex_Mono, Inter } from "next/font/google";
 import { z } from "zod";
 
@@ -42,6 +42,21 @@ const loginSchema = z.object({
 export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("error");
+    if (!code) return;
+    if (code === "invite_link_invalid") {
+      setError(
+        "That invite or reset link is invalid or expired. Ask your admin to resend it, or sign in below if you already set a password."
+      );
+    } else if (code === "auth_callback_failed") {
+      setError("Sign-in link failed. Try again or use email and password.");
+    } else if (code === "auth_misconfigured") {
+      setError("Authentication is misconfigured. Contact support.");
+    }
+  }, []);
 
   async function handleSubmit(formData: FormData) {
     setError(null);
