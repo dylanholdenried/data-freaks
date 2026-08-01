@@ -94,7 +94,7 @@ export default function SetPasswordPage() {
         <CardHeader>
           <CardTitle className="text-lg font-semibold tracking-tight">Create your password</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Choose a password for your Data Freaks account, then continue to the app.
+            Choose a password for your DealerACQ account, then continue to the app.
           </p>
         </CardHeader>
         <CardContent>

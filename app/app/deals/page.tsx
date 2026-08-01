@@ -56,12 +56,12 @@ export default async function DealsPage() {
       <div className="space-y-6">
         <section className="app-panel p-5">
           <p className="app-kicker">Sales Registry</p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
             Sales Registry
           </h1>
         </section>
         <div className="app-panel p-8 text-center">
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-muted-foreground">
             No stores configured. Go to{" "}
             <Link href="/app/setup" className="text-blue-600 underline">
               Setup &amp; Config

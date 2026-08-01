@@ -73,11 +73,11 @@ const SEL =
   "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 " +
   "disabled:cursor-not-allowed disabled:opacity-60";
 
-const LBL = "text-xs font-medium text-slate-500";
+const LBL = "text-xs font-medium text-muted-foreground";
 
 function emptyCls(value: string, locked = false) {
   return !locked && !value.trim()
-    ? "border-red-400 bg-red-50 focus-visible:ring-red-400 focus:ring-red-400"
+    ? "border-red-400 bg-[color-mix(in_srgb,var(--da-red)_12%,transparent)] focus-visible:ring-red-400 focus:ring-red-400"
     : "";
 }
 
@@ -91,13 +91,13 @@ function StatusBadge({ status }: { status: string }) {
     pending: "bg-amber-100 text-amber-700",
     delivered: "bg-blue-100 text-blue-700",
     closed: "bg-emerald-100 text-emerald-700",
-    dead: "bg-slate-100 text-slate-600",
-    unwound: "bg-red-100 text-red-700",
+    dead: "bg-muted text-muted-foreground",
+    unwound: "bg-red-100 text-[var(--da-red)]",
   };
   return (
     <span
       className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${
-        cfg[status] ?? "bg-slate-100 text-slate-600"
+        cfg[status] ?? "bg-muted text-muted-foreground"
       }`}
     >
       {status}
@@ -648,12 +648,12 @@ export default function UpdatePendingForm({
           <div className="min-w-0">
             <p className="app-kicker">Transaction Intake</p>
             <div className="mt-1 flex items-center gap-3">
-              <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+              <h1 className="text-3xl font-semibold tracking-tight text-foreground">
                 Update Deal
               </h1>
               <StatusBadge status={markedLost ? "dead" : dealStatus} />
             </div>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-muted-foreground">
               Fill economics and close when ready.
             </p>
           </div>
@@ -684,18 +684,18 @@ export default function UpdatePendingForm({
 
       {/* ── Mark lost success banner ─────────────────────────────────────────── */}
       {markedLost && (
-        <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-5">
-          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-slate-600" />
+        <div className="flex items-start gap-3 rounded-2xl border border-border bg-muted p-5">
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
           <div className="min-w-0 flex-1">
-            <p className="font-semibold text-slate-800">Deal marked lost</p>
-            <p className="mt-0.5 text-sm text-slate-600">
+            <p className="font-semibold text-foreground">Deal marked lost</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">
               Stock{" "}
               <span className="font-mono font-semibold">#{stockNumber}</span>{" "}
               has been marked Lost. Redirecting to Sales Registry…
             </p>
             <a
               href="/app/deals"
-              className="mt-1 inline-block text-xs text-slate-600 underline hover:text-slate-900"
+              className="mt-1 inline-block text-xs text-muted-foreground underline hover:text-foreground"
             >
               Go to Sales Registry →
             </a>
@@ -705,16 +705,16 @@ export default function UpdatePendingForm({
 
       {/* ── Close validation errors ──────────────────────────────────────────── */}
       {closeErrors.length > 0 && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-5">
+        <div className="rounded-2xl border border-[color-mix(in_srgb,var(--da-red)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-red)_12%,transparent)] p-5">
           <div className="mb-2 flex items-center gap-2">
             <XCircle className="h-4 w-4 shrink-0 text-red-600" />
-            <p className="text-sm font-semibold text-red-800">
+            <p className="text-sm font-semibold text-[var(--da-red)]">
               Cannot close — fix these first:
             </p>
           </div>
           <ul className="list-inside list-disc space-y-0.5 pl-1">
             {closeErrors.map((e, i) => (
-              <li key={i} className="text-sm text-red-700">
+              <li key={i} className="text-sm text-[var(--da-red)]">
                 {e}
               </li>
             ))}
@@ -746,11 +746,11 @@ export default function UpdatePendingForm({
 
       {/* ── Save error banner ────────────────────────────────────────────────── */}
       {errors.length > 0 && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-5">
-          <p className="mb-2 text-sm font-semibold text-red-800">Save failed:</p>
+        <div className="rounded-2xl border border-[color-mix(in_srgb,var(--da-red)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-red)_12%,transparent)] p-5">
+          <p className="mb-2 text-sm font-semibold text-[var(--da-red)]">Save failed:</p>
           <ul className="list-inside list-disc space-y-0.5">
             {errors.map((e, i) => (
-              <li key={i} className="text-sm text-red-700">
+              <li key={i} className="text-sm text-[var(--da-red)]">
                 {e}
               </li>
             ))}
@@ -759,8 +759,8 @@ export default function UpdatePendingForm({
       )}
 
       {/* ── Deal Details (Step 1 — editable until closed) ────────────────────── */}
-      <Card className="app-panel border-[#e7ebf3] shadow-none">
-        <CardHeader className="border-[#edf1f7]">
+      <Card className="app-panel border-border shadow-none">
+        <CardHeader className="border-border">
           <CardTitle className="text-lg">Deal Details</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -816,13 +816,13 @@ export default function UpdatePendingForm({
             </div>
             <div className="space-y-1">
               <label className={LBL}>Store</label>
-              <p className="flex h-10 items-center text-sm text-slate-600">
+              <p className="flex h-10 items-center text-sm text-muted-foreground">
                 {storeName}
               </p>
             </div>
             <div className="space-y-1">
               <label className={LBL}>Vehicle</label>
-              <p className="flex h-10 items-center text-sm text-slate-600">
+              <p className="flex h-10 items-center text-sm text-muted-foreground">
                 {displayYear} {displayMake} {displayModel}
               </p>
             </div>
@@ -831,8 +831,8 @@ export default function UpdatePendingForm({
       </Card>
 
       {/* ── Salesperson(s) ───────────────────────────────────────────────────── */}
-      <Card className="app-panel border-[#e7ebf3] shadow-none">
-        <CardHeader className="border-[#edf1f7]">
+      <Card className="app-panel border-border shadow-none">
+        <CardHeader className="border-border">
           <CardTitle className="text-lg">Salesperson(s)</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -870,7 +870,7 @@ export default function UpdatePendingForm({
                     disabled={isLocked}
                     className={cn("pr-7", emptyCls(split.share, isLocked))}
                   />
-                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
                     %
                   </span>
                 </div>
@@ -881,7 +881,7 @@ export default function UpdatePendingForm({
                   variant="ghost"
                   size="icon"
                   onClick={() => removeSplit(idx)}
-                  className="shrink-0 text-slate-400 hover:text-red-500"
+                  className="shrink-0 text-muted-foreground hover:text-red-500"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -906,7 +906,7 @@ export default function UpdatePendingForm({
 
       {/* ── VIN decode success banner ─────────────────────────────────────────── */}
       {decodeMsg && (
-        <div className="flex items-start gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+        <div className="flex items-start gap-3 rounded-2xl border border-[color-mix(in_srgb,var(--da-blue)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-blue)_12%,transparent)] p-4">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
           <p className="flex-1 text-sm text-blue-800">{decodeMsg}</p>
           <button
@@ -921,7 +921,7 @@ export default function UpdatePendingForm({
 
       {/* ── VIN decode error banner ───────────────────────────────────────────── */}
       {decodeError && (
-        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+        <div className="flex items-start gap-3 rounded-2xl border border-[color-mix(in_srgb,var(--da-amber)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-amber)_12%,transparent)] p-4">
           <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
           <p className="flex-1 text-sm text-amber-800">{decodeError}</p>
           <button
@@ -935,8 +935,8 @@ export default function UpdatePendingForm({
       )}
 
       {/* ── Vehicle Details ──────────────────────────────────────────────────── */}
-      <Card className="app-panel border-[#e7ebf3] shadow-none">
-        <CardHeader className="border-[#edf1f7]">
+      <Card className="app-panel border-border shadow-none">
+        <CardHeader className="border-border">
           <CardTitle className="text-lg">Vehicle Details</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -1141,8 +1141,8 @@ export default function UpdatePendingForm({
       </Card>
 
       {/* ── Acquisition & Finance ────────────────────────────────────────────── */}
-      <Card className="app-panel border-[#e7ebf3] shadow-none">
-        <CardHeader className="border-[#edf1f7]">
+      <Card className="app-panel border-border shadow-none">
+        <CardHeader className="border-border">
           <CardTitle className="text-lg">Acquisition & Finance</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -1207,8 +1207,8 @@ export default function UpdatePendingForm({
       </Card>
 
       {/* ── Financials ───────────────────────────────────────────────────────── */}
-      <Card className="app-panel border-[#e7ebf3] shadow-none">
-        <CardHeader className="border-[#edf1f7]">
+      <Card className="app-panel border-border shadow-none">
+        <CardHeader className="border-border">
           <CardTitle className="text-lg">Financials</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -1262,7 +1262,7 @@ export default function UpdatePendingForm({
                   )}
                   placeholder={listPriceNa ? "NA" : undefined}
                 />
-                <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+                <label className="inline-flex items-center gap-2 text-sm text-foreground">
                   <input
                     type="checkbox"
                     checked={listPriceNa}
@@ -1272,7 +1272,7 @@ export default function UpdatePendingForm({
                       setListPriceNa(na);
                       if (na) setListPrice("");
                     }}
-                    className="h-4 w-4 rounded border-slate-300"
+                    className="h-4 w-4 rounded border-border"
                   />
                   NA (unavailable — voids lost gross)
                 </label>
@@ -1302,9 +1302,9 @@ export default function UpdatePendingForm({
 
       {/* ── Mark Lost confirmation ───────────────────────────────────────────── */}
       {showLostConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-            <h2 className="text-lg font-semibold tracking-tight text-slate-900">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="app-panel w-full max-w-md p-6">
+            <h2 className="text-lg font-semibold tracking-tight text-foreground">
               Are you sure you want to mark this deal lost?
             </h2>
             <div className="mt-5 flex flex-wrap justify-end gap-2">

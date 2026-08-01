@@ -15,7 +15,7 @@ export default function SubprimeTab({ units }: { units: InvUnitRow[] }) {
 
   return (
     <div className="space-y-6">
-      <p className="text-sm text-slate-600">
+      <p className="text-sm text-muted-foreground">
         Subprime advertised price is ignored. Target retail ={" "}
         {SUBPRIME.targetRetailJdMult * 100}% of JD trade-in. Ideal cost ≤{" "}
         {fmtMoney(SUBPRIME.idealCostMax)}; acceptable ≤ {fmtMoney(SUBPRIME.acceptableCostMax)}.
@@ -27,7 +27,7 @@ export default function SubprimeTab({ units }: { units: InvUnitRow[] }) {
           <Empty>No flagged subprime units.</Empty>
         ) : (
           <table className="min-w-full text-left text-xs">
-            <thead className="bg-slate-50 text-slate-500">
+            <thead className="bg-muted text-muted-foreground">
               <tr>
                 <th className="px-3 py-2 font-medium">Stock</th>
                 <th className="px-3 py-2 font-medium">Vehicle</th>
@@ -41,7 +41,7 @@ export default function SubprimeTab({ units }: { units: InvUnitRow[] }) {
             </thead>
             <tbody>
               {audit.map((u) => (
-                <tr key={u.stk} className="border-t border-slate-100">
+                <tr key={u.stk} className="border-t border-border">
                   <td className="px-3 py-2 font-medium">{u.stk}</td>
                   <td className="px-3 py-2">{u.veh}</td>
                   <td className="px-3 py-2">{u.age}</td>
@@ -73,14 +73,14 @@ export default function SubprimeTab({ units }: { units: InvUnitRow[] }) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h3 className="mb-2 text-sm font-semibold text-slate-800">{title}</h3>
-      <div className="overflow-x-auto rounded-lg border border-slate-200">{children}</div>
+      <h3 className="mb-2 text-sm font-semibold text-foreground">{title}</h3>
+      <div className="overflow-x-auto rounded-lg border border-border">{children}</div>
     </div>
   );
 }
 
 function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="px-4 py-6 text-center text-xs text-slate-400">{children}</p>;
+  return <p className="px-4 py-6 text-center text-xs text-muted-foreground">{children}</p>;
 }
 
 function SpreadTable({
@@ -93,7 +93,7 @@ function SpreadTable({
   if (rows.length === 0) return <Empty>None</Empty>;
   return (
     <table className="min-w-full text-left text-xs">
-      <thead className="bg-slate-50 text-slate-500">
+      <thead className="bg-muted text-muted-foreground">
         <tr>
           <th className="px-3 py-2 font-medium">Stock</th>
           <th className="px-3 py-2 font-medium">Vehicle</th>
@@ -108,7 +108,7 @@ function SpreadTable({
       </thead>
       <tbody>
         {rows.map((u) => (
-          <tr key={u.stk} className="border-t border-slate-100">
+          <tr key={u.stk} className="border-t border-border">
             <td className="px-3 py-2 font-medium">{u.stk}</td>
             <td className="px-3 py-2">{u.veh}</td>
             <td className="px-3 py-2">{u.age}</td>

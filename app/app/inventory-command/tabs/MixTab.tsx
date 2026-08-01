@@ -46,12 +46,12 @@ function MixTable({
   total: number;
 }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white">
-      <div className="border-b border-slate-100 px-3 py-2 text-sm font-semibold text-slate-800">
+    <div className="rounded-lg border border-border bg-card">
+      <div className="border-b border-border px-3 py-2 text-sm font-semibold text-foreground">
         {title}
       </div>
       <table className="min-w-full text-left text-xs">
-        <thead className="bg-slate-50 text-slate-500">
+        <thead className="bg-muted text-muted-foreground">
           <tr>
             <th className="px-3 py-2 font-medium">Segment</th>
             <th className="px-3 py-2 font-medium">Count</th>
@@ -60,7 +60,7 @@ function MixTable({
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.label} className="border-t border-slate-100">
+            <tr key={r.label} className="border-t border-border">
               <td className="px-3 py-2 capitalize">{r.label}</td>
               <td className="px-3 py-2">{fmtNum(r.count)}</td>
               <td className="px-3 py-2">

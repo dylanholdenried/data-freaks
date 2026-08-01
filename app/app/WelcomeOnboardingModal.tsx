@@ -35,12 +35,12 @@ export default function WelcomeOnboardingModal({ firstName, show }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-        <h2 className="text-lg font-semibold tracking-tight text-slate-900">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="app-panel w-full max-w-md p-6">
+        <h2 className="text-lg font-semibold tracking-tight text-foreground">
           Welcome{firstName ? `, ${firstName}` : ""}
         </h2>
-        <p className="mt-2 text-sm text-slate-600">
+        <p className="mt-2 text-sm text-muted-foreground">
           Your auto group is active. Next, finish store setup — add salespeople, finance managers,
           acquisition sources, and monthly goals.
         </p>
@@ -52,7 +52,7 @@ export default function WelcomeOnboardingModal({ firstName, show }: Props) {
             Go to Setup
           </Button>
         </div>
-        <p className="mt-3 text-xs text-slate-400">
+        <p className="mt-3 text-xs text-muted-foreground">
           You can always open{" "}
           <Link href="/app/setup" className="underline">
             Setup & Config

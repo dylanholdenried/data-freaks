@@ -74,13 +74,13 @@ export default async function AdminGroupsPage() {
         <CardContent>
           <form action={createAutoGroup} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div className="sm:col-span-2">
-              <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor="name">
+              <label className="mb-1 block text-xs font-medium text-muted-foreground" htmlFor="name">
                 Name
               </label>
               <Input id="name" name="name" required placeholder="Acme Motors Group" />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor="plan">
+              <label className="mb-1 block text-xs font-medium text-muted-foreground" htmlFor="plan">
                 Plan
               </label>
               <select

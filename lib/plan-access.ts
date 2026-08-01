@@ -18,11 +18,19 @@ export function canAccessInventoryCommand(plan: string | null | undefined): bool
   return normalizePlan(plan) === "advise";
 }
 
+/** Buy-Box is an Advise-tier feature (same gate as Inventory Command). */
+export function canAccessBuyBox(plan: string | null | undefined): boolean {
+  return canAccessInventoryCommand(plan);
+}
+
 /** Nav hrefs that require Analyze+ */
-const ANALYZE_HREFS = new Set(["/app/profit-center"]);
+const ANALYZE_HREFS = new Set([
+  "/app/profit-center",
+  "/app/salesperson-leaderboard",
+]);
 
 /** Nav hrefs that require Advise */
-const ADVISE_HREFS = new Set(["/app/inventory-command"]);
+const ADVISE_HREFS = new Set(["/app/inventory-command", "/app/buy-box"]);
 
 export function canAccessAppNav(
   plan: string | null | undefined,
@@ -31,4 +39,12 @@ export function canAccessAppNav(
   if (ADVISE_HREFS.has(href)) return canAccessInventoryCommand(plan);
   if (ANALYZE_HREFS.has(href)) return canAccessProfitCenter(plan);
   return true;
+}
+
+/** Whether a nav item should render unlocked or with a lock (still visible). */
+export function navAccessState(
+  plan: string | null | undefined,
+  href: string
+): "open" | "locked" {
+  return canAccessAppNav(plan, href) ? "open" : "locked";
 }

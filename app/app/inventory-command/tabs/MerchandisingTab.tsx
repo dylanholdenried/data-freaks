@@ -28,10 +28,10 @@ export default function MerchandisingTab({ units }: { units: InvUnitRow[] }) {
 function Stat({ label, value, warn }: { label: string; value: number; warn?: boolean }) {
   return (
     <div
-      className={`rounded-lg border px-4 py-3 ${warn ? "border-amber-300 bg-amber-50" : "border-slate-200 bg-white"}`}
+      className={`rounded-lg border px-4 py-3 ${warn ? "border-[color-mix(in_srgb,var(--da-amber)_45%,transparent)] bg-[color-mix(in_srgb,var(--da-amber)_12%,transparent)]" : "border-border bg-card"}`}
     >
-      <div className="text-[11px] uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="text-xl font-semibold text-slate-900">{fmtNum(value)}</div>
+      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="text-xl font-semibold text-foreground">{fmtNum(value)}</div>
     </div>
   );
 }
@@ -39,7 +39,7 @@ function Stat({ label, value, warn }: { label: string; value: number; warn?: boo
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h3 className="mb-2 text-sm font-semibold text-slate-800">{title}</h3>
+      <h3 className="mb-2 text-sm font-semibold text-foreground">{title}</h3>
       {children}
     </div>
   );
@@ -47,12 +47,12 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function UnitTable({ rows }: { rows: InvUnitRow[] }) {
   if (rows.length === 0) {
-    return <p className="text-xs text-slate-400">None</p>;
+    return <p className="text-xs text-muted-foreground">None</p>;
   }
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200">
+    <div className="overflow-x-auto rounded-lg border border-border">
       <table className="min-w-full text-left text-xs">
-        <thead className="bg-slate-50 text-slate-500">
+        <thead className="bg-muted text-muted-foreground">
           <tr>
             <th className="px-3 py-2 font-medium">Stock</th>
             <th className="px-3 py-2 font-medium">Vehicle</th>
@@ -63,7 +63,7 @@ function UnitTable({ rows }: { rows: InvUnitRow[] }) {
         </thead>
         <tbody>
           {rows.map((u) => (
-            <tr key={u.stk} className="border-t border-slate-100">
+            <tr key={u.stk} className="border-t border-border">
               <td className="px-3 py-2 font-medium">{u.stk}</td>
               <td className="px-3 py-2">{u.veh}</td>
               <td className="px-3 py-2">{u.age}</td>

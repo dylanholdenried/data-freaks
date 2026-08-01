@@ -5,8 +5,8 @@ import { usePathname } from "next/navigation";
 import { BarChart3, Building2, ClipboardList, Package, Upload } from "lucide-react";
 
 const navLink =
-  "flex items-center gap-2 rounded-lg px-3 py-2 text-slate-300 hover:bg-white/10 hover:text-white";
-const navLinkActive = `${navLink} bg-blue-500/25 font-medium text-white`;
+  "flex items-center gap-2 rounded-lg px-3 py-2 text-[var(--da-muted)] hover:bg-[var(--da-panel-2)] hover:text-[var(--da-text)]";
+const navLinkActive = `${navLink} bg-[color-mix(in_srgb,var(--da-blue)_25%,transparent)] font-medium text-[var(--da-text)]`;
 
 const links = [
   {

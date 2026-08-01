@@ -133,7 +133,7 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
   return (
     <div className="space-y-6">
       {activated ? (
-        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+        <div className="rounded-md border border-[color-mix(in_srgb,var(--da-green)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-green)_12%,transparent)] px-3 py-2 text-sm text-[var(--da-green)]">
           Auto group activated. The group admin can sign in at /login.
           {emailError ? (
             <span className="mt-1 block text-amber-800">
@@ -175,13 +175,13 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
           <form action={updateAutoGroup} className="grid gap-3 sm:grid-cols-3">
             <input type="hidden" name="id" value={group.id} />
             <div className="sm:col-span-2">
-              <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor="group_name">
+              <label className="mb-1 block text-xs font-medium text-muted-foreground" htmlFor="group_name">
                 Name
               </label>
               <Input id="group_name" name="name" defaultValue={group.name} required />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor="group_plan">
+              <label className="mb-1 block text-xs font-medium text-muted-foreground" htmlFor="group_plan">
                 Plan
               </label>
               <select
@@ -220,7 +220,7 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
             <input type="hidden" name="dealer_group_id" value={group.id} />
             <div>
               <label
-                className="mb-1 block text-xs font-medium text-slate-600"
+                className="mb-1 block text-xs font-medium text-muted-foreground"
                 htmlFor="min_volume"
               >
                 Min deals to rate
@@ -237,7 +237,7 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
             </div>
             <div>
               <label
-                className="mb-1 block text-xs font-medium text-slate-600"
+                className="mb-1 block text-xs font-medium text-muted-foreground"
                 htmlFor="list_size"
               >
                 List size (buy &amp; red)
@@ -255,7 +255,7 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
             <div className="hidden sm:block" />
             <div>
               <label
-                className="mb-1 block text-xs font-medium text-slate-600"
+                className="mb-1 block text-xs font-medium text-muted-foreground"
                 htmlFor="weight_front"
               >
                 Weight · front profit
@@ -272,7 +272,7 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
             </div>
             <div>
               <label
-                className="mb-1 block text-xs font-medium text-slate-600"
+                className="mb-1 block text-xs font-medium text-muted-foreground"
                 htmlFor="weight_back"
               >
                 Weight · back profit
@@ -289,7 +289,7 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
             </div>
             <div>
               <label
-                className="mb-1 block text-xs font-medium text-slate-600"
+                className="mb-1 block text-xs font-medium text-muted-foreground"
                 htmlFor="weight_turn"
               >
                 Weight · turn
@@ -306,7 +306,7 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
             </div>
             <div>
               <label
-                className="mb-1 block text-xs font-medium text-slate-600"
+                className="mb-1 block text-xs font-medium text-muted-foreground"
                 htmlFor="weight_trade"
               >
                 Weight · trade %
@@ -338,7 +338,7 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
           <form action={createStoreInGroup} className="flex flex-wrap items-end gap-3">
             <input type="hidden" name="dealer_group_id" value={group.id} />
             <div className="min-w-[220px] flex-1">
-              <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor="store_name">
+              <label className="mb-1 block text-xs font-medium text-muted-foreground" htmlFor="store_name">
                 Store name
               </label>
               <Input id="store_name" name="name" placeholder="Centralia" required />
@@ -420,11 +420,11 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
               return (
                 <div
                   key={user.id}
-                  className="rounded-lg border border-border bg-slate-50/80 px-4 py-3"
+                  className="rounded-lg border border-border bg-muted/80 px-4 py-3"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <div className="text-sm font-medium text-slate-900">{displayName}</div>
+                      <div className="text-sm font-medium text-foreground">{displayName}</div>
                       <div className="text-xs text-muted-foreground">{user.email}</div>
                       {user.phone ? (
                         <div className="text-xs text-muted-foreground">{user.phone}</div>
@@ -445,11 +445,11 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
             return (
               <div
                 key={user.id}
-                className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+                className="rounded-lg border border-border bg-card p-4 shadow-sm"
               >
                 <div className="mb-4 flex flex-wrap items-start justify-between gap-2 border-b border-border pb-3">
                   <div>
-                    <div className="text-sm font-semibold text-slate-900">{displayName}</div>
+                    <div className="text-sm font-semibold text-foreground">{displayName}</div>
                     <div className="text-xs text-muted-foreground">{user.email}</div>
                   </div>
                   <div className="flex flex-wrap gap-1">
@@ -467,7 +467,7 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
 
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-600">
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">
                         First name
                       </label>
                       <Input
@@ -478,7 +478,7 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-600">
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">
                         Last name
                       </label>
                       <Input
@@ -489,7 +489,7 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
                       />
                     </div>
                     <div className="sm:col-span-2">
-                      <label className="mb-1 block text-xs font-medium text-slate-600">Email</label>
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">Email</label>
                       <Input
                         name="email"
                         type="email"
@@ -499,7 +499,7 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-600">Phone</label>
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">Phone</label>
                       <Input
                         name="phone"
                         type="tel"
@@ -509,7 +509,7 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-600">Status</label>
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">Status</label>
                       <select
                         name="status"
                         defaultValue={user.status}
@@ -523,7 +523,7 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
                     </div>
                     <div className="sm:col-span-2">
                       <label
-                        className="mb-1 block text-xs font-medium text-slate-600"
+                        className="mb-1 block text-xs font-medium text-muted-foreground"
                         htmlFor={`edit_${user.id}_dealer_group`}
                       >
                         Auto group

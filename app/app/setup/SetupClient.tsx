@@ -41,7 +41,7 @@ const SEL =
   "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 " +
   "disabled:cursor-not-allowed disabled:opacity-60";
 
-const LBL = "text-xs font-medium text-slate-500";
+const LBL = "text-xs font-medium text-muted-foreground";
 
 // ── Month names ───────────────────────────────────────────────────────────────
 
@@ -172,12 +172,14 @@ function GoalsSection({
     deptsByStore.set(d.store_id, arr);
   }
 
-  const currentYear = initialYear;
-  const years = [currentYear - 1, currentYear, currentYear + 1];
+  const nowYear = new Date().getFullYear();
+  const years = Array.from(
+    new Set([nowYear - 1, nowYear, nowYear + 1, initialYear, year])
+  ).sort((a, b) => a - b);
 
   return (
-    <Card className="app-panel border-[#e7ebf3] shadow-none">
-      <CardHeader className="border-[#edf1f7]">
+    <Card id="goals" className="app-panel scroll-mt-24 border-border shadow-none">
+      <CardHeader className="border-border">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle className="text-lg">Monthly Department Goals</CardTitle>
           <div className="flex items-center gap-2">
@@ -214,7 +216,7 @@ function GoalsSection({
             className={`flex items-start gap-3 rounded-xl border p-4 ${
               banner.kind === "ok"
                 ? "border-green-200 bg-green-50 text-green-800"
-                : "border-red-200 bg-red-50 text-red-800"
+                : "border-[color-mix(in_srgb,var(--da-red)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-red)_12%,transparent)] text-[var(--da-red)]"
             }`}
           >
             {banner.kind === "ok" && <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />}
@@ -230,7 +232,7 @@ function GoalsSection({
         )}
 
         {departments.length === 0 ? (
-          <p className="text-sm text-slate-400">No departments configured yet.</p>
+          <p className="text-sm text-muted-foreground">No departments configured yet.</p>
         ) : (
           <div className="space-y-6">
             {stores.map((store) => {
@@ -238,13 +240,13 @@ function GoalsSection({
               if (depts.length === 0) return null;
               return (
                 <div key={store.id}>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     {store.name}
                   </p>
                   <div className="space-y-2">
                     {depts.map((dept) => (
                       <div key={dept.id} className="flex min-w-0 flex-wrap items-center gap-3">
-                        <label className="min-w-0 flex-1 basis-40 text-sm text-slate-700 sm:flex-none sm:basis-auto sm:w-40 sm:shrink-0">{dept.name}</label>
+                        <label className="min-w-0 flex-1 basis-40 text-sm text-foreground sm:flex-none sm:basis-auto sm:w-40 sm:shrink-0">{dept.name}</label>
                         <Input
                           type="number"
                           min={0}
@@ -255,7 +257,7 @@ function GoalsSection({
                           }
                           className="w-28 shrink-0"
                         />
-                        <span className="text-xs text-slate-400">units</span>
+                        <span className="text-xs text-muted-foreground">units</span>
                       </div>
                     ))}
                   </div>
@@ -376,11 +378,11 @@ function RosterSection({
   const activeCount = hasActive ? items.filter((i) => i.active).length : items.length;
 
   return (
-    <Card className="app-panel border-[#e7ebf3] shadow-none">
-      <CardHeader className="border-[#edf1f7]">
+    <Card className="app-panel border-border shadow-none">
+      <CardHeader className="border-border">
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg">{title}</CardTitle>
-          <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
+          <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
             {activeCount} active
           </span>
         </div>
@@ -391,7 +393,7 @@ function RosterSection({
             className={`flex items-start gap-3 rounded-xl border p-3 ${
               banner.kind === "ok"
                 ? "border-green-200 bg-green-50 text-green-800"
-                : "border-red-200 bg-red-50 text-red-800"
+                : "border-[color-mix(in_srgb,var(--da-red)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-red)_12%,transparent)] text-[var(--da-red)]"
             }`}
           >
             {banner.kind === "ok" && <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />}
@@ -446,7 +448,7 @@ function RosterSection({
 
         {/* List */}
         {items.length === 0 ? (
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-muted-foreground">
             {emptyMessage ?? `No ${title.toLowerCase()} yet. Add one above.`}
           </p>
         ) : (
@@ -457,11 +459,11 @@ function RosterSection({
               return (
                 <div key={store.id}>
                   {stores.length > 1 && (
-                    <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       {store.name}
                     </p>
                   )}
-                  <div className="divide-y divide-[#edf1f7] rounded-xl border border-[#edf1f7]">
+                  <div className="divide-y divide-border rounded-xl border border-border">
                     {storeItems.map((item) => {
                       const isActive = !hasActive || item.active;
                       return (
@@ -471,7 +473,7 @@ function RosterSection({
                         >
                           <span
                             className={`text-sm font-medium ${
-                              isActive ? "text-slate-800" : "text-slate-400 line-through"
+                              isActive ? "text-foreground" : "text-muted-foreground line-through"
                             }`}
                           >
                             {item.name}
@@ -483,8 +485,8 @@ function RosterSection({
                               onClick={() => handleToggleActive(item)}
                               className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
                                 isActive
-                                  ? "text-slate-500 hover:bg-red-50 hover:text-red-600"
-                                  : "text-emerald-600 hover:bg-emerald-50"
+                                  ? "text-muted-foreground hover:bg-[color-mix(in_srgb,var(--da-red)_12%,transparent)] hover:text-red-600"
+                                  : "text-emerald-600 hover:bg-[color-mix(in_srgb,var(--da-green)_12%,transparent)]"
                               }`}
                             >
                               {isActive ? (
@@ -561,16 +563,16 @@ export default function SetupClient({
       {/* Page header */}
       <section className="app-panel p-5">
         <p className="app-kicker">Administration</p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Setup & Config</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">Setup & Config</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Manage stores, monthly goals, salespeople, acquisition sources, and finance managers.
         </p>
       </section>
 
       {showOnboardingChecklist && !allDone ? (
-        <Card className="border-blue-200 bg-blue-50/60 shadow-none">
+        <Card className="border-[color-mix(in_srgb,var(--da-blue)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-blue)_10%,transparent)] shadow-none">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base text-slate-900">Finish group setup</CardTitle>
+            <CardTitle className="text-base text-foreground">Finish group setup</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             {checklistItems.map((item) => {
@@ -578,13 +580,13 @@ export default function SetupClient({
               return (
                 <div
                   key={item.key}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-blue-100 bg-white px-3 py-2"
+                  className="flex items-center justify-between gap-3 rounded-lg border border-[color-mix(in_srgb,var(--da-blue)_25%,transparent)] bg-card px-3 py-2"
                 >
                   <div className="flex items-center gap-2 text-sm">
                     <CheckCircle2
-                      className={`h-4 w-4 ${done ? "text-emerald-500" : "text-slate-300"}`}
+                      className={`h-4 w-4 ${done ? "text-emerald-500" : "text-muted-foreground"}`}
                     />
-                    <span className={done ? "text-slate-500 line-through" : "text-slate-800"}>
+                    <span className={done ? "text-muted-foreground line-through" : "text-foreground"}>
                       {item.label}
                     </span>
                   </div>
@@ -607,19 +609,19 @@ export default function SetupClient({
       ) : null}
 
       {/* Section 1: Stores (read-only) */}
-      <Card className="app-panel border-[#e7ebf3] shadow-none">
-        <CardHeader className="border-[#edf1f7]">
+      <Card className="app-panel border-border shadow-none">
+        <CardHeader className="border-border">
           <CardTitle className="text-lg">Stores</CardTitle>
         </CardHeader>
         <CardContent className="pt-4">
           {stores.length === 0 ? (
-            <p className="text-sm text-slate-400">No stores configured. Contact support to add a store.</p>
+            <p className="text-sm text-muted-foreground">No stores configured. Contact support to add a store.</p>
           ) : (
-            <div className="divide-y divide-[#edf1f7] rounded-xl border border-[#edf1f7]">
+            <div className="divide-y divide-border rounded-xl border border-border">
               {stores.map((store) => (
                 <div key={store.id} className="flex items-center gap-3 px-4 py-3">
-                  <Building2 className="h-4 w-4 shrink-0 text-slate-400" />
-                  <span className="text-sm font-medium text-slate-800">{store.name}</span>
+                  <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="text-sm font-medium text-foreground">{store.name}</span>
                 </div>
               ))}
             </div>

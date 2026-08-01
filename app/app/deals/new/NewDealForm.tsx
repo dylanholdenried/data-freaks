@@ -52,11 +52,11 @@ const SEL =
   "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 " +
   "disabled:cursor-not-allowed disabled:opacity-60";
 
-const LBL = "text-xs font-medium text-slate-500";
+const LBL = "text-xs font-medium text-muted-foreground";
 
 function emptyCls(value: string) {
   return !value.trim()
-    ? "border-red-400 bg-red-50 focus-visible:ring-red-400 focus:ring-red-400"
+    ? "border-red-400 bg-[color-mix(in_srgb,var(--da-red)_12%,transparent)] focus-visible:ring-red-400 focus:ring-red-400"
     : "";
 }
 
@@ -370,8 +370,8 @@ export default function NewDealForm({
       {/* Page header */}
       <section className="app-panel p-5">
         <p className="app-kicker">Transaction Intake</p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Log Transaction</h1>
-        <p className="mt-1 text-sm text-slate-500">Step 1 — Add Deal. Saves as Pending.</p>
+        <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">New Deal</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Step 1 — Add Deal. Saves as Pending.</p>
       </section>
 
       {/* Success banner — stays visible while form is reset for next entry */}
@@ -399,13 +399,13 @@ export default function NewDealForm({
 
       {/* Validation errors */}
       {errors.length > 0 && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-5">
-          <p className="mb-2 text-sm font-semibold text-red-800">
+        <div className="rounded-2xl border border-[color-mix(in_srgb,var(--da-red)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-red)_12%,transparent)] p-5">
+          <p className="mb-2 text-sm font-semibold text-[var(--da-red)]">
             Please fix the following before saving:
           </p>
           <ul className="list-inside list-disc space-y-0.5">
             {errors.map((e, i) => (
-              <li key={i} className="text-sm text-red-700">
+              <li key={i} className="text-sm text-[var(--da-red)]">
                 {e}
               </li>
             ))}
@@ -415,7 +415,7 @@ export default function NewDealForm({
 
       {/* Make / department mismatch — warn only; save still allowed */}
       {makeDeptMismatch && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+        <div className="rounded-2xl border border-[color-mix(in_srgb,var(--da-amber)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-amber)_12%,transparent)] p-5">
           <p className="text-sm font-semibold text-amber-900">Make / department mismatch</p>
           <p className="mt-1 text-sm text-amber-800">
             <span className="font-medium">{vehicleMake.trim()}</span> is not allowed for{" "}
@@ -426,8 +426,8 @@ export default function NewDealForm({
       )}
 
       {/* ── Store & Department ─────────────────────────────────────────────── */}
-      <Card className="app-panel border-[#e7ebf3] shadow-none">
-        <CardHeader className="border-[#edf1f7]">
+      <Card className="app-panel border-border shadow-none">
+        <CardHeader className="border-border">
           <CardTitle className="text-lg">Store & Department</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -470,8 +470,8 @@ export default function NewDealForm({
       </Card>
 
       {/* ── Deal Details ───────────────────────────────────────────────────── */}
-      <Card className="app-panel border-[#e7ebf3] shadow-none">
-        <CardHeader className="border-[#edf1f7]">
+      <Card className="app-panel border-border shadow-none">
+        <CardHeader className="border-border">
           <CardTitle className="text-lg">Deal Details</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -527,7 +527,7 @@ export default function NewDealForm({
 
           {/* Decode error */}
           {decodeError && (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <div className="flex items-start gap-2 rounded-lg border border-[color-mix(in_srgb,var(--da-amber)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-amber)_12%,transparent)] p-3">
               <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
               <p className="flex-1 text-sm text-amber-800">{decodeError}</p>
               <button
@@ -717,8 +717,8 @@ export default function NewDealForm({
       </Card>
 
       {/* ── Salesperson(s) ─────────────────────────────────────────────────── */}
-      <Card className="app-panel border-[#e7ebf3] shadow-none">
-        <CardHeader className="border-[#edf1f7]">
+      <Card className="app-panel border-border shadow-none">
+        <CardHeader className="border-border">
           <CardTitle className="text-lg">Salesperson(s)</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -757,7 +757,7 @@ export default function NewDealForm({
                     max={100}
                     className={`pr-7 ${emptyCls(split.share)}`}
                   />
-                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
                     %
                   </span>
                 </div>
@@ -768,7 +768,7 @@ export default function NewDealForm({
                   variant="ghost"
                   size="icon"
                   onClick={() => removeSplit(idx)}
-                  className="shrink-0 text-slate-400 hover:text-red-500"
+                  className="shrink-0 text-muted-foreground hover:text-red-500"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -792,23 +792,23 @@ export default function NewDealForm({
       </Card>
 
       {/* ── Trade-In ───────────────────────────────────────────────────────── */}
-      <Card className="app-panel border-[#e7ebf3] shadow-none">
-        <CardHeader className="border-[#edf1f7]">
+      <Card className="app-panel border-border shadow-none">
+        <CardHeader className="border-border">
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg">Trade-In</CardTitle>
             <label className="flex cursor-pointer items-center gap-2">
-              <span className="text-xs text-slate-500">Has trade?</span>
+              <span className="text-xs text-muted-foreground">Has trade?</span>
               <button
                 type="button"
                 role="switch"
                 aria-checked={hasTrade}
                 onClick={() => setHasTrade((v) => !v)}
                 className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                  hasTrade ? "bg-blue-600" : "bg-slate-200"
+                  hasTrade ? "bg-[var(--da-blue)]" : "bg-[var(--da-line)]"
                 }`}
               >
                 <span
-                  className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-lg transition-transform ${
+                  className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-card shadow-lg transition-transform ${
                     hasTrade ? "translate-x-4" : "translate-x-0"
                   }`}
                 />
@@ -822,11 +822,11 @@ export default function NewDealForm({
             {trades.map((trade, idx) => (
               <div
                 key={idx}
-                className="space-y-3 rounded-xl border border-[#edf1f7] bg-[#fafcff] p-4"
+                className="space-y-3 rounded-xl border border-border bg-muted p-4"
               >
                 {trades.length > 1 && (
                   <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       Trade {idx + 1}
                     </p>
                     <Button
@@ -834,7 +834,7 @@ export default function NewDealForm({
                       variant="ghost"
                       size="sm"
                       onClick={() => removeTrade(idx)}
-                      className="h-7 px-2 text-slate-400 hover:text-red-500"
+                      className="h-7 px-2 text-muted-foreground hover:text-red-500"
                     >
                       <Trash2 className="mr-1 h-3.5 w-3.5" />
                       Remove
@@ -913,8 +913,8 @@ export default function NewDealForm({
       </Card>
 
       {/* ── Notes ─────────────────────────────────────────────────────────── */}
-      <Card className="app-panel border-[#e7ebf3] shadow-none">
-        <CardHeader className="border-[#edf1f7]">
+      <Card className="app-panel border-border shadow-none">
+        <CardHeader className="border-border">
           <CardTitle className="text-lg">Notes</CardTitle>
         </CardHeader>
         <CardContent>

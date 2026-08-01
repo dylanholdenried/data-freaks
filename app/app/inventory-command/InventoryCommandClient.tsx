@@ -69,8 +69,8 @@ export default function InventoryCommandClient({
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Inventory Command</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-xl font-semibold text-foreground">Inventory Command</h1>
+          <p className="text-sm text-muted-foreground">
             {storeName}
             {asOf ? ` · as of ${asOf}` : " · no snapshot yet"}
           </p>
@@ -85,7 +85,7 @@ export default function InventoryCommandClient({
                 "rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
                 storeId === s.id
                   ? "border-blue-600 bg-blue-600 text-white"
-                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  : "border-border bg-card text-foreground hover:bg-muted"
               )}
             >
               {s.name}
@@ -94,7 +94,7 @@ export default function InventoryCommandClient({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-1 border-b border-slate-200 pb-px">
+      <div className="flex flex-wrap gap-1 border-b border-border pb-px">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -103,8 +103,8 @@ export default function InventoryCommandClient({
             className={cn(
               "-mb-px rounded-t-lg border border-b-0 px-3 py-2 text-xs font-medium transition-colors",
               tab === t.id
-                ? "border-slate-200 bg-white text-slate-900"
-                : "border-transparent text-slate-500 hover:text-slate-800"
+                ? "border-border bg-card text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
             {t.label}
@@ -114,7 +114,7 @@ export default function InventoryCommandClient({
 
       <div className="min-w-0">
         {!snapshotDate && units.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+          <p className="rounded-lg border border-dashed border-border bg-muted px-4 py-8 text-center text-sm text-muted-foreground">
             No inventory snapshot for this store yet. A platform admin can upload the daily
             vAuto Merchandising export from Inventory upload.
           </p>
@@ -133,7 +133,7 @@ export default function InventoryCommandClient({
 
         {/* Keep priceActions available for future Pricing history panel */}
         {tab === "pricing" && priceActions.length > 0 ? (
-          <p className="mt-4 text-xs text-slate-400">
+          <p className="mt-4 text-xs text-muted-foreground">
             {priceActions.length} price action{priceActions.length === 1 ? "" : "s"} on{" "}
             {snapshotDate}.
           </p>

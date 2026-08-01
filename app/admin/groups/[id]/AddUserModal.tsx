@@ -62,17 +62,17 @@ export default function AddUserModal({ dealerGroupId, stores }: Props) {
       </Button>
 
       {open ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="add-user-title"
-            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl"
+            className="app-panel max-h-[90vh] w-full max-w-lg overflow-y-auto p-6"
           >
-            <h2 id="add-user-title" className="text-lg font-semibold tracking-tight text-slate-900">
+            <h2 id="add-user-title" className="text-lg font-semibold tracking-tight text-foreground">
               Add User
             </h2>
-            <p className="mt-1 text-sm text-slate-600">
+            <p className="mt-1 text-sm text-muted-foreground">
               Create an account for this auto group. They will receive an email to set their password
               and log in.
             </p>
@@ -108,7 +108,7 @@ export default function AddUserModal({ dealerGroupId, stores }: Props) {
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <label
-                    className="mb-1 block text-xs font-medium text-slate-600"
+                    className="mb-1 block text-xs font-medium text-muted-foreground"
                     htmlFor="modal_first_name"
                   >
                     First name
@@ -117,7 +117,7 @@ export default function AddUserModal({ dealerGroupId, stores }: Props) {
                 </div>
                 <div>
                   <label
-                    className="mb-1 block text-xs font-medium text-slate-600"
+                    className="mb-1 block text-xs font-medium text-muted-foreground"
                     htmlFor="modal_last_name"
                   >
                     Last name
@@ -128,7 +128,7 @@ export default function AddUserModal({ dealerGroupId, stores }: Props) {
 
               <div>
                 <label
-                  className="mb-1 block text-xs font-medium text-slate-600"
+                  className="mb-1 block text-xs font-medium text-muted-foreground"
                   htmlFor="modal_email"
                 >
                   Email

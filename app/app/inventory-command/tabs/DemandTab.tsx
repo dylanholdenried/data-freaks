@@ -9,18 +9,18 @@ export default function DemandTab({ units }: { units: InvUnitRow[] }) {
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-slate-600">
+      <p className="text-sm text-muted-foreground">
         Seen but skipped: age ≥ 7, SRP ≥ 300, VR &lt; 1% (VDP÷SRP).{" "}
         <span className="font-semibold">{skipped.length}</span> units.
       </p>
       {skipped.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+        <p className="rounded-lg border border-dashed border-border bg-muted px-4 py-8 text-center text-sm text-muted-foreground">
           No skipped units match the filter.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <div className="overflow-x-auto rounded-lg border border-border">
           <table className="min-w-full text-left text-xs">
-            <thead className="bg-slate-50 text-slate-500">
+            <thead className="bg-muted text-muted-foreground">
               <tr>
                 <th className="px-3 py-2 font-medium">Stock</th>
                 <th className="px-3 py-2 font-medium">Vehicle</th>
@@ -34,7 +34,7 @@ export default function DemandTab({ units }: { units: InvUnitRow[] }) {
             </thead>
             <tbody>
               {skipped.map((u) => (
-                <tr key={u.stk} className="border-t border-slate-100">
+                <tr key={u.stk} className="border-t border-border">
                   <td className="px-3 py-2 font-medium">{u.stk}</td>
                   <td className="px-3 py-2">{u.veh}</td>
                   <td className="px-3 py-2">{u.age}</td>

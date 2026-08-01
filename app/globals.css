@@ -2,6 +2,28 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --background: #ffffff;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #3b82f6;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172a;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #3b82f6;
+}
+
 body {
   @apply bg-background text-foreground antialiased;
 }
@@ -10,20 +32,114 @@ body {
   @apply shadow-card border border-border rounded-2xl bg-card;
 }
 
+/* ---------- Authenticated app shell (dark by default, .light flips) ---------- */
+.da-app {
+  --da-bg: #0b0e13;
+  --da-panel: #12161f;
+  --da-panel-2: #171c27;
+  --da-line: #232a38;
+  --da-text: #e8ecf2;
+  --da-muted: #8b94a3;
+  --da-amber: #ffb020;
+  --da-amber-dim: rgba(255, 176, 32, 0.12);
+  --da-blue: #4a9eff;
+  --da-blue-dim: rgba(74, 158, 255, 0.12);
+  --da-green: #2ecc71;
+  --da-red: #ff5c5c;
+  --da-display: var(--font-da-display), system-ui, sans-serif;
+  --da-body: var(--font-da-body), system-ui, sans-serif;
+  --da-mono: var(--font-da-mono), ui-monospace, monospace;
+
+  --background: var(--da-bg);
+  --foreground: var(--da-text);
+  --card: var(--da-panel);
+  --card-foreground: var(--da-text);
+  --popover: var(--da-panel);
+  --popover-foreground: var(--da-text);
+  --primary: var(--da-blue);
+  --primary-foreground: #ffffff;
+  --secondary: var(--da-panel-2);
+  --secondary-foreground: var(--da-text);
+  --muted: var(--da-panel-2);
+  --muted-foreground: var(--da-muted);
+  --accent: var(--da-panel-2);
+  --accent-foreground: var(--da-text);
+  --destructive: var(--da-red);
+  --destructive-foreground: #ffffff;
+  --border: var(--da-line);
+  --input: var(--da-line);
+  --ring: var(--da-blue);
+
+  color: var(--da-text);
+  font-family: var(--da-body);
+  background: var(--da-bg);
+  min-height: 100vh;
+}
+
+.da-app.light {
+  --da-bg: #f3f6fb;
+  --da-panel: #ffffff;
+  --da-panel-2: #eef2f8;
+  --da-line: #e7ebf3;
+  --da-text: #0f172a;
+  --da-muted: #64748b;
+  --da-amber: #d97706;
+  --da-amber-dim: rgba(217, 119, 6, 0.12);
+  --da-blue: #2563eb;
+  --da-blue-dim: rgba(37, 99, 235, 0.1);
+  --da-green: #059669;
+  --da-red: #dc2626;
+
+  --background: var(--da-bg);
+  --foreground: var(--da-text);
+  --card: var(--da-panel);
+  --card-foreground: var(--da-text);
+  --popover: var(--da-panel);
+  --popover-foreground: var(--da-text);
+  --primary: var(--da-blue);
+  --primary-foreground: #ffffff;
+  --secondary: var(--da-panel-2);
+  --secondary-foreground: var(--da-text);
+  --muted: var(--da-panel-2);
+  --muted-foreground: var(--da-muted);
+  --accent: var(--da-panel-2);
+  --accent-foreground: var(--da-text);
+  --destructive: var(--da-red);
+  --destructive-foreground: #ffffff;
+  --border: var(--da-line);
+  --input: var(--da-line);
+  --ring: var(--da-blue);
+}
+
 .app-canvas {
-  @apply min-h-screen overflow-x-clip bg-[#f3f6fb];
+  min-height: 100vh;
+  overflow-x: clip;
+  background: var(--da-bg, #f3f6fb);
+  color: var(--da-text, inherit);
 }
 
 .app-panel {
-  @apply rounded-2xl border border-[#e7ebf3] bg-white shadow-[0_10px_30px_rgba(15,23,42,0.06)];
+  border-radius: 1rem;
+  border: 1px solid var(--da-line, #e7ebf3);
+  background: var(--da-panel, #ffffff);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+}
+
+.da-app:not(.light) .app-panel {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
 }
 
 .app-kicker {
-  @apply text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--da-muted, #94a3b8);
 }
 
-/* Hide the shared light root footer when the DealerACQ landing page is present */
-main:has(.da-landing) + footer {
+/* Hide the shared light root footer on marketing + authenticated shells */
+main:has(.da-landing) + footer,
+main:has(.da-app) + footer {
   display: none;
 }
 
@@ -1829,6 +1945,45 @@ main:has(.da-landing) + footer {
   color: var(--da-amber);
 }
 
+/* Light mode: #1 podium + top-3 pills use green; other ranks stay readable */
+.da-app.light .da-demo-podium-card.rank-1 {
+  border-color: color-mix(in srgb, var(--da-green) 55%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--da-green) 14%, transparent),
+    var(--da-bg) 60%
+  );
+}
+
+.da-app.light .da-demo-podium-card.rank-1 .da-demo-rank {
+  color: var(--da-green);
+}
+
+.da-app.light .da-demo-rank-pill {
+  background: #e2e8f0;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
+}
+
+.da-app.light .da-demo-rank-pill.top {
+  background: color-mix(in srgb, var(--da-green) 16%, transparent);
+  color: var(--da-green);
+  border-color: color-mix(in srgb, var(--da-green) 35%, transparent);
+}
+
+.da-app.light .da-demo-podium-stat {
+  border-top-color: var(--da-line);
+}
+
+.da-app.light .da-demo-table th,
+.da-app.light .da-demo-table td {
+  border-bottom-color: var(--da-line);
+}
+
+.da-app.light .da-demo-table th {
+  background: var(--da-panel-2);
+}
+
 .da-demo-sort {
   background: none;
   border: 0;
@@ -2169,24 +2324,9 @@ main:has(.da-landing) + footer {
 }
 
 /* ---------------------------------------------------------------------------
-   Profit Center command-center (dark Midmo / DealerACQ scoped shell)
+   Profit Center command-center (inherits --da-* from .da-app)
 --------------------------------------------------------------------------- */
 .pc-command {
-  --da-bg: #0b0e13;
-  --da-panel: #12161f;
-  --da-panel-2: #171c27;
-  --da-line: #232a38;
-  --da-text: #e8ecf2;
-  --da-muted: #8b94a3;
-  --da-amber: #ffb020;
-  --da-amber-dim: rgba(255, 176, 32, 0.12);
-  --da-blue: #4a9eff;
-  --da-green: #2ecc71;
-  --da-red: #ff5c5c;
-  --da-display: var(--font-da-display), system-ui, sans-serif;
-  --da-body: var(--font-da-body), system-ui, sans-serif;
-  --da-mono: var(--font-da-mono), ui-monospace, monospace;
-
   margin: -1.5rem -1.25rem -2rem;
   padding: 1.5rem 1.25rem 2.5rem;
   min-height: calc(100vh - 4rem);
@@ -2684,6 +2824,333 @@ main:has(.da-landing) + footer {
   .pc-bar-stats {
     grid-column: 2;
     text-align: left;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Dashboard TV command center (pace bars, dept sections)
+--------------------------------------------------------------------------- */
+.dash-tv-head {
+  flex-wrap: wrap;
+}
+
+.dash-tv-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.dash-tv-selects {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.dash-tv-selects label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dash-tv-selects label span {
+  font-family: var(--da-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--da-muted);
+}
+
+.dash-tv-selects select {
+  appearance: none;
+  background: var(--da-panel);
+  border: 1px solid var(--da-line);
+  border-radius: 8px;
+  color: var(--da-text);
+  font-family: var(--da-display);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  padding: 8px 32px 8px 12px;
+  min-width: 120px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--da-muted) 50%),
+    linear-gradient(135deg, var(--da-muted) 50%, transparent 50%);
+  background-position: calc(100% - 14px) calc(50% - 2px), calc(100% - 9px) calc(50% - 2px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+
+.dash-tv-selects select:focus {
+  outline: none;
+  border-color: var(--da-blue);
+}
+
+.dash-tv-empty,
+.dash-tv-empty-cell {
+  color: var(--da-muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 18px 8px;
+}
+
+.dash-tv-footnote {
+  margin: 12px 0 0;
+  font-family: var(--da-mono);
+  font-size: 11px;
+  color: var(--da-muted);
+}
+
+.dash-tv .da-sec-eyebrow {
+  color: var(--da-blue);
+}
+
+.dash-tv .da-demo-section-title h2 {
+  font-family: var(--da-display);
+  font-weight: 800;
+  color: var(--da-text);
+  text-transform: none;
+  letter-spacing: -0.01em;
+}
+
+.dash-dept {
+  display: grid;
+  gap: 14px;
+  background: var(--da-panel);
+  border: 1px solid var(--da-line);
+  border-radius: 10px;
+  padding: 20px 18px 18px;
+}
+
+.dash-dept-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dash-dept-head h2 {
+  font-family: var(--da-display);
+  font-weight: 800;
+  font-size: clamp(20px, 2.4vw, 28px);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  margin: 0;
+  color: var(--da-text);
+}
+
+.dash-dept-head span {
+  font-family: var(--da-mono);
+  font-size: 11px;
+  color: var(--da-muted);
+  letter-spacing: 0.04em;
+}
+
+.dash-no-goal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 20px 18px;
+  border: 1px dashed var(--da-line);
+  border-radius: 10px;
+  background: var(--da-bg);
+}
+
+.dash-no-goal p {
+  margin: 0;
+  color: var(--da-muted);
+  font-size: 14px;
+}
+
+.dash-no-goal a {
+  text-decoration: none;
+}
+
+.dash-pace-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dash-pace-kpi {
+  background: var(--da-bg);
+  border: 1px solid var(--da-line);
+  border-radius: 8px;
+  padding: 14px 12px;
+  text-align: center;
+}
+
+.dash-pace-kpi-value {
+  font-family: var(--da-display);
+  font-weight: 800;
+  font-size: clamp(22px, 2.8vw, 34px);
+  line-height: 1.05;
+  color: var(--da-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-pace-kpi-value.amber {
+  color: var(--da-amber);
+}
+.dash-pace-kpi-value.green {
+  color: var(--da-green);
+}
+.dash-pace-kpi-value.red {
+  color: var(--da-red);
+}
+.dash-pace-kpi-value.blue {
+  color: var(--da-blue);
+}
+
+.dash-pace-kpi-label {
+  margin-top: 6px;
+  font-family: var(--da-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--da-muted);
+}
+
+.dash-pace-bar-panel {
+  background: var(--da-bg);
+  border: 1px solid var(--da-line);
+  border-radius: 10px;
+  padding: 16px 18px;
+}
+
+.dash-pace-bar-title {
+  margin: 0 0 12px;
+  font-family: var(--da-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--da-muted);
+}
+
+.dash-pace-track {
+  position: relative;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(35, 42, 56, 0.9);
+  overflow: hidden;
+}
+
+.dash-pace-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #2f7fe0, var(--da-blue));
+  min-width: 0;
+  transition: width 0.35s ease;
+}
+
+.dash-pace-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  margin-left: -1.5px;
+  background: var(--da-amber);
+  box-shadow: 0 0 8px rgba(255, 176, 32, 0.55);
+  z-index: 2;
+}
+
+.dash-pace-caption,
+.dash-pace-projection {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  color: var(--da-muted);
+  font-family: var(--da-mono);
+}
+
+.dash-pace-projection b {
+  color: var(--da-text);
+  font-weight: 600;
+}
+
+.dash-pace-projection .good {
+  color: var(--da-green);
+}
+.dash-pace-projection .warn {
+  color: var(--da-red);
+}
+
+.dash-gross-panel {
+  background: var(--da-bg);
+  border: 1px solid var(--da-line);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.dash-gross-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 16px;
+}
+
+.dash-gross-stat {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--da-line);
+}
+
+.dash-gross-stat span {
+  font-family: var(--da-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--da-muted);
+}
+
+.dash-gross-stat b {
+  font-family: var(--da-display);
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--da-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-gross-stat.is-strong b {
+  color: #fff;
+  font-size: 17px;
+}
+
+.dash-mix-panel {
+  margin: 0;
+  background: var(--da-bg);
+}
+
+@media (max-width: 900px) {
+  .dash-pace-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dash-gross-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .dash-tv-controls {
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .dash-tv-selects {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .dash-pace-kpis {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .da-demo-podium-grid {
+    grid-template-columns: 1fr;
   }
 }
 

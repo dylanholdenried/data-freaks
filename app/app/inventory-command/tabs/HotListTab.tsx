@@ -21,7 +21,7 @@ export default function HotListTab({
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-slate-600">
+      <p className="text-sm text-muted-foreground">
         Hot threshold today: age ≥ <span className="font-semibold">{threshold}</span> days
         (90 − days until 1st of next month).{" "}
         <span className="font-semibold">{hot.length}</span> units · {fmtMoney(cash)} cost tied up.
@@ -29,9 +29,9 @@ export default function HotListTab({
       {hot.length === 0 ? (
         <Empty>No hot units for this snapshot.</Empty>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <div className="overflow-x-auto rounded-lg border border-border">
           <table className="min-w-full text-left text-xs">
-            <thead className="bg-slate-50 text-slate-500">
+            <thead className="bg-muted text-muted-foreground">
               <tr>
                 <th className="px-3 py-2 font-medium">Stock</th>
                 <th className="px-3 py-2 font-medium">Vehicle</th>
@@ -44,7 +44,7 @@ export default function HotListTab({
             </thead>
             <tbody>
               {hot.map((u) => (
-                <tr key={u.stk} className="border-t border-slate-100">
+                <tr key={u.stk} className="border-t border-border">
                   <td className="px-3 py-2 font-medium">{u.stk}</td>
                   <td className="px-3 py-2">{u.veh}</td>
                   <td className="px-3 py-2">{u.age}</td>
@@ -64,7 +64,7 @@ export default function HotListTab({
 
 function Empty({ children }: { children: React.ReactNode }) {
   return (
-    <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+    <p className="rounded-lg border border-dashed border-border bg-muted px-4 py-8 text-center text-sm text-muted-foreground">
       {children}
     </p>
   );

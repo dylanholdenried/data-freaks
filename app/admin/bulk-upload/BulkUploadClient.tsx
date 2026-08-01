@@ -219,10 +219,10 @@ export default function BulkUploadClient({ groups, stores, history: initialHisto
     <div className="space-y-6">
       <section className="app-panel p-5">
         <p className="app-kicker">Platform Admin</p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">
+        <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
           Bulk Deal Upload
         </h1>
-        <p className="mt-1 max-w-2xl text-sm text-slate-500">
+        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
           Import deals for one store at a time. Incomplete rows import as pending; fully complete
           rows import as closed. Confirm the preview before anything is written to Supabase. Use
           Upload history below to review past imports or unwind a committed upload.
@@ -230,13 +230,13 @@ export default function BulkUploadClient({ groups, stores, history: initialHisto
       </section>
 
       {error ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+        <div className="rounded-lg border border-[color-mix(in_srgb,var(--da-red)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-red)_12%,transparent)] px-4 py-3 text-sm text-[var(--da-red)]">
           {error}
         </div>
       ) : null}
 
       {historyMessage ? (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+        <div className="rounded-lg border border-[color-mix(in_srgb,var(--da-green)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-green)_12%,transparent)] px-4 py-3 text-sm text-[var(--da-green)]">
           {historyMessage}
         </div>
       ) : null}
@@ -249,7 +249,7 @@ export default function BulkUploadClient({ groups, stores, history: initialHisto
           <CardContent className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block space-y-1.5">
-                <span className="text-xs font-medium text-slate-500">Auto Group</span>
+                <span className="text-xs font-medium text-muted-foreground">Auto Group</span>
                 <select
                   className={sel}
                   value={groupId}
@@ -265,7 +265,7 @@ export default function BulkUploadClient({ groups, stores, history: initialHisto
                 </select>
               </label>
               <label className="block space-y-1.5">
-                <span className="text-xs font-medium text-slate-500">Store</span>
+                <span className="text-xs font-medium text-muted-foreground">Store</span>
                 <select
                   className={sel}
                   value={storeId}
@@ -283,7 +283,7 @@ export default function BulkUploadClient({ groups, stores, history: initialHisto
             </div>
 
             {selectedGroup && selectedStore ? (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              <div className="rounded-lg border border-[color-mix(in_srgb,var(--da-amber)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-amber)_12%,transparent)] px-4 py-3 text-sm text-[var(--da-amber)]">
                 <p className="font-medium">All rows will import into</p>
                 <p className="mt-0.5 text-base font-semibold">
                   {selectedGroup.name} / {selectedStore.name}
@@ -300,7 +300,7 @@ export default function BulkUploadClient({ groups, stores, history: initialHisto
             <CardTitle className="text-base">2. CSV file</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-muted-foreground">
               Use the standard template. Blank optional fields import as{" "}
               <span className="font-medium">pending</span>; complete rows as{" "}
               <span className="font-medium">closed</span>. Dates accept YYYY-MM-DD, M/D/YY, or
@@ -326,10 +326,10 @@ export default function BulkUploadClient({ groups, stores, history: initialHisto
                 />
                 <span
                   className={
-                    "inline-flex h-10 items-center rounded-md bg-slate-900 px-4 text-sm font-medium text-white " +
+                    "inline-flex h-10 items-center rounded-md bg-[var(--da-text)] px-4 text-sm font-medium text-[var(--da-bg)] " +
                     (!groupId || !storeId || pending
                       ? "cursor-not-allowed opacity-50"
-                      : "hover:bg-slate-800")
+                      : "hover:opacity-90")
                   }
                 >
                   {pending ? (
@@ -351,7 +351,7 @@ export default function BulkUploadClient({ groups, stores, history: initialHisto
             <CardTitle className="text-base">3. Review & confirm</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="sticky top-0 z-10 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            <div className="sticky top-0 z-10 rounded-lg border border-[color-mix(in_srgb,var(--da-amber)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-amber)_12%,transparent)] px-4 py-3 text-sm text-[var(--da-amber)]">
               Importing into{" "}
               <span className="font-semibold">
                 {preview.dealerGroupName} / {preview.storeName}
@@ -366,15 +366,15 @@ export default function BulkUploadClient({ groups, stores, history: initialHisto
               <span className="text-emerald-700">
                 Valid: <strong>{preview.validCount}</strong>
               </span>
-              <span className="text-red-700">
+              <span className="text-[var(--da-red)]">
                 Errors: <strong>{preview.errorCount}</strong>
               </span>
             </div>
 
             {preview.willCreate.length > 0 ? (
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
-                <p className="font-medium text-slate-800">Will create on confirm</p>
-                <ul className="mt-2 list-disc space-y-1 pl-5 text-slate-600">
+              <div className="rounded-lg border border-border bg-muted px-4 py-3 text-sm">
+                <p className="font-medium text-foreground">Will create on confirm</p>
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
                   {preview.willCreate.map((w) => (
                     <li key={w}>{w}</li>
                   ))}
@@ -383,15 +383,15 @@ export default function BulkUploadClient({ groups, stores, history: initialHisto
             ) : null}
 
             {preview.errorCount > 0 ? (
-              <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              <div className="flex items-start gap-2 rounded-lg border border-[color-mix(in_srgb,var(--da-red)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-red)_12%,transparent)] px-4 py-3 text-sm text-[var(--da-red)]">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                 <p>Fix the CSV and re-upload. Confirm is disabled until every row is valid.</p>
               </div>
             ) : null}
 
-            <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <div className="overflow-x-auto rounded-lg border border-border">
               <table className="min-w-full text-left text-sm">
-                <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                <thead className="bg-muted text-xs uppercase text-muted-foreground">
                   <tr>
                     <th className="px-3 py-2">Row</th>
                     <th className="px-3 py-2">Sale date</th>
@@ -407,8 +407,8 @@ export default function BulkUploadClient({ groups, stores, history: initialHisto
                       key={r.rowNumber}
                       className={
                         r.isValid
-                          ? "border-t border-slate-100"
-                          : "border-t border-red-100 bg-red-50/60"
+                          ? "border-t border-border"
+                          : "border-t border-[color-mix(in_srgb,var(--da-red)_25%,transparent)] bg-[color-mix(in_srgb,var(--da-red)_10%,transparent)]"
                       }
                     >
                       <td className="px-3 py-2 tabular-nums">{r.rowNumber}</td>
@@ -419,10 +419,10 @@ export default function BulkUploadClient({ groups, stores, history: initialHisto
                         {r.isValid ? (
                           <span className="text-emerald-700">Valid</span>
                         ) : (
-                          <span className="text-red-700">Error</span>
+                          <span className="text-[var(--da-red)]">Error</span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-xs text-slate-600">
+                      <td className="px-3 py-2 text-xs text-muted-foreground">
                         {[...r.errors, ...r.warnings].join("; ") || "—"}
                       </td>
                     </tr>
@@ -458,7 +458,7 @@ export default function BulkUploadClient({ groups, stores, history: initialHisto
             <CardTitle className="text-base">Import complete</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+            <div className="flex items-start gap-2 rounded-lg border border-[color-mix(in_srgb,var(--da-green)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-green)_12%,transparent)] px-4 py-3 text-sm text-[var(--da-green)]">
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
               <div>
                 <p className="font-medium">
@@ -467,7 +467,7 @@ export default function BulkUploadClient({ groups, stores, history: initialHisto
                   {preview.storeName}
                 </p>
                 {result.created_refs > 0 ? (
-                  <p className="mt-1 text-emerald-800">
+                  <p className="mt-1 text-[var(--da-green)]">
                     Created {result.created_refs} missing roster item
                     {result.created_refs === 1 ? "" : "s"} (salespeople / F&amp;I / sources).
                   </p>
@@ -494,16 +494,16 @@ export default function BulkUploadClient({ groups, stores, history: initialHisto
           <CardTitle className="text-base">Upload history</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-muted-foreground">
             Recent import batches. Unwind permanently deletes deals from that upload (trades and
             notes cascade). Salespeople / F&amp;I created during import are kept.
           </p>
           {initialHistory.length === 0 ? (
-            <p className="text-sm text-slate-500">No uploads yet.</p>
+            <p className="text-sm text-muted-foreground">No uploads yet.</p>
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <div className="overflow-x-auto rounded-lg border border-border">
               <table className="min-w-full text-left text-sm">
-                <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                <thead className="bg-muted text-xs uppercase text-muted-foreground">
                   <tr>
                     <th className="px-3 py-2">Uploaded</th>
                     <th className="px-3 py-2">File</th>
@@ -515,18 +515,18 @@ export default function BulkUploadClient({ groups, stores, history: initialHisto
                 </thead>
                 <tbody>
                   {initialHistory.map((b) => (
-                    <tr key={b.id} className="border-t border-slate-100">
-                      <td className="whitespace-nowrap px-3 py-2 text-slate-600">
+                    <tr key={b.id} className="border-t border-border">
+                      <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
                         {formatWhen(b.createdAt)}
                       </td>
-                      <td className="px-3 py-2 font-medium text-slate-800">{b.fileName}</td>
-                      <td className="px-3 py-2 text-slate-600">
+                      <td className="px-3 py-2 font-medium text-foreground">{b.fileName}</td>
+                      <td className="px-3 py-2 text-muted-foreground">
                         {b.dealerGroupName} / {b.storeName}
                       </td>
-                      <td className="px-3 py-2 tabular-nums text-slate-600">
+                      <td className="px-3 py-2 tabular-nums text-muted-foreground">
                         {b.validCount}/{b.rowCount}
                         {b.linkedDealCount > 0 ? (
-                          <span className="ml-1 text-xs text-slate-400">
+                          <span className="ml-1 text-xs text-muted-foreground">
                             ({b.linkedDealCount} linked)
                           </span>
                         ) : null}
@@ -539,17 +539,17 @@ export default function BulkUploadClient({ groups, stores, history: initialHisto
                               : b.status === "unwound"
                                 ? "text-amber-700"
                                 : b.status === "cancelled"
-                                  ? "text-slate-500"
-                                  : "text-slate-700"
+                                  ? "text-muted-foreground"
+                                  : "text-foreground"
                           }
                         >
                           {statusLabel(b.status)}
                         </span>
                         {b.status === "committed" && b.committedAt ? (
-                          <div className="text-xs text-slate-400">{formatWhen(b.committedAt)}</div>
+                          <div className="text-xs text-muted-foreground">{formatWhen(b.committedAt)}</div>
                         ) : null}
                         {b.status === "unwound" && b.unwoundAt ? (
-                          <div className="text-xs text-slate-400">{formatWhen(b.unwoundAt)}</div>
+                          <div className="text-xs text-muted-foreground">{formatWhen(b.unwoundAt)}</div>
                         ) : null}
                       </td>
                       <td className="px-3 py-2">
@@ -569,7 +569,7 @@ export default function BulkUploadClient({ groups, stores, history: initialHisto
                             Unwind
                           </Button>
                         ) : (
-                          <span className="text-xs text-slate-400">—</span>
+                          <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </td>
                     </tr>

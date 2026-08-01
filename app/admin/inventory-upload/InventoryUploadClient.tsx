@@ -96,8 +96,8 @@ export default function InventoryUploadClient({
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Inventory upload</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-xl font-semibold text-foreground">Inventory upload</h1>
+          <p className="text-sm text-muted-foreground">
             Upload a vAuto Merchandising export (.xls) or CSV template — one store per file.
           </p>
         </div>
@@ -114,7 +114,7 @@ export default function InventoryUploadClient({
         <CardContent>
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block text-xs font-medium text-slate-600">
+              <label className="block text-xs font-medium text-muted-foreground">
                 Auto Group
                 <select
                   className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -133,7 +133,7 @@ export default function InventoryUploadClient({
                   ))}
                 </select>
               </label>
-              <label className="block text-xs font-medium text-slate-600">
+              <label className="block text-xs font-medium text-muted-foreground">
                 Store
                 <select
                   className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -150,7 +150,7 @@ export default function InventoryUploadClient({
                   ))}
                 </select>
               </label>
-              <label className="block text-xs font-medium text-slate-600">
+              <label className="block text-xs font-medium text-muted-foreground">
                 Snapshot date
                 <input
                   type="date"
@@ -160,7 +160,7 @@ export default function InventoryUploadClient({
                   required
                 />
               </label>
-              <label className="block text-xs font-medium text-slate-600">
+              <label className="block text-xs font-medium text-muted-foreground">
                 Export file
                 <input
                   type="file"
@@ -173,12 +173,12 @@ export default function InventoryUploadClient({
             </div>
 
             {error ? (
-              <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <p className="rounded-md border border-[color-mix(in_srgb,var(--da-red)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-red)_12%,transparent)] px-3 py-2 text-sm text-[var(--da-red)]">
                 {error}
               </p>
             ) : null}
             {result ? (
-              <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              <p className="rounded-md border border-[color-mix(in_srgb,var(--da-green)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-green)_12%,transparent)] px-3 py-2 text-sm text-[var(--da-green)]">
                 {result.replaced ? "Replaced" : "Created"} snapshot for {result.snapshotDate}:{" "}
                 {result.unitCount} units, {result.arrivals} arrivals, {result.exits} exits,{" "}
                 {result.priceActions} price actions.
@@ -203,11 +203,11 @@ export default function InventoryUploadClient({
         </CardHeader>
         <CardContent>
           {recent.length === 0 ? (
-            <p className="text-sm text-slate-500">No uploads yet.</p>
+            <p className="text-sm text-muted-foreground">No uploads yet.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-xs">
-                <thead className="text-slate-500">
+                <thead className="text-muted-foreground">
                   <tr>
                     <th className="py-2 pr-3 font-medium">Date</th>
                     <th className="py-2 pr-3 font-medium">Store</th>
@@ -218,7 +218,7 @@ export default function InventoryUploadClient({
                 </thead>
                 <tbody>
                   {recent.map((r) => (
-                    <tr key={r.id} className="border-t border-slate-100">
+                    <tr key={r.id} className="border-t border-border">
                       <td className="py-2 pr-3">{r.snapshot_date}</td>
                       <td className="py-2 pr-3">{storeNameById.get(r.store_id) ?? r.store_id}</td>
                       <td className="py-2 pr-3">{r.source_filename ?? "—"}</td>

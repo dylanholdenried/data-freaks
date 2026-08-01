@@ -2,7 +2,6 @@
 
 import { useMemo, useState, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Archivo, IBM_Plex_Mono, Inter } from "next/font/google";
 import {
   aggregateByDimension,
   buildTradesByDeal,
@@ -32,27 +31,6 @@ import {
   type BuyBoxSettings,
 } from "@/lib/profit-center/buyBox";
 import { cn } from "@/lib/utils";
-
-const archivo = Archivo({
-  subsets: ["latin"],
-  weight: ["500", "600", "700", "800"],
-  variable: "--font-da-display",
-  display: "swap",
-});
-
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-da-body",
-  display: "swap",
-});
-
-const ibmPlexMono = IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-da-mono",
-  display: "swap",
-});
 
 type Store = { id: string; name: string };
 type Salesperson = { id: string; name: string; store_id: string };
@@ -436,14 +414,7 @@ export default function ProfitCenterClient({
     filtered.length === 0 ? null : (tradeDealCount / filtered.length) * 100;
 
   return (
-    <div
-      className={cn(
-        "pc-command space-y-4",
-        archivo.variable,
-        inter.variable,
-        ibmPlexMono.variable
-      )}
-    >
+    <div className={cn("pc-command space-y-4")}>
       <header className="pc-head">
         <div>
           <p className="pc-kicker">Acquisition intelligence</p>

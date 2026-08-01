@@ -54,7 +54,7 @@ export default async function InventoryCommandPage({
   const stores = await getAccessibleStores(supabase, profile);
   if (stores.length === 0) {
     return (
-      <p className="text-sm text-slate-500">No stores available for your account.</p>
+      <p className="text-sm text-muted-foreground">No stores available for your account.</p>
     );
   }
 

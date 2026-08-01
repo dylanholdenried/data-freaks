@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Menu, X } from "lucide-react";
 
 const linkClass =
-  "block rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50";
+  "block rounded-lg px-3 py-2.5 text-sm font-medium text-foreground hover:bg-muted";
 
 const links = [
   { href: "/admin/requests", label: "Requests" },
@@ -47,7 +47,7 @@ export default function AdminMobileMenu() {
         aria-haspopup="dialog"
         aria-controls={open ? titleId : undefined}
         onClick={() => setOpen(true)}
-        className="flex cursor-pointer items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-sm"
+        className="flex cursor-pointer items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-foreground shadow-sm"
       >
         <Menu className="h-3.5 w-3.5" />
         Menu
@@ -58,7 +58,7 @@ export default function AdminMobileMenu() {
           <button
             type="button"
             aria-label="Close menu"
-            className="absolute inset-0 bg-slate-900/40"
+            className="absolute inset-0 bg-black/50"
             onClick={close}
           />
           <aside
@@ -66,15 +66,15 @@ export default function AdminMobileMenu() {
             role="dialog"
             aria-modal="true"
             aria-label="Admin navigation"
-            className="absolute inset-y-0 left-0 flex w-[min(100%,18rem)] max-w-full flex-col bg-white shadow-xl"
+            className="absolute inset-y-0 left-0 flex w-[min(100%,18rem)] max-w-full flex-col border-r border-border bg-card shadow-xl"
           >
-            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-              <p className="text-sm font-semibold text-slate-900">Platform Admin</p>
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <p className="text-sm font-semibold text-foreground">Platform Admin</p>
               <button
                 type="button"
                 onClick={close}
                 aria-label="Close menu"
-                className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
               >
                 <X className="h-4 w-4" />
               </button>

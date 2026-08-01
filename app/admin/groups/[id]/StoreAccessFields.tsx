@@ -30,7 +30,7 @@ export default function StoreAccessFields({
       {includeRoleSelect ? (
         <div>
           <label
-            className="mb-1 block text-xs font-medium text-slate-600"
+            className="mb-1 block text-xs font-medium text-muted-foreground"
             htmlFor={`${idPrefix}_role`}
           >
             Role
@@ -50,7 +50,7 @@ export default function StoreAccessFields({
 
       {role === "store_admin" ? (
         <fieldset className="rounded-md border border-border p-3">
-          <legend className="px-1 text-xs font-medium text-slate-600">Assigned stores</legend>
+          <legend className="px-1 text-xs font-medium text-muted-foreground">Assigned stores</legend>
           {stores.length === 0 ? (
             <p className="text-xs text-muted-foreground">
               Add stores to this auto group before assigning a store admin.
@@ -58,13 +58,13 @@ export default function StoreAccessFields({
           ) : (
             <div className="grid gap-2 sm:grid-cols-2">
               {stores.map((store) => (
-                <label key={store.id} className="flex items-center gap-2 text-sm text-slate-700">
+                <label key={store.id} className="flex items-center gap-2 text-sm text-foreground">
                   <input
                     type="checkbox"
                     name="store_ids"
                     value={store.id}
                     defaultChecked={defaultStoreIds.includes(store.id)}
-                    className="h-4 w-4 rounded border-slate-300"
+                    className="h-4 w-4 rounded border-border"
                   />
                   {store.name}
                 </label>
@@ -94,7 +94,7 @@ export function PhoneField({
 }) {
   return (
     <div>
-      <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor={id}>
+      <label className="mb-1 block text-xs font-medium text-muted-foreground" htmlFor={id}>
         Phone
       </label>
       <Input

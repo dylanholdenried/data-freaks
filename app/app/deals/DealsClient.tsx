@@ -64,7 +64,7 @@ const STATUS_OPTIONS: { value: StatusFilter; label: string; activeClass: string 
   { value: "pending",   label: "Pending",   activeClass: "bg-amber-500 text-white" },
   { value: "delivered", label: "Delivered", activeClass: "bg-blue-500 text-white" },
   { value: "closed",    label: "Closed",    activeClass: "bg-emerald-600 text-white" },
-  { value: "dead",      label: "Dead",      activeClass: "bg-slate-500 text-white" },
+  { value: "dead",      label: "Dead",      activeClass: "bg-muted0 text-white" },
   { value: "unwound",   label: "Unwound",   activeClass: "bg-red-500 text-white" },
 ];
 
@@ -102,16 +102,20 @@ const fmt$ = (v: number) =>
 
 function StatusBadge({ status }: { status: string }) {
   const cfg: Record<string, string> = {
-    pending:   "bg-amber-100 text-amber-700",
-    delivered: "bg-blue-100 text-blue-700",
-    closed:    "bg-emerald-100 text-emerald-700",
-    dead:      "bg-slate-100 text-slate-600",
-    unwound:   "bg-red-100 text-red-700",
+    pending:
+      "bg-[color-mix(in_srgb,var(--da-amber)_18%,transparent)] text-[var(--da-amber)]",
+    delivered:
+      "bg-[color-mix(in_srgb,var(--da-blue)_18%,transparent)] text-[var(--da-blue)]",
+    closed:
+      "bg-[color-mix(in_srgb,var(--da-green)_18%,transparent)] text-[var(--da-green)]",
+    dead: "bg-muted text-muted-foreground",
+    unwound:
+      "bg-[color-mix(in_srgb,var(--da-red)_18%,transparent)] text-[var(--da-red)]",
   };
   return (
     <span
       className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${
-        cfg[status] ?? "bg-slate-100 text-slate-600"
+        cfg[status] ?? "bg-muted text-muted-foreground"
       }`}
     >
       {status}
@@ -123,7 +127,7 @@ function Pill({
   label,
   active,
   onClick,
-  activeClass = "bg-blue-600 text-white",
+  activeClass = "bg-[var(--da-blue)] text-white",
 }: {
   label: string;
   active: boolean;
@@ -135,7 +139,7 @@ function Pill({
       type="button"
       onClick={onClick}
       className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-        active ? activeClass : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+        active ? activeClass : "bg-muted text-muted-foreground hover:bg-[var(--da-line)]"
       }`}
     >
       {label}
@@ -165,7 +169,7 @@ function SortHeader({
       type="button"
       onClick={() => onSort(col)}
       className={`flex w-full items-center ${right ? "justify-end" : ""} text-xs font-semibold uppercase tracking-wide transition-colors ${
-        active ? "text-blue-600" : "text-slate-400 hover:text-slate-600"
+        active ? "text-blue-600" : "text-muted-foreground hover:text-muted-foreground"
       }`}
     >
       {label}{indicator}
@@ -333,16 +337,16 @@ export default function DealsClient({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="app-kicker">Sales Registry</p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
               Sales Registry
             </h1>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-muted-foreground">
               {deals.length} total deals · click any row to open and update
             </p>
           </div>
           <Button asChild>
             <Link href="/app/deals/new" prefetch>
-              + Log Transaction
+              + New Deal
             </Link>
           </Button>
         </div>
@@ -420,7 +424,7 @@ export default function DealsClient({
               className={`shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
                 allTime
                   ? "bg-blue-600 text-white"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  : "bg-muted text-muted-foreground hover:bg-[var(--da-line)]"
               }`}
             >
               All time
@@ -480,30 +484,30 @@ export default function DealsClient({
       </section>
 
       {/* Table */}
-      <section className="w-full min-w-0 rounded-2xl border border-[#e7ebf3] bg-white shadow-[0_10px_30px_rgba(15,23,42,0.06)]">
+      <section className="w-full min-w-0 rounded-2xl border border-border bg-card shadow-[0_10px_30px_rgba(15,23,42,0.06)]">
         {/* Count bar */}
-        <div className="flex items-center justify-between border-b border-[#edf1f7] bg-[#f8fafd] px-5 py-3">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+        <div className="flex items-center justify-between border-b border-border bg-muted px-5 py-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
             Deals
           </p>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted-foreground">
             Showing {filteredDeals.length} of {deals.length}
           </p>
         </div>
 
         {/* Column headers — xl+ only */}
         <div
-          className={`hidden border-b border-[#edf1f7] bg-[#f8fafd] px-5 py-2 xl:grid ${TGRID}`}
+          className={`hidden border-b border-border bg-muted px-5 py-2 xl:grid ${TGRID}`}
         >
           <SortHeader col="sale_date" label="Date" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
           <SortHeader col="stock_number" label="Stock #" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
           <SortHeader col="customer_last_name" label="Customer" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Vehicle</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Vehicle</span>
           {showStore && (
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Store</span>
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Store</span>
           )}
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Dept</span>
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Salesperson</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Dept</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Salesperson</span>
           <SortHeader col="status" label="Status" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
           <SortHeader col="front_profit" label="Front" right sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
           <SortHeader col="back_profit" label="Back" right sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
@@ -512,9 +516,9 @@ export default function DealsClient({
         </div>
 
         {/* Rows */}
-        <div className="divide-y divide-[#edf1f7]">
+        <div className="divide-y divide-border">
           {filteredDeals.length === 0 ? (
-            <p className="px-5 py-10 text-center text-sm text-slate-400">
+            <p className="px-5 py-10 text-center text-sm text-muted-foreground">
               No deals match these filters.
             </p>
           ) : (
@@ -533,10 +537,10 @@ export default function DealsClient({
                   key={deal.id}
                   href={`/app/deals/${deal.id}/edit`}
                   prefetch
-                  className={`group flex min-w-0 flex-col px-5 py-3 transition-colors hover:bg-[#f5f8ff] xl:grid ${TGRID} xl:items-center`}
+                  className={`group flex min-w-0 flex-col px-5 py-3 transition-colors hover:bg-muted xl:grid ${TGRID} xl:items-center`}
                 >
                   {/* Date — always visible, grid cell 1 */}
-                  <span className="text-sm text-slate-400">
+                  <span className="text-sm text-muted-foreground">
                     {formatDate(deal.sale_date)}
                   </span>
 
@@ -546,23 +550,23 @@ export default function DealsClient({
                   </span>
 
                   {/* Customer — always visible, grid cell 3 */}
-                  <span className="min-w-0 truncate text-sm font-medium text-slate-800">
+                  <span className="min-w-0 truncate text-sm font-medium text-foreground">
                     {deal.customer_last_name || "—"}
                   </span>
 
                   {/* Vehicle — always visible, grid cell 4 (1fr) */}
-                  <span className="min-w-0 truncate text-sm text-slate-600">
+                  <span className="min-w-0 truncate text-sm text-muted-foreground">
                     {deal.vehicle_year} {deal.vehicle_make} {deal.vehicle_model}
                   </span>
 
                   {/* Stacked summary — hidden at xl+, not a grid cell */}
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-400 xl:hidden">
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground xl:hidden">
                     <StatusBadge status={deal.status} />
                     {showStore && <span>{storeName}</span>}
                     <span>{deptName}</span>
                     {spNames.length > 0 && <span>{spNames.join(", ")}</span>}
                     {totalGross !== null && (
-                      <span className="font-medium text-slate-600">
+                      <span className="font-medium text-muted-foreground">
                         {fmt$(totalGross)}
                       </span>
                     )}
@@ -570,18 +574,18 @@ export default function DealsClient({
 
                   {/* Store — xl+, Both mode only */}
                   {showStore && (
-                    <span className="hidden text-sm text-slate-500 xl:block">
+                    <span className="hidden text-sm text-muted-foreground xl:block">
                       {storeName}
                     </span>
                   )}
 
                   {/* Dept */}
-                  <span className="hidden text-sm text-slate-500 xl:block">
+                  <span className="hidden text-sm text-muted-foreground xl:block">
                     {deptName}
                   </span>
 
                   {/* Salesperson(s) */}
-                  <span className="hidden text-sm text-slate-500 xl:block">
+                  <span className="hidden text-sm text-muted-foreground xl:block">
                     {spNames.length > 0 ? spNames.join(", ") : "—"}
                   </span>
 
@@ -591,22 +595,22 @@ export default function DealsClient({
                   </span>
 
                   {/* Front */}
-                  <span className="hidden text-right text-sm tabular-nums text-slate-500 xl:block">
+                  <span className="hidden text-right text-sm tabular-nums text-muted-foreground xl:block">
                     {deal.front_profit !== null ? fmt$(deal.front_profit) : "—"}
                   </span>
 
                   {/* Back */}
-                  <span className="hidden text-right text-sm tabular-nums text-slate-500 xl:block">
+                  <span className="hidden text-right text-sm tabular-nums text-muted-foreground xl:block">
                     {deal.back_profit !== null ? fmt$(deal.back_profit) : "—"}
                   </span>
 
                   {/* Total */}
-                  <span className="hidden text-right text-sm tabular-nums font-semibold text-slate-800 xl:block">
+                  <span className="hidden text-right text-sm tabular-nums font-semibold text-foreground xl:block">
                     {totalGross !== null ? fmt$(totalGross) : "—"}
                   </span>
 
                   {/* Chevron */}
-                  <ChevronRight className="hidden h-4 w-4 text-slate-300 transition-colors group-hover:text-blue-400 xl:block" />
+                  <ChevronRight className="hidden h-4 w-4 text-muted-foreground transition-colors group-hover:text-blue-400 xl:block" />
                 </Link>
               );
             })

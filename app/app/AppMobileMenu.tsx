@@ -2,22 +2,44 @@
 
 import { useEffect, useId, useState } from "react";
 import Link from "next/link";
-import { Menu, X } from "lucide-react";
-import { canAccessAppNav, type PlanTier } from "@/lib/plan-access";
+import { Lock, Menu, X } from "lucide-react";
+import { navAccessState, type PlanTier } from "@/lib/plan-access";
+import { cn } from "@/lib/utils";
 import AutoGroupSwitcher, { type AutoGroupOption } from "./AutoGroupSwitcher";
 
 const linkClass =
-  "block rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50";
+  "flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-foreground hover:bg-muted";
+const linkLocked =
+  "flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground/80 hover:bg-muted";
 
-const links = [
-  { href: "/app/dashboard", label: "Dashboard" },
-  { href: "/app/profit-center", label: "Profit Center" },
-  { href: "/app/inventory-command", label: "Inventory Command" },
-  { href: "/app/deals", label: "Sales Registry" },
-  { href: "/app/deals/new", label: "Log Transaction" },
-  { href: "/app/setup", label: "Setup & Config" },
-  { href: "/app/calendar", label: "Pace Calendar" },
-] as const;
+type NavItem = { href: string; label: string };
+
+const SECTIONS: { title: string; links: NavItem[] }[] = [
+  {
+    title: "Log",
+    links: [
+      { href: "/app/dashboard", label: "Dashboard" },
+      { href: "/app/deals", label: "Sales Registry" },
+      { href: "/app/setup", label: "Setup & Config" },
+      { href: "/app/calendar", label: "Pace Calendar" },
+      { href: "/app/deals/new", label: "New Deal" },
+    ],
+  },
+  {
+    title: "Analyze",
+    links: [
+      { href: "/app/salesperson-leaderboard", label: "Salesperson Leaderboard" },
+      { href: "/app/profit-center", label: "Profit Center" },
+    ],
+  },
+  {
+    title: "Advise",
+    links: [
+      { href: "/app/inventory-command", label: "Inventory Command" },
+      { href: "/app/buy-box", label: "Buy-Box" },
+    ],
+  },
+];
 
 export default function AppMobileMenu({
   isPlatformAdmin = false,
@@ -32,7 +54,6 @@ export default function AppMobileMenu({
 }) {
   const [open, setOpen] = useState(false);
   const titleId = useId();
-  const visible = links.filter((l) => canAccessAppNav(plan, l.href));
 
   useEffect(() => {
     if (!open) return;
@@ -63,7 +84,7 @@ export default function AppMobileMenu({
         aria-haspopup="dialog"
         aria-controls={open ? titleId : undefined}
         onClick={() => setOpen(true)}
-        className="flex cursor-pointer items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-sm"
+        className="flex cursor-pointer items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-foreground shadow-sm"
       >
         <Menu className="h-3.5 w-3.5" />
         Menu
@@ -74,7 +95,7 @@ export default function AppMobileMenu({
           <button
             type="button"
             aria-label="Close menu"
-            className="absolute inset-0 bg-slate-900/40"
+            className="absolute inset-0 bg-black/50"
             onClick={close}
           />
           <aside
@@ -82,21 +103,21 @@ export default function AppMobileMenu({
             role="dialog"
             aria-modal="true"
             aria-label="App navigation"
-            className="absolute inset-y-0 left-0 flex w-[min(100%,18rem)] max-w-full flex-col bg-white shadow-xl"
+            className="absolute inset-y-0 left-0 flex w-[min(100%,18rem)] max-w-full flex-col border-r border-border bg-card shadow-xl"
           >
-            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-              <p className="text-sm font-semibold text-slate-900">Menu</p>
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <p className="text-sm font-semibold text-foreground">Menu</p>
               <button
                 type="button"
                 onClick={close}
                 aria-label="Close menu"
-                className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
             {isPlatformAdmin ? (
-              <div className="border-b border-slate-200 py-3">
+              <div className="border-b border-border py-3">
                 <AutoGroupSwitcher
                   groups={groups}
                   selectedGroupId={selectedGroupId}
@@ -104,18 +125,38 @@ export default function AppMobileMenu({
                 />
               </div>
             ) : null}
-            <nav className="flex-1 overflow-y-auto p-3">
-              {visible.map(({ href, label }) => (
-                <Link key={href} href={href} className={linkClass} prefetch onClick={close}>
-                  {label}
-                </Link>
+            <nav className="flex-1 space-y-5 overflow-y-auto p-3">
+              {SECTIONS.map(({ title, links }) => (
+                <div key={title} className="space-y-1">
+                  <p className="px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                    {title}
+                  </p>
+                  {links.map(({ href, label }) => {
+                    const locked = navAccessState(plan, href) === "locked";
+                    return (
+                      <Link
+                        key={href}
+                        href={href}
+                        className={cn(locked ? linkLocked : linkClass)}
+                        prefetch
+                        onClick={close}
+                        title={locked ? `Requires ${title} plan` : undefined}
+                      >
+                        <span className="min-w-0 flex-1 truncate">{label}</span>
+                        {locked ? <Lock className="h-3.5 w-3.5 shrink-0 opacity-80" /> : null}
+                      </Link>
+                    );
+                  })}
+                </div>
               ))}
-              {isPlatformAdmin ? (
+            </nav>
+            {isPlatformAdmin ? (
+              <div className="border-t border-border p-3">
                 <Link href="/admin" className={linkClass} prefetch onClick={close}>
                   Platform Admin
                 </Link>
-              ) : null}
-            </nav>
+              </div>
+            ) : null}
           </aside>
         </div>
       ) : null}

@@ -18,13 +18,13 @@ function Kpi({
   return (
     <Card className={warn ? "border-amber-300" : undefined}>
       <CardHeader className="pb-1 pt-4">
-        <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+        <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           {label}
         </CardTitle>
       </CardHeader>
       <CardContent className="pb-4">
-        <div className="text-2xl font-semibold text-slate-900">{value}</div>
-        {target ? <p className="mt-0.5 text-xs text-slate-400">Target {target}</p> : null}
+        <div className="text-2xl font-semibold text-foreground">{value}</div>
+        {target ? <p className="mt-0.5 text-xs text-muted-foreground">Target {target}</p> : null}
       </CardContent>
     </Card>
   );
@@ -97,10 +97,10 @@ export default function OverviewTab({
 
       {hotUnits.length > 0 ? (
         <div>
-          <h3 className="mb-2 text-sm font-semibold text-slate-800">Hot list preview</h3>
-          <div className="overflow-x-auto rounded-lg border border-slate-200">
+          <h3 className="mb-2 text-sm font-semibold text-foreground">Hot list preview</h3>
+          <div className="overflow-x-auto rounded-lg border border-border">
             <table className="min-w-full text-left text-xs">
-              <thead className="bg-slate-50 text-slate-500">
+              <thead className="bg-muted text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2 font-medium">Stock</th>
                   <th className="px-3 py-2 font-medium">Vehicle</th>
@@ -110,9 +110,9 @@ export default function OverviewTab({
               </thead>
               <tbody>
                 {hotUnits.slice(0, 8).map((u) => (
-                  <tr key={u.stk} className="border-t border-slate-100">
-                    <td className="px-3 py-2 font-medium text-slate-800">{u.stk}</td>
-                    <td className="px-3 py-2 text-slate-600">{u.veh}</td>
+                  <tr key={u.stk} className="border-t border-border">
+                    <td className="px-3 py-2 font-medium text-foreground">{u.stk}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{u.veh}</td>
                     <td className="px-3 py-2">{u.age}</td>
                     <td className="px-3 py-2">{fmtMoney(u.cost)}</td>
                   </tr>
