@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
+import { isPlatformStaff } from "@/lib/roles";
 
 export type StoreAccessProfile = {
   id: string;
@@ -14,7 +15,7 @@ export type AccessibleStore = {
 
 /**
  * Resolve stores the current profile may view/edit.
- * - platform_admin / group_admin → all stores in the effective dealer group
+ * - owner/platform_admin / group_admin → all stores in the effective dealer group
  * - store_admin → stores listed in user_store_access (within that group)
  */
 export async function getAccessibleStores(
@@ -26,7 +27,7 @@ export async function getAccessibleStores(
   const dealerGroupId = await getEffectiveDealerGroupId(profile);
   if (!dealerGroupId) return [];
 
-  if (profile.role === "platform_admin" || profile.role === "group_admin") {
+  if (isPlatformStaff(profile.role) || profile.role === "group_admin") {
     const { data, error } = await supabase
       .from("stores")
       .select("id,name")

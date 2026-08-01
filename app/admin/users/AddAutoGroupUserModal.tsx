@@ -1,28 +1,35 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { createUserInGroup } from "@/app/admin/actions";
-import StoreAccessFields, { PhoneField } from "./StoreAccessFields";
-import type { SaveResult } from "./FormWithSaveToast";
+import StoreAccessFields, { PhoneField } from "@/app/admin/groups/[id]/StoreAccessFields";
+import type { SaveResult } from "@/app/admin/groups/[id]/FormWithSaveToast";
+import { createAutoGroupUserFromUsersPage } from "./actions";
 
-type StoreOption = { id: string; name: string };
+type StoreOption = { id: string; name: string; dealer_group_id: string };
+type GroupOption = { id: string; name: string };
 
 type Props = {
-  dealerGroupId: string;
+  groups: GroupOption[];
   stores: StoreOption[];
 };
 
-export default function AddUserModal({ dealerGroupId, stores }: Props) {
+export default function AddAutoGroupUserModal({ groups, stores }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [groupId, setGroupId] = useState(groups[0]?.id ?? "");
   const [toast, setToast] = useState<{ text: string; warning?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const timerRef = useRef<number | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+
+  const groupStores = useMemo(
+    () => stores.filter((s) => s.dealer_group_id === groupId).map((s) => ({ id: s.id, name: s.name })),
+    [stores, groupId]
+  );
 
   useEffect(() => {
     return () => {
@@ -40,6 +47,7 @@ export default function AddUserModal({ dealerGroupId, stores }: Props) {
     setOpen(false);
     setError(null);
     formRef.current?.reset();
+    setGroupId(groups[0]?.id ?? "");
   }
 
   return (
@@ -57,8 +65,8 @@ export default function AddUserModal({ dealerGroupId, stores }: Props) {
         </div>
       ) : null}
 
-      <Button type="button" size="sm" onClick={() => setOpen(true)}>
-        Add User
+      <Button type="button" size="sm" onClick={() => setOpen(true)} disabled={groups.length === 0}>
+        + Add User
       </Button>
 
       {open ? (
@@ -66,14 +74,14 @@ export default function AddUserModal({ dealerGroupId, stores }: Props) {
           <div
             role="dialog"
             aria-modal="true"
-            aria-labelledby="add-user-title"
+            aria-labelledby="add-ag-user-title"
             className="app-panel max-h-[90vh] w-full max-w-lg overflow-y-auto p-6"
           >
-            <h2 id="add-user-title" className="text-lg font-semibold tracking-tight text-foreground">
-              Add User
+            <h2 id="add-ag-user-title" className="text-lg font-semibold tracking-tight text-foreground">
+              Add Auto Group User
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Create an account for this auto group. They will receive an email to set their password
+              Create an account for an auto group. They will receive an email to set their password
               and log in.
             </p>
 
@@ -84,7 +92,9 @@ export default function AddUserModal({ dealerGroupId, stores }: Props) {
                 setError(null);
                 startTransition(async () => {
                   try {
-                    const result = (await createUserInGroup(formData)) as SaveResult | void;
+                    const result = (await createAutoGroupUserFromUsersPage(
+                      formData
+                    )) as SaveResult | void;
                     if (!result) return;
                     if (!result.saved) {
                       setError(result.error);
@@ -92,9 +102,6 @@ export default function AddUserModal({ dealerGroupId, stores }: Props) {
                     }
                     flashToast(result.message || "User Created", result.emailWarning);
                     close();
-                    if (result.redirectTo) {
-                      router.push(result.redirectTo);
-                    }
                     router.refresh();
                   } catch (err: any) {
                     setError(err?.message || "Could not create user");
@@ -102,39 +109,61 @@ export default function AddUserModal({ dealerGroupId, stores }: Props) {
                 });
               }}
             >
-              <input type="hidden" name="dealer_group_id" value={dealerGroupId} />
               <input type="hidden" name="status" value="invited" />
+
+              <div>
+                <label
+                  className="mb-1 block text-xs font-medium text-muted-foreground"
+                  htmlFor="users_page_dealer_group"
+                >
+                  Auto group
+                </label>
+                <select
+                  id="users_page_dealer_group"
+                  name="dealer_group_id"
+                  required
+                  value={groupId}
+                  onChange={(e) => setGroupId(e.target.value)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  {groups.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <label
                     className="mb-1 block text-xs font-medium text-muted-foreground"
-                    htmlFor="modal_first_name"
+                    htmlFor="users_page_first_name"
                   >
                     First name
                   </label>
-                  <Input id="modal_first_name" name="first_name" placeholder="Jane" required />
+                  <Input id="users_page_first_name" name="first_name" placeholder="Jane" required />
                 </div>
                 <div>
                   <label
                     className="mb-1 block text-xs font-medium text-muted-foreground"
-                    htmlFor="modal_last_name"
+                    htmlFor="users_page_last_name"
                   >
                     Last name
                   </label>
-                  <Input id="modal_last_name" name="last_name" placeholder="Doe" required />
+                  <Input id="users_page_last_name" name="last_name" placeholder="Doe" required />
                 </div>
               </div>
 
               <div>
                 <label
                   className="mb-1 block text-xs font-medium text-muted-foreground"
-                  htmlFor="modal_email"
+                  htmlFor="users_page_email"
                 >
                   Email
                 </label>
                 <Input
-                  id="modal_email"
+                  id="users_page_email"
                   name="email"
                   type="email"
                   required
@@ -142,9 +171,13 @@ export default function AddUserModal({ dealerGroupId, stores }: Props) {
                 />
               </div>
 
-              <PhoneField id="modal_phone" />
+              <PhoneField id="users_page_phone" />
 
-              <StoreAccessFields stores={stores} idPrefix="modal_user" />
+              <StoreAccessFields
+                key={groupId}
+                stores={groupStores}
+                idPrefix="users_page_user"
+              />
 
               <p className="text-[11px] text-muted-foreground">
                 If this email already has an account, they will be moved into this auto group (one

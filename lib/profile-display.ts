@@ -10,6 +10,8 @@ export function formatProfileName(
 
 export function formatRoleLabel(role: string | null | undefined): string {
   switch (role) {
+    case "owner_admin":
+      return "Owner";
     case "platform_admin":
       return "Platform Admin";
     case "group_admin":

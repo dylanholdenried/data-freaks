@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { requireAdminServiceClient } from "@/app/admin/admin-data";
 import { sendInviteEmail, sendPasswordResetEmail } from "@/lib/email/resend";
+import { isPlatformStaff } from "@/lib/roles";
 
 type PlanTier = "log" | "analyze" | "advise";
 type AppRole = "group_admin" | "store_admin";
@@ -13,8 +14,16 @@ type UserStatus = "invited" | "active" | "disabled";
 
 function revalidateGroup(groupId?: string) {
   revalidatePath("/admin/groups");
+  revalidatePath("/admin/users");
   if (groupId) {
     revalidatePath(`/admin/groups/${groupId}`);
+  }
+}
+
+function revalidateUser(userId?: string) {
+  revalidatePath("/admin/users");
+  if (userId) {
+    revalidatePath(`/admin/users/${userId}`);
   }
 }
 
@@ -209,7 +218,7 @@ export async function createUserInGroup(formData: FormData) {
   const last_name = String(formData.get("last_name") || "").trim() || null;
   const phone = String(formData.get("phone") || "").trim() || null;
   const role = String(formData.get("role") || "store_admin") as AppRole;
-  const status = String(formData.get("status") || "active") as UserStatus;
+  const status = String(formData.get("status") || "invited") as UserStatus;
   const storeIds = formData
     .getAll("store_ids")
     .map((v) => String(v).trim())
@@ -228,17 +237,20 @@ export async function createUserInGroup(formData: FormData) {
   // One email → one account. If they already exist, move/update into this group.
   const { data: existingProfile } = await service
     .from("profiles")
-    .select("id, user_id, dealer_group_id, role")
+    .select("id, user_id, dealer_group_id, role, status")
     .eq("email", email)
     .maybeSingle();
 
-  if (existingProfile?.role === "platform_admin") {
+  if (isPlatformStaff(existingProfile?.role)) {
     throw new Error("Cannot reassign a platform admin from Auto Groups");
   }
 
   let userId: string;
   let previousGroupId: string | null = null;
   let createdNewAccount = false;
+  // New invites start as invited; do not demote an already-active account when reassigning.
+  const effectiveStatus: UserStatus =
+    existingProfile?.status === "active" ? "active" : status;
 
   if (existingProfile) {
     previousGroupId = existingProfile.dealer_group_id;
@@ -260,7 +272,7 @@ export async function createUserInGroup(formData: FormData) {
         last_name,
         phone,
         role,
-        status,
+        status: effectiveStatus,
         dealer_group_id,
       })
       .eq("id", existingProfile.id);
@@ -297,7 +309,7 @@ export async function createUserInGroup(formData: FormData) {
           last_name,
           phone,
           role,
-          status,
+          status: effectiveStatus,
           dealer_group_id,
         });
         if (profileError) {
@@ -317,7 +329,7 @@ export async function createUserInGroup(formData: FormData) {
         last_name,
         phone,
         role,
-        status,
+        status: effectiveStatus,
         dealer_group_id,
       });
 
@@ -353,6 +365,7 @@ export async function createUserInGroup(formData: FormData) {
   }
 
   revalidateGroup(dealer_group_id);
+  revalidateUser(existingProfile?.id ?? userId);
   if (previousGroupId && previousGroupId !== dealer_group_id) {
     revalidateGroup(previousGroupId);
   }
@@ -381,7 +394,7 @@ export async function updateUserInGroup(formData: FormData) {
   const last_name = String(formData.get("last_name") || "").trim() || null;
   const phone = String(formData.get("phone") || "").trim() || null;
   const role = String(formData.get("role") || "store_admin") as AppRole;
-  const status = String(formData.get("status") || "active") as UserStatus;
+  const status = String(formData.get("status") || "invited") as UserStatus;
   const storeIds = formData
     .getAll("store_ids")
     .map((v) => String(v).trim())
@@ -412,7 +425,7 @@ export async function updateUserInGroup(formData: FormData) {
   if (!existing) {
     throw new Error("User not found in this auto group");
   }
-  if (existing.role === "platform_admin") {
+  if (isPlatformStaff(existing.role)) {
     throw new Error("Cannot edit platform admins from Auto Groups");
   }
 
@@ -458,6 +471,7 @@ export async function updateUserInGroup(formData: FormData) {
   await syncUserStoreAccess(service, user_id, dealer_group_id, role, movingGroups ? [] : storeIds);
 
   revalidateGroup(current_dealer_group_id);
+  revalidateUser(id);
   if (movingGroups) {
     revalidateGroup(dealer_group_id);
   }
@@ -538,7 +552,7 @@ export async function disableUserInGroup(formData: FormData) {
   if (!existing) {
     throw new Error("User not found in this auto group");
   }
-  if (existing.role === "platform_admin") {
+  if (isPlatformStaff(existing.role)) {
     throw new Error("Cannot disable platform admins from Auto Groups");
   }
 
@@ -553,6 +567,7 @@ export async function disableUserInGroup(formData: FormData) {
   }
 
   revalidateGroup(dealer_group_id);
+  revalidateUser(id);
 }
 
 export async function sendUserPasswordReset(formData: FormData): Promise<
@@ -581,7 +596,7 @@ export async function sendUserPasswordReset(formData: FormData): Promise<
   if (!existing) {
     return { saved: false, error: "User not found in this auto group" };
   }
-  if (existing.role === "platform_admin") {
+  if (isPlatformStaff(existing.role)) {
     return { saved: false, error: "Cannot reset password for platform admins from Auto Groups" };
   }
 

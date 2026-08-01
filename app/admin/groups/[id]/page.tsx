@@ -8,17 +8,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import {
   createStoreInGroup,
   deleteStoreInGroup,
-  disableUserInGroup,
-  sendUserPasswordReset,
   updateAutoGroup,
   updateProfitCenterSettings,
   updateStoreInGroup,
-  updateUserInGroup,
 } from "@/app/admin/actions";
 import { DEFAULT_BUY_BOX_SETTINGS } from "@/lib/profit-center/buyBox";
 import { openStoreViewForGroupAction } from "@/app/app/group-actions";
 import { requireAdminServiceClient } from "@/app/admin/admin-data";
-import StoreAccessFields from "./StoreAccessFields";
+import { formatProfileName, formatRoleLabel } from "@/lib/profile-display";
+import { isPlatformStaff } from "@/lib/roles";
 import FormWithSaveToast from "./FormWithSaveToast";
 import AddUserModal from "./AddUserModal";
 
@@ -41,7 +39,7 @@ async function getGroupDetail(id: string) {
   }
   if (!group) return null;
 
-  const [{ data: stores }, { data: users }, { data: allGroups }, settingsResult] =
+  const [{ data: stores }, { data: users }, settingsResult] =
     await Promise.all([
     supabase
       .from("stores")
@@ -53,10 +51,6 @@ async function getGroupDetail(id: string) {
       .select("id, user_id, email, first_name, last_name, phone, role, status, created_at")
       .eq("dealer_group_id", id)
       .order("created_at", { ascending: false }),
-    supabase
-      .from("dealer_groups")
-      .select("id, name")
-      .order("name", { ascending: true }),
     supabase
       .from("profit_center_settings")
       .select(
@@ -95,7 +89,6 @@ async function getGroupDetail(id: string) {
     stores: stores ?? [],
     users: users ?? [],
     accessByProfile,
-    allGroups: allGroups ?? [],
     pcSettings: pcSettings ?? null,
   };
 }
@@ -105,7 +98,7 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
   const detail = await getGroupDetail(id);
   if (!detail) notFound();
 
-  const { group, stores, users, accessByProfile, allGroups, pcSettings } = detail;
+  const { group, stores, users, accessByProfile, pcSettings } = detail;
   const storeOptions = stores.map((s) => ({ id: s.id, name: s.name }));
   const storeNameById = new Map(stores.map((s) => [s.id, s.name]));
   const activated = searchParams?.activated === "1";
@@ -402,191 +395,60 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
           <CardTitle className="text-sm font-semibold">Users ({users.length})</CardTitle>
           <AddUserModal dealerGroupId={group.id} stores={storeOptions} />
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3">
           {users.length === 0 ? (
             <p className="text-sm text-muted-foreground">No users assigned to this group yet.</p>
-          ) : null}
+          ) : (
+            <ul className="divide-y divide-border rounded-lg border border-border">
+              {users.map((user) => {
+                const platformStaff = isPlatformStaff(user.role);
+                const assignedStoreIds = accessByProfile.get(user.id) ?? [];
+                const assignedNames = assignedStoreIds
+                  .map((sid) => storeNameById.get(sid))
+                  .filter(Boolean);
+                const displayName = formatProfileName(user.first_name, user.last_name);
 
-          {users.map((user) => {
-            const isPlatformAdmin = user.role === "platform_admin";
-            const assignedStoreIds = accessByProfile.get(user.id) ?? [];
-            const assignedNames = assignedStoreIds
-              .map((sid) => storeNameById.get(sid))
-              .filter(Boolean);
-            const displayName =
-              [user.first_name, user.last_name].filter(Boolean).join(" ") || "—";
-
-            if (isPlatformAdmin) {
-              return (
-                <div
-                  key={user.id}
-                  className="rounded-lg border border-border bg-muted/80 px-4 py-3"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-medium text-foreground">{displayName}</div>
-                      <div className="text-xs text-muted-foreground">{user.email}</div>
-                      {user.phone ? (
-                        <div className="text-xs text-muted-foreground">{user.phone}</div>
-                      ) : null}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="outline">{user.role}</Badge>
-                      <Badge variant={user.status === "active" ? "success" : "warning"}>
-                        {user.status}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">Managed as platform admin</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            }
-
-            return (
-              <div
-                key={user.id}
-                className="rounded-lg border border-border bg-card p-4 shadow-sm"
-              >
-                <div className="mb-4 flex flex-wrap items-start justify-between gap-2 border-b border-border pb-3">
-                  <div>
-                    <div className="text-sm font-semibold text-foreground">{displayName}</div>
-                    <div className="text-xs text-muted-foreground">{user.email}</div>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    <Badge variant="outline">{user.role}</Badge>
-                    <Badge variant={user.status === "active" ? "success" : "warning"}>
-                      {user.status}
-                    </Badge>
-                  </div>
-                </div>
-
-                <FormWithSaveToast action={updateUserInGroup} className="space-y-4">
-                  <input type="hidden" name="id" value={user.id} />
-                  <input type="hidden" name="user_id" value={user.user_id} />
-                  <input type="hidden" name="current_dealer_group_id" value={group.id} />
-
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                        First name
-                      </label>
-                      <Input
-                        name="first_name"
-                        defaultValue={user.first_name ?? ""}
-                        placeholder="First name"
-                        aria-label="First name"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                        Last name
-                      </label>
-                      <Input
-                        name="last_name"
-                        defaultValue={user.last_name ?? ""}
-                        placeholder="Last name"
-                        aria-label="Last name"
-                      />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="mb-1 block text-xs font-medium text-muted-foreground">Email</label>
-                      <Input
-                        name="email"
-                        type="email"
-                        required
-                        defaultValue={user.email}
-                        aria-label="Email"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-muted-foreground">Phone</label>
-                      <Input
-                        name="phone"
-                        type="tel"
-                        defaultValue={user.phone ?? ""}
-                        placeholder="Phone"
-                        aria-label="Phone"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-muted-foreground">Status</label>
-                      <select
-                        name="status"
-                        defaultValue={user.status}
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        aria-label="Status"
-                      >
-                        <option value="invited">Invited</option>
-                        <option value="active">Active</option>
-                        <option value="disabled">Disabled</option>
-                      </select>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label
-                        className="mb-1 block text-xs font-medium text-muted-foreground"
-                        htmlFor={`edit_${user.id}_dealer_group`}
-                      >
-                        Auto group
-                      </label>
-                      <select
-                        id={`edit_${user.id}_dealer_group`}
-                        name="dealer_group_id"
-                        defaultValue={group.id}
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        aria-label="Auto group"
-                      >
-                        {allGroups.map((g) => (
-                          <option key={g.id} value={g.id}>
-                            {g.name}
-                          </option>
-                        ))}
-                      </select>
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        Changing group moves this account (same email). Store access is cleared until
-                        you assign stores on the destination group.
-                      </p>
-                    </div>
-                  </div>
-
-                  <StoreAccessFields
-                    stores={storeOptions}
-                    defaultRole={user.role === "group_admin" ? "group_admin" : "store_admin"}
-                    defaultStoreIds={assignedStoreIds}
-                    idPrefix={`edit_${user.id}`}
-                  />
-                  {user.role === "store_admin" && assignedNames.length > 0 ? (
-                    <p className="text-[11px] text-muted-foreground">
-                      Currently: {assignedNames.join(", ")}
-                    </p>
-                  ) : null}
-
-                  <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border pt-3">
-                    <Button type="submit" size="sm" variant="outline">
-                      Save
-                    </Button>
-                    <Button
-                      formAction={disableUserInGroup}
-                      type="submit"
-                      size="sm"
-                      variant="ghost"
+                return (
+                  <li key={user.id}>
+                    <Link
+                      href={`/admin/users/${user.id}`}
+                      className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 transition-colors hover:bg-muted/60"
                     >
-                      Remove
-                    </Button>
-                  </div>
-                </FormWithSaveToast>
-
-                <div className="mt-2 flex flex-wrap justify-end gap-2">
-                  <FormWithSaveToast action={sendUserPasswordReset}>
-                    <input type="hidden" name="id" value={user.id} />
-                    <input type="hidden" name="current_dealer_group_id" value={group.id} />
-                    <Button type="submit" size="sm" variant="outline">
-                      Reset password
-                    </Button>
-                  </FormWithSaveToast>
-                </div>
-              </div>
-            );
-          })}
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-foreground">
+                          {displayName}
+                        </div>
+                        <div className="truncate text-xs text-muted-foreground">{user.email}</div>
+                        {platformStaff ? (
+                          <div className="mt-0.5 text-[11px] text-muted-foreground">
+                            Managed as platform staff
+                          </div>
+                        ) : user.role === "store_admin" && assignedNames.length > 0 ? (
+                          <div className="mt-0.5 text-[11px] text-muted-foreground">
+                            Stores: {assignedNames.join(", ")}
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Badge variant="outline">{formatRoleLabel(user.role)}</Badge>
+                        <Badge
+                          variant={
+                            user.status === "active"
+                              ? "success"
+                              : user.status === "invited"
+                                ? "warning"
+                                : "outline"
+                          }
+                        >
+                          {user.status}
+                        </Badge>
+                      </div>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </CardContent>
       </Card>
     </div>

@@ -7,6 +7,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { SELECTED_DEALER_GROUP_COOKIE } from "@/lib/dealer-group-context";
+import { isPlatformStaff } from "@/lib/roles";
 
 async function requirePlatformAdminProfile() {
   const supabase = createSupabaseServerClient();
@@ -26,7 +27,7 @@ async function requirePlatformAdminProfile() {
     .or(profileMatchAuthUserId(user.id))
     .maybeSingle();
 
-  if (!profile || profile.status !== "active" || profile.role !== "platform_admin") {
+  if (!profile || profile.status !== "active" || !isPlatformStaff(profile.role)) {
     redirect("/app");
   }
 

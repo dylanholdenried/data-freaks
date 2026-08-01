@@ -2,14 +2,17 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
+import { isOwnerAdmin, isPlatformStaff } from "@/lib/roles";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type AdminContext = {
   supabase: SupabaseClient;
   profileId: string;
+  role: string;
+  isOwner: boolean;
 };
 
-/** Confirm the current session is an active platform admin, then return a service client for admin reads/writes. */
+/** Confirm the current session is an active platform staff admin, then return a service client for admin reads/writes. */
 export async function requireAdminServiceClient(): Promise<SupabaseClient> {
   const { supabase } = await requireAdminContext();
   return supabase;
@@ -38,12 +41,14 @@ export async function requireAdminContext(): Promise<AdminContext> {
     .or(profileMatchAuthUserId(user.id))
     .maybeSingle();
 
-  if (!profile || profile.status !== "active" || profile.role !== "platform_admin") {
+  if (!profile || profile.status !== "active" || !isPlatformStaff(profile.role)) {
     redirect("/app");
   }
 
   return {
     supabase: service,
     profileId: profile.id,
+    role: profile.role,
+    isOwner: isOwnerAdmin(profile.role),
   };
 }

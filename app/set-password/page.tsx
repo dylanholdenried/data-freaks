@@ -7,6 +7,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { activateProfileAfterPassword } from "./actions";
 
 export default function SetPasswordPage() {
   const router = useRouter();
@@ -76,6 +77,12 @@ export default function SetPasswordPage() {
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) {
         setError(updateError.message);
+        return;
+      }
+
+      const activate = await activateProfileAfterPassword();
+      if (!activate.ok) {
+        setError(activate.error);
         return;
       }
 

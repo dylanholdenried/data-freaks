@@ -8,6 +8,7 @@ import {
   listDealerGroupsForAdmin,
 } from "@/lib/dealer-group-context";
 import { formatProfileName, formatRoleLabel } from "@/lib/profile-display";
+import { isPlatformStaff } from "@/lib/roles";
 import { Button } from "@/components/ui/button";
 import { BarChart3, Shield } from "lucide-react";
 import { DaAppThemeProvider } from "@/components/theme/theme-context";
@@ -38,7 +39,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     redirect("/awaiting-approval");
   }
 
-  const isPlatformAdmin = profile.role === "platform_admin";
+  const isPlatformAdmin = isPlatformStaff(profile.role);
   const groups = isPlatformAdmin ? await listDealerGroupsForAdmin() : [];
   const selectedGroupId = isPlatformAdmin
     ? await getEffectiveDealerGroupId(profile)

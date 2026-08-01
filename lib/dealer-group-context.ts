@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { isPlatformStaff } from "@/lib/roles";
 
 export const SELECTED_DEALER_GROUP_COOKIE = "df_selected_dealer_group_id";
 
@@ -15,7 +16,7 @@ export async function getEffectiveDealerGroupId(
 ): Promise<string | null> {
   if (!profile) return null;
 
-  if (profile.role !== "platform_admin") {
+  if (!isPlatformStaff(profile.role)) {
     return profile.dealer_group_id ?? null;
   }
 

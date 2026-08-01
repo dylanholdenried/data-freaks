@@ -6,6 +6,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import { assertStoreAccess } from "@/lib/store-access";
+import { isPlatformStaff } from "@/lib/roles";
 
 export async function signOut() {
   const supabase = createSupabaseServerClient();
@@ -27,7 +28,7 @@ export async function createStore(formData: FormData) {
     .maybeSingle();
 
   // Only platform / group admins create stores via this legacy path
-  if (!profile || (profile.role !== "platform_admin" && profile.role !== "group_admin")) {
+  if (!profile || (!isPlatformStaff(profile.role) && profile.role !== "group_admin")) {
     throw new Error("Not allowed to create stores");
   }
 

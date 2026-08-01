@@ -35,7 +35,7 @@ end$$;
 do $$
 begin
   if not exists (select 1 from pg_type where typname = 'app_role') then
-    create type app_role as enum ('platform_admin', 'group_admin', 'store_admin');
+    create type app_role as enum ('owner_admin', 'platform_admin', 'group_admin', 'store_admin');
   end if;
 end$$;
 
@@ -100,12 +100,28 @@ create or replace function public.is_platform_admin()
 returns boolean
 language sql
 security definer
+stable
 set search_path = public
 as $$
   select exists (
     select 1 from public.profiles
     where (user_id = auth.uid() or id = auth.uid())
-      and role = 'platform_admin'
+      and role in ('platform_admin', 'owner_admin')
+      and status = 'active'
+  );
+$$;
+
+create or replace function public.is_owner_admin()
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles
+    where (user_id = auth.uid() or id = auth.uid())
+      and role = 'owner_admin'
       and status = 'active'
   );
 $$;

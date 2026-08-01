@@ -5,6 +5,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { formatProfileName, formatRoleLabel } from "@/lib/profile-display";
+import { isPlatformStaff } from "@/lib/roles";
 import { Button } from "@/components/ui/button";
 import { DaAppThemeProvider } from "@/components/theme/theme-context";
 import ThemeToggle from "@/components/theme/ThemeToggle";
@@ -30,7 +31,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     .or(profileMatchAuthUserId(user.id))
     .maybeSingle();
 
-  if (!profile || profile.status !== "active" || profile.role !== "platform_admin") {
+  if (!profile || profile.status !== "active" || !isPlatformStaff(profile.role)) {
     redirect("/app");
   }
 
