@@ -9,30 +9,11 @@ import {
   isOwnerAdmin,
   isPlatformStaff,
 } from "@/lib/roles";
+import { generatePasswordSetupLink } from "@/lib/auth/password-setup-link";
 
 type AppRole = "group_admin" | "store_admin";
 type UserStatus = "invited" | "active" | "disabled";
 type PlatformTargetRole = "platform_admin" | "owner_admin";
-
-function authRedirectBase() {
-  return (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, "");
-}
-
-async function generatePasswordSetupLink(
-  service: ReturnType<typeof createSupabaseServiceClient>,
-  email: string
-): Promise<{ ok: true; actionLink: string } | { ok: false; error: string }> {
-  const redirectTo = `${authRedirectBase()}/auth/callback?next=${encodeURIComponent("/set-password")}`;
-  const { data, error } = await service.auth.admin.generateLink({
-    type: "recovery",
-    email,
-    options: { redirectTo },
-  });
-  if (error || !data?.properties?.action_link) {
-    return { ok: false, error: error?.message || "Could not generate password link" };
-  }
-  return { ok: true, actionLink: data.properties.action_link };
-}
 
 function revalidateUserPaths(profileId: string, dealerGroupId?: string | null) {
   revalidatePath("/admin/users");

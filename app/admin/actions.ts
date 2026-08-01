@@ -7,6 +7,7 @@ import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { requireAdminServiceClient } from "@/app/admin/admin-data";
 import { sendInviteEmail, sendPasswordResetEmail } from "@/lib/email/resend";
 import { isPlatformStaff } from "@/lib/roles";
+import { generatePasswordSetupLink } from "@/lib/auth/password-setup-link";
 
 type PlanTier = "log" | "analyze" | "advise";
 type AppRole = "group_admin" | "store_admin";
@@ -25,26 +26,6 @@ function revalidateUser(userId?: string) {
   if (userId) {
     revalidatePath(`/admin/users/${userId}`);
   }
-}
-
-function authRedirectBase() {
-  return (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, "");
-}
-
-async function generatePasswordSetupLink(
-  service: ReturnType<typeof createSupabaseServiceClient>,
-  email: string
-): Promise<{ ok: true; actionLink: string } | { ok: false; error: string }> {
-  const redirectTo = `${authRedirectBase()}/auth/callback?next=${encodeURIComponent("/set-password")}`;
-  const { data, error } = await service.auth.admin.generateLink({
-    type: "recovery",
-    email,
-    options: { redirectTo },
-  });
-  if (error || !data?.properties?.action_link) {
-    return { ok: false, error: error?.message || "Could not generate password link" };
-  }
-  return { ok: true, actionLink: data.properties.action_link };
 }
 
 export async function createAutoGroup(formData: FormData) {
