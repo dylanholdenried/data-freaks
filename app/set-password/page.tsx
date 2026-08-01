@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { Archivo, IBM_Plex_Mono, Inter } from "next/font/google";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { setPasswordForSessionUser } from "./actions";
 
 const archivo = Archivo({
   subsets: ["latin"],
@@ -116,17 +115,30 @@ export default function SetPasswordPage() {
 
     setSubmitting(true);
     try {
-      const result = await setPasswordForSessionUser({
-        confirmedEmail: confirmEmail,
-        password,
+      const res = await fetch("/api/auth/set-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          confirmedEmail: confirmEmail,
+          password,
+        }),
       });
-      if (!result.ok) {
-        setError(result.error);
+
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(
+          typeof body.error === "string" ? body.error : `Could not save password (${res.status})`
+        );
         return;
       }
 
       window.location.href = "/app";
     } catch (err: any) {
+      const msg = String(err?.message ?? "");
+      if (msg === "Failed to fetch" || msg === "fetch failed" || msg.includes("NetworkError")) {
+        setError("Could not reach the server. Check your connection and try again.");
+        return;
+      }
       setError(err?.message || "Could not update password.");
     } finally {
       setSubmitting(false);
