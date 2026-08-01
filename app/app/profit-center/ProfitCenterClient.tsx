@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { Archivo, IBM_Plex_Mono, Inter } from "next/font/google";
 import {
   aggregateByDimension,
   buildTradesByDeal,
@@ -19,12 +20,43 @@ import {
   type DateRange,
 } from "@/lib/profit-center/dateRange";
 import { PRICE_BANDS } from "@/lib/profit-center/priceBands";
-import { columnExtent, heatmapStyle, type HeatPolarity } from "@/lib/profit-center/heatmap";
+import {
+  columnExtent,
+  heatmapStyle,
+  statusRgb,
+  type HeatPolarity,
+} from "@/lib/profit-center/heatmap";
 import { TRUCK_CLASS_LABELS } from "@/lib/profit-center/truckClass";
+import {
+  scoreBuyBox,
+  type BuyBoxSettings,
+} from "@/lib/profit-center/buyBox";
 import { cn } from "@/lib/utils";
+
+const archivo = Archivo({
+  subsets: ["latin"],
+  weight: ["500", "600", "700", "800"],
+  variable: "--font-da-display",
+  display: "swap",
+});
+
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-da-body",
+  display: "swap",
+});
+
+const ibmPlexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-da-mono",
+  display: "swap",
+});
 
 type Store = { id: string; name: string };
 type Salesperson = { id: string; name: string; store_id: string };
+type Department = { id: string; name: string; store_id: string };
 
 type SortKey = keyof RollupRow;
 
@@ -36,17 +68,23 @@ const DIMENSIONS: { id: Dimension; label: string }[] = [
   { id: "acquisition", label: "Acquisition" },
   { id: "body_style", label: "Body Style" },
   { id: "truck_class", label: "Truck Class" },
+  { id: "department", label: "Department" },
   { id: "salesperson", label: "Salesperson" },
 ];
 
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
-
-const SEL =
-  "h-9 rounded-md border border-input bg-background px-3 text-sm " +
-  "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2";
+const EMPTY_FILTERS: ProfitFilters = {
+  storeId: "all",
+  departmentName: "all",
+  make: "all",
+  model: "all",
+  year: "all",
+  priceBandId: "all",
+  acquisition: "all",
+  bodyStyle: "all",
+  truckClass: "all",
+  salespersonId: "all",
+  financeType: "all",
+};
 
 const fmt$ = (v: number | null) => {
   if (v == null || !Number.isFinite(v)) return "—";
@@ -69,6 +107,11 @@ const fmtPct = (v: number | null) => {
   if (v == null || !Number.isFinite(v)) return "—";
   return `${v.toFixed(0)}%`;
 };
+
+function storePillLabel(name: string) {
+  const first = name.trim().split(/\s+/)[0] ?? name;
+  return first.toUpperCase();
+}
 
 type ColDef = {
   key: SortKey;
@@ -133,8 +176,8 @@ const COLUMNS: ColDef[] = [
   },
   {
     key: "avgAge",
-    label: "Avg Age",
-    format: (r) => fmtN(r.avgAge, 0),
+    label: "Avg Turn",
+    format: (r) => (r.avgAge == null ? "—" : `${fmtN(r.avgAge, 0)}d`),
     heat: "lowerBetter",
     numeric: (r) => r.avgAge,
   },
@@ -200,29 +243,27 @@ const COLUMNS: ColDef[] = [
 
 interface Props {
   stores: Store[];
+  departments: Department[];
   deals: ProfitDeal[];
   trades: ProfitTrade[];
   salespeople: Salesperson[];
   dealSalespeople: ProfitDealSalesperson[];
+  buyBoxSettings: BuyBoxSettings;
+  groupName: string;
   preset: DatePreset;
-  year: number;
-  month: number;
-  customFrom: string;
-  customTo: string;
   range: DateRange;
 }
 
 export default function ProfitCenterClient({
   stores,
+  departments,
   deals,
   trades,
   salespeople,
   dealSalespeople,
+  buyBoxSettings,
+  groupName,
   preset,
-  year,
-  month,
-  customFrom,
-  customTo,
   range,
 }: Props) {
   const router = useRouter();
@@ -231,18 +272,7 @@ export default function ProfitCenterClient({
   const [dimension, setDimension] = useState<Dimension>("make");
   const [sortKey, setSortKey] = useState<SortKey>("volume");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [filters, setFilters] = useState<ProfitFilters>({
-    storeId: "all",
-    make: "all",
-    model: "all",
-    year: "all",
-    priceBandId: "all",
-    acquisition: "all",
-    bodyStyle: "all",
-    truckClass: "all",
-    salespersonId: "all",
-    financeType: "all",
-  });
+  const [filters, setFilters] = useState<ProfitFilters>(EMPTY_FILTERS);
 
   const tradesByDeal = useMemo(() => buildTradesByDeal(trades), [trades]);
   const salespersonNames = useMemo(() => {
@@ -250,20 +280,52 @@ export default function ProfitCenterClient({
     for (const s of salespeople) m.set(s.id, s.name);
     return m;
   }, [salespeople]);
+  const departmentNames = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const d of departments) m.set(d.id, d.name);
+    return m;
+  }, [departments]);
 
   const filtered = useMemo(
-    () => filterDeals(deals, filters, { tradesByDeal, dealSalespeople }),
-    [deals, filters, tradesByDeal, dealSalespeople]
+    () =>
+      filterDeals(deals, filters, {
+        tradesByDeal,
+        dealSalespeople,
+        departmentNames,
+      }),
+    [deals, filters, tradesByDeal, dealSalespeople, departmentNames]
   );
 
-  const { rows, total } = useMemo(() => {
-    return aggregateByDimension(dimension, {
+  const ctx = useMemo(
+    () => ({
       deals: filtered,
       tradesByDeal,
       dealSalespeople,
       salespersonNames,
-    });
-  }, [dimension, filtered, tradesByDeal, dealSalespeople, salespersonNames]);
+      departmentNames,
+    }),
+    [filtered, tradesByDeal, dealSalespeople, salespersonNames, departmentNames]
+  );
+
+  const { rows, total } = useMemo(
+    () => aggregateByDimension(dimension, ctx),
+    [dimension, ctx]
+  );
+
+  const modelRows = useMemo(() => {
+    if (dimension === "model") return rows;
+    return aggregateByDimension("model", ctx).rows;
+  }, [dimension, rows, ctx]);
+
+  const buyBox = useMemo(
+    () => scoreBuyBox(modelRows, buyBoxSettings),
+    [modelRows, buyBoxSettings]
+  );
+
+  const makeRows = useMemo(() => {
+    if (dimension === "make") return rows;
+    return aggregateByDimension("make", ctx).rows;
+  }, [dimension, rows, ctx]);
 
   const sortedRows = useMemo(() => {
     const copy = [...rows];
@@ -300,6 +362,17 @@ export default function ProfitCenterClient({
     return map;
   }, [sortedRows, visibleCols]);
 
+  const deptOptions = useMemo(() => {
+    const scoped =
+      filters.storeId === "all"
+        ? departments
+        : departments.filter((d) => d.store_id === filters.storeId);
+    const names = [...new Set(scoped.map((d) => d.name))].sort((a, b) =>
+      a.localeCompare(b)
+    );
+    return names;
+  }, [departments, filters.storeId]);
+
   const filterOptions = useMemo(() => {
     const makes = [...new Set(deals.map((d) => d.vehicle_make))].sort();
     const models = [
@@ -324,26 +397,12 @@ export default function ProfitCenterClient({
   }, [deals, filters.make]);
 
   const navigateDate = useCallback(
-    (next: {
-      preset: DatePreset;
-      year?: number;
-      month?: number;
-      from?: string;
-      to?: string;
-    }) => {
+    (nextPreset: DatePreset) => {
       const params = new URLSearchParams();
-      params.set("preset", next.preset);
-      if (next.preset === "month") {
-        params.set("year", String(next.year ?? year));
-        params.set("month", String(next.month ?? month));
-      }
-      if (next.preset === "custom") {
-        params.set("from", next.from ?? customFrom);
-        params.set("to", next.to ?? customTo);
-      }
+      params.set("preset", nextPreset);
       router.push(`${pathname}?${params.toString()}`);
     },
-    [router, pathname, year, month, customFrom, customTo]
+    [router, pathname]
   );
 
   function toggleSort(key: SortKey) {
@@ -355,151 +414,293 @@ export default function ProfitCenterClient({
     }
   }
 
-  const yearsForPicker = useMemo(() => {
-    const y = new Date().getFullYear();
-    return [y, y - 1, y - 2, y - 3];
-  }, []);
+  const selectedStore =
+    filters.storeId === "all"
+      ? null
+      : stores.find((s) => s.id === filters.storeId) ?? null;
+
+  const title = selectedStore?.name ?? (stores.length > 1 ? "All Stores" : groupName || "Profit Center");
+
+  const maxMakeVol = Math.max(1, ...makeRows.map((r) => r.volume));
+  const makeAgeExtent = columnExtent(makeRows.map((r) => r.avgAge));
+
+  const ages = filtered
+    .map((d) => d.age)
+    .filter((a): a is number => a != null && Number.isFinite(a));
+  const avgTurn =
+    ages.length === 0 ? null : ages.reduce((s, a) => s + a, 0) / ages.length;
+  const tradeDealCount = filtered.filter(
+    (d) => (tradesByDeal.get(d.id) ?? []).length > 0
+  ).length;
+  const tradePct =
+    filtered.length === 0 ? null : (tradeDealCount / filtered.length) * 100;
 
   return (
-    <div className="space-y-6">
-      <header className="rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 px-6 py-8 text-white shadow-sm">
-        <p className="app-kicker text-slate-300">Acquisition intelligence</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
-          Profit Center
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm text-slate-300">
-          Closed-deal performance by make, model, price point, acquisition source,
-          and more — so you know what to buy and what to avoid.
-        </p>
-        <p className="mt-3 text-xs text-slate-400">
-          Showing {range.from} → {range.to} · {filtered.length.toLocaleString()} closed
-          deal{filtered.length === 1 ? "" : "s"}
-          {filtered.length !== deals.length
-            ? ` (filtered from ${deals.length.toLocaleString()})`
-            : ""}
-        </p>
+    <div
+      className={cn(
+        "pc-command space-y-4",
+        archivo.variable,
+        inter.variable,
+        ibmPlexMono.variable
+      )}
+    >
+      <header className="pc-head">
+        <div>
+          <p className="pc-kicker">Acquisition intelligence</p>
+          <h1 className="pc-title">{title}</h1>
+          <p className="pc-meta">
+            {range.from === "2000-01-01" ? "All time" : `${range.from} → ${range.to}`}
+            {" · "}
+            {filtered.length.toLocaleString()} closed deal
+            {filtered.length === 1 ? "" : "s"}
+            {" · "}
+            {fmt$(total.total)} total gross
+            {filtered.length !== deals.length
+              ? ` · filtered from ${deals.length.toLocaleString()}`
+              : ""}
+          </p>
+        </div>
+        {stores.length > 0 && (
+          <div className="pc-store-pills" role="group" aria-label="Store">
+            <button
+              type="button"
+              className={cn("pc-pill", filters.storeId === "all" && "is-active")}
+              onClick={() =>
+                setFilters((f) => ({
+                  ...f,
+                  storeId: "all",
+                  departmentName: "all",
+                }))
+              }
+            >
+              All
+            </button>
+            {stores.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                className={cn(
+                  "pc-pill",
+                  filters.storeId === s.id && "is-active"
+                )}
+                onClick={() =>
+                  setFilters((f) => ({
+                    ...f,
+                    storeId: s.id,
+                    departmentName: "all",
+                  }))
+                }
+              >
+                {storePillLabel(s.name)}
+              </button>
+            ))}
+          </div>
+        )}
       </header>
 
-      {/* Date controls */}
-      <section className="app-panel space-y-3 p-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Date range
-        </p>
-        <div className="flex flex-wrap gap-2">
+      <section className="pc-panel">
+        <p className="pc-panel-label">Date range</p>
+        <div className="pc-pill-row">
           {DATE_PRESET_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               type="button"
-              onClick={() => navigateDate({ preset: opt.value })}
+              onClick={() => navigateDate(opt.value)}
               className={cn(
-                "rounded-full px-3 py-1.5 text-xs font-medium transition",
-                preset === opt.value
-                  ? "bg-slate-900 text-white"
-                  : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                "pc-pill is-soft",
+                preset === opt.value && "is-active"
               )}
             >
               {opt.label}
             </button>
           ))}
         </div>
-        {preset === "month" && (
-          <div className="flex flex-wrap gap-2">
-            <select
-              className={SEL}
-              value={month}
-              onChange={(e) =>
-                navigateDate({
-                  preset: "month",
-                  month: Number(e.target.value),
-                  year,
-                })
+      </section>
+
+      {deptOptions.length > 0 && (
+        <section className="pc-panel">
+          <p className="pc-panel-label">Department</p>
+          <div className="pc-pill-row">
+            <button
+              type="button"
+              className={cn(
+                "pc-pill is-soft",
+                filters.departmentName === "all" && "is-active"
+              )}
+              onClick={() =>
+                setFilters((f) => ({ ...f, departmentName: "all" }))
               }
             >
-              {MONTH_NAMES.map((name, i) => (
-                <option key={name} value={i + 1}>
-                  {name}
-                </option>
-              ))}
-            </select>
-            <select
-              className={SEL}
-              value={year}
-              onChange={(e) =>
-                navigateDate({
-                  preset: "month",
-                  month,
-                  year: Number(e.target.value),
-                })
+              All
+            </button>
+            {deptOptions.map((name) => (
+              <button
+                key={name}
+                type="button"
+                className={cn(
+                  "pc-pill is-soft",
+                  filters.departmentName === name && "is-active"
+                )}
+                onClick={() =>
+                  setFilters((f) => ({ ...f, departmentName: name }))
+                }
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <div className="pc-kpi-grid">
+        <div className="pc-kpi">
+          <div className="pc-kpi-label">Units closed</div>
+          <div className="pc-kpi-value amber">{fmtN(filtered.length)}</div>
+        </div>
+        <div className="pc-kpi">
+          <div className="pc-kpi-label">Total front</div>
+          <div className="pc-kpi-value">{fmt$(total.front)}</div>
+        </div>
+        <div className="pc-kpi">
+          <div className="pc-kpi-label">Total back</div>
+          <div className="pc-kpi-value">{fmt$(total.back)}</div>
+        </div>
+        <div className="pc-kpi">
+          <div className="pc-kpi-label">Avg total gross</div>
+          <div className="pc-kpi-value green">{fmt$(total.avgTotal)}</div>
+        </div>
+        <div className="pc-kpi">
+          <div className="pc-kpi-label">Avg turn</div>
+          <div
+            className={cn(
+              "pc-kpi-value",
+              avgTurn != null && avgTurn > 45 ? "red" : "amber"
+            )}
+          >
+            {avgTurn == null ? "—" : `${fmtN(avgTurn, 0)}d`}
+          </div>
+        </div>
+        <div className="pc-kpi">
+          <div className="pc-kpi-label">Trade %</div>
+          <div className="pc-kpi-value">{fmtPct(tradePct)}</div>
+        </div>
+        <div className="pc-kpi">
+          <div className="pc-kpi-label">Buy signals</div>
+          <div className="pc-kpi-value green">{buyBox.buys.length}</div>
+          <div className="pc-kpi-sub">min {buyBoxSettings.minVolume} deals</div>
+        </div>
+        <div className="pc-kpi">
+          <div className="pc-kpi-label">Red-lights</div>
+          <div className="pc-kpi-value red">{buyBox.reds.length}</div>
+          <div className="pc-kpi-sub">min {buyBoxSettings.minVolume} deals</div>
+        </div>
+      </div>
+
+      <section className="pc-buybox">
+        <div className="pc-buybox-head">
+          <h2>Buy-box &amp; red-lights</h2>
+          <p>
+            Models scored on front profit, back profit, turn (avg age), and trade
+            % — weighted and adjustable by admin. Needs at least{" "}
+            {buyBoxSettings.minVolume} closed deals to rate.
+          </p>
+        </div>
+        <div className="pc-buybox-cols">
+          <div>
+            <div className="pc-buybox-title buy">Buy more</div>
+            {buyBox.buys.length === 0 ? (
+              <p className="pc-muted">
+                No models meet the minimum volume in this cut.
+              </p>
+            ) : (
+              buyBox.buys.map((row) => (
+                <div key={row.key} className="pc-buybox-row">
+                  <div>
+                    <b>{row.label}</b>
+                    <span>
+                      {row.volume} deals · front {fmt$(row.avgFront)} · back{" "}
+                      {fmt$(row.avgBack)} · {fmtN(row.avgAge, 0)}d · trade{" "}
+                      {fmtPct(row.tradePct)}
+                    </span>
+                  </div>
+                  <div className="pc-buybox-score buy">
+                    {(row.score * 100).toFixed(0)}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          <div>
+            <div className="pc-buybox-title red">Red-light</div>
+            {buyBox.reds.length === 0 ? (
+              <p className="pc-muted">No red-lights in this cut.</p>
+            ) : (
+              buyBox.reds.map((row) => (
+                <div key={row.key} className="pc-buybox-row">
+                  <div>
+                    <b>{row.label}</b>
+                    <span>
+                      {row.volume} deals · front {fmt$(row.avgFront)} · back{" "}
+                      {fmt$(row.avgBack)} · {fmtN(row.avgAge, 0)}d · trade{" "}
+                      {fmtPct(row.tradePct)}
+                    </span>
+                  </div>
+                  <div className="pc-buybox-score red">
+                    {(row.score * 100).toFixed(0)}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="pc-chart">
+        <div className="pc-chart-head">
+          <div>
+            <h3>By make</h3>
+            <p>count vs avg turn — long and slow is the red flag</p>
+          </div>
+        </div>
+        {makeRows.length === 0 ? (
+          <p className="pc-muted">No deals to chart.</p>
+        ) : (
+          makeRows.slice(0, 12).map((row) => {
+            const widthPct = Math.max(8, (row.volume / maxMakeVol) * 100);
+            let t = 0.5;
+            if (makeAgeExtent && row.avgAge != null) {
+              const { min, max } = makeAgeExtent;
+              if (max !== min) {
+                t = 1 - (row.avgAge - min) / (max - min);
               }
-            >
-              {yearsForPicker.map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-        {preset === "custom" && (
-          <div className="flex flex-wrap items-end gap-2">
-            <div>
-              <label className="mb-1 block text-xs text-slate-500">From</label>
-              <input
-                type="date"
-                className={SEL}
-                value={customFrom}
-                onChange={(e) =>
-                  navigateDate({
-                    preset: "custom",
-                    from: e.target.value,
-                    to: customTo,
-                  })
-                }
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-slate-500">To</label>
-              <input
-                type="date"
-                className={SEL}
-                value={customTo}
-                onChange={(e) =>
-                  navigateDate({
-                    preset: "custom",
-                    from: customFrom,
-                    to: e.target.value,
-                  })
-                }
-              />
-            </div>
-          </div>
+            }
+            const color = statusRgb(t);
+            return (
+              <div key={row.key} className="pc-bar-row">
+                <div className="pc-bar-label" title={row.label}>
+                  {row.label}
+                </div>
+                <div className="pc-bar-track">
+                  <div
+                    className="pc-bar-fill"
+                    style={{ width: `${widthPct}%`, background: color }}
+                  >
+                    {row.volume}
+                  </div>
+                </div>
+                <div className="pc-bar-stats" style={{ color }}>
+                  {fmtN(row.avgAge, 0)}d avg · {fmt$(row.avgTotal)}
+                </div>
+              </div>
+            );
+          })
         )}
       </section>
 
-      {/* Filters */}
-      <section className="app-panel space-y-3 p-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Filters
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
-          {stores.length > 1 && (
-            <select
-              className={SEL}
-              value={filters.storeId}
-              onChange={(e) =>
-                setFilters((f) => ({ ...f, storeId: e.target.value }))
-              }
-            >
-              <option value="all">All stores</option>
-              {stores.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          )}
+      <section className="pc-panel space-y-3">
+        <p className="pc-panel-label">More filters</p>
+        <div className="pc-filters">
           <select
-            className={SEL}
             value={filters.make}
             onChange={(e) =>
               setFilters((f) => ({ ...f, make: e.target.value, model: "all" }))
@@ -513,7 +714,6 @@ export default function ProfitCenterClient({
             ))}
           </select>
           <select
-            className={SEL}
             value={filters.model}
             onChange={(e) =>
               setFilters((f) => ({ ...f, model: e.target.value }))
@@ -527,7 +727,6 @@ export default function ProfitCenterClient({
             ))}
           </select>
           <select
-            className={SEL}
             value={filters.year}
             onChange={(e) =>
               setFilters((f) => ({ ...f, year: e.target.value }))
@@ -541,7 +740,6 @@ export default function ProfitCenterClient({
             ))}
           </select>
           <select
-            className={SEL}
             value={filters.priceBandId}
             onChange={(e) =>
               setFilters((f) => ({ ...f, priceBandId: e.target.value }))
@@ -555,7 +753,6 @@ export default function ProfitCenterClient({
             ))}
           </select>
           <select
-            className={SEL}
             value={filters.acquisition}
             onChange={(e) =>
               setFilters((f) => ({ ...f, acquisition: e.target.value }))
@@ -569,7 +766,6 @@ export default function ProfitCenterClient({
             ))}
           </select>
           <select
-            className={SEL}
             value={filters.bodyStyle}
             onChange={(e) =>
               setFilters((f) => ({ ...f, bodyStyle: e.target.value }))
@@ -583,7 +779,6 @@ export default function ProfitCenterClient({
             ))}
           </select>
           <select
-            className={SEL}
             value={filters.truckClass}
             onChange={(e) =>
               setFilters((f) => ({ ...f, truckClass: e.target.value }))
@@ -597,7 +792,6 @@ export default function ProfitCenterClient({
             ))}
           </select>
           <select
-            className={SEL}
             value={filters.salespersonId}
             onChange={(e) =>
               setFilters((f) => ({ ...f, salespersonId: e.target.value }))
@@ -614,7 +808,6 @@ export default function ProfitCenterClient({
               ))}
           </select>
           <select
-            className={SEL}
             value={filters.financeType}
             onChange={(e) =>
               setFilters((f) => ({ ...f, financeType: e.target.value }))
@@ -628,28 +821,14 @@ export default function ProfitCenterClient({
         </div>
         <button
           type="button"
-          className="text-xs font-medium text-slate-600 underline-offset-2 hover:underline"
-          onClick={() =>
-            setFilters({
-              storeId: "all",
-              make: "all",
-              model: "all",
-              year: "all",
-              priceBandId: "all",
-              acquisition: "all",
-              bodyStyle: "all",
-              truckClass: "all",
-              salespersonId: "all",
-              financeType: "all",
-            })
-          }
+          className="pc-link"
+          onClick={() => setFilters(EMPTY_FILTERS)}
         >
           Clear filters
         </button>
       </section>
 
-      {/* Dimension tabs */}
-      <div className="flex flex-wrap gap-1 border-b border-slate-200 pb-px">
+      <div className="pc-tabs">
         {DIMENSIONS.map((d) => (
           <button
             key={d.id}
@@ -659,48 +838,38 @@ export default function ProfitCenterClient({
               setSortKey("volume");
               setSortDir("desc");
             }}
-            className={cn(
-              "-mb-px rounded-t-lg px-3 py-2 text-sm font-medium transition",
-              dimension === d.id
-                ? "border border-b-white border-slate-200 bg-white text-slate-900"
-                : "text-slate-500 hover:text-slate-800"
-            )}
+            className={cn("pc-tab", dimension === d.id && "is-active")}
           >
             {d.label}
           </button>
         ))}
       </div>
 
-      {/* Table */}
-      <section className="app-panel overflow-hidden">
+      <section className="pc-panel" style={{ padding: 0, overflow: "hidden" }}>
         {filtered.length === 0 ? (
-          <div className="px-6 py-16 text-center text-sm text-slate-500">
+          <div className="pc-empty">
             No closed deals in this range
             {deals.length > 0 ? " match your filters" : ""}. Adjust the date
             range or clear filters to see results.
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full border-collapse text-left text-xs">
+          <div className="pc-table-wrap">
+            <table className="pc-table">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50">
+                <tr>
                   {visibleCols.map((col) => (
-                    <th
-                      key={col.key}
-                      className={cn(
-                        "sticky top-0 whitespace-nowrap px-2.5 py-2.5 font-semibold text-slate-600",
-                        col.align === "left" ? "text-left" : "text-right"
-                      )}
-                    >
+                    <th key={col.key}>
                       <button
                         type="button"
-                        className="inline-flex items-center gap-1 hover:text-slate-900"
+                        className="pc-sort"
                         onClick={() => toggleSort(col.key)}
                       >
                         {col.label}
-                        {sortKey === col.key ? (
-                          <span aria-hidden>{sortDir === "asc" ? "↑" : "↓"}</span>
-                        ) : null}
+                        {sortKey === col.key
+                          ? sortDir === "asc"
+                            ? " ↑"
+                            : " ↓"
+                          : ""}
                       </button>
                     </th>
                   ))}
@@ -708,10 +877,7 @@ export default function ProfitCenterClient({
               </thead>
               <tbody>
                 {sortedRows.map((row) => (
-                  <tr
-                    key={row.key}
-                    className="border-b border-slate-100 hover:bg-slate-50/80"
-                  >
+                  <tr key={row.key}>
                     {visibleCols.map((col) => {
                       const ext = extents.get(col.key);
                       const style =
@@ -726,12 +892,6 @@ export default function ProfitCenterClient({
                       return (
                         <td
                           key={col.key}
-                          className={cn(
-                            "whitespace-nowrap px-2.5 py-2 tabular-nums",
-                            col.align === "left"
-                              ? "text-left font-medium text-slate-800"
-                              : "text-right text-slate-700"
-                          )}
                           style={col.key === "label" ? undefined : style}
                         >
                           {col.format(row)}
@@ -742,17 +902,9 @@ export default function ProfitCenterClient({
                 ))}
               </tbody>
               <tfoot>
-                <tr className="border-t-2 border-slate-300 bg-slate-100 font-semibold">
+                <tr>
                   {visibleCols.map((col) => (
-                    <td
-                      key={col.key}
-                      className={cn(
-                        "whitespace-nowrap px-2.5 py-2.5 tabular-nums text-slate-900",
-                        col.align === "left" ? "text-left" : "text-right"
-                      )}
-                    >
-                      {col.format(total)}
-                    </td>
+                    <td key={col.key}>{col.format(total)}</td>
                   ))}
                 </tr>
               </tfoot>
@@ -762,10 +914,10 @@ export default function ProfitCenterClient({
       </section>
 
       {dimension === "salesperson" && (
-        <p className="text-xs text-slate-500">
-          Avg Lost Gross = sale price − list price (deals marked list-price NA are
-          excluded). Avg Trade Hold = ACV − allowance (averaged per deal, then
-          across deals). Negative values are unfavorable.
+        <p className="pc-footnote">
+          Avg Lost Gross = sale price − list price (deals marked list-price NA
+          are excluded). Avg Trade Hold = ACV − allowance (averaged per deal,
+          then across deals). Negative values are unfavorable.
         </p>
       )}
     </div>

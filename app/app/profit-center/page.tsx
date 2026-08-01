@@ -5,6 +5,7 @@ import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import { getAccessibleStores } from "@/lib/store-access";
 import { canAccessProfitCenter } from "@/lib/plan-access";
 import {
+  ACTIVE_DATE_PRESETS,
   resolveDateRange,
   type DatePreset,
 } from "@/lib/profit-center/dateRange";
@@ -13,26 +14,22 @@ import type {
   ProfitDealSalesperson,
   ProfitTrade,
 } from "@/lib/profit-center/aggregate";
+import {
+  DEFAULT_BUY_BOX_SETTINGS,
+  settingsFromDbRow,
+} from "@/lib/profit-center/buyBox";
 import SelectAutoGroupEmptyState from "../SelectAutoGroupEmptyState";
 import PlanNoAccessState from "../PlanNoAccessState";
 import ProfitCenterClient from "./ProfitCenterClient";
 
 type Store = { id: string; name: string };
 type Salesperson = { id: string; name: string; store_id: string };
-
-const PRESETS = new Set<DatePreset>([
-  "mtd",
-  "ytd",
-  "last_month",
-  "last_3_months",
-  "last_6_months",
-  "last_12_months",
-  "month",
-  "custom",
-]);
+type Department = { id: string; name: string; store_id: string };
 
 function parsePreset(raw: string | undefined): DatePreset {
-  if (raw && PRESETS.has(raw as DatePreset)) return raw as DatePreset;
+  if (raw && ACTIVE_DATE_PRESETS.has(raw as DatePreset)) {
+    return raw as DatePreset;
+  }
   return "mtd";
 }
 
@@ -60,7 +57,7 @@ export default async function ProfitCenterPage({
 
   const { data: group } = await supabase
     .from("dealer_groups")
-    .select("plan")
+    .select("plan, name")
     .eq("id", dealerGroupId)
     .maybeSingle();
 
@@ -80,48 +77,35 @@ export default async function ProfitCenterPage({
   const preset = parsePreset(
     typeof searchParams.preset === "string" ? searchParams.preset : undefined
   );
-  const yearParam =
-    typeof searchParams.year === "string" ? parseInt(searchParams.year, 10) : NaN;
-  const monthParam =
-    typeof searchParams.month === "string" ? parseInt(searchParams.month, 10) : NaN;
-  const customFrom =
-    typeof searchParams.from === "string" ? searchParams.from : undefined;
-  const customTo =
-    typeof searchParams.to === "string" ? searchParams.to : undefined;
 
   const now = new Date();
-  const range = resolveDateRange(preset, {
-    now,
-    year: Number.isFinite(yearParam) ? yearParam : now.getFullYear(),
-    month: Number.isFinite(monthParam) ? monthParam : now.getMonth() + 1,
-    customFrom,
-    customTo,
-  });
+  const range = resolveDateRange(preset, { now });
+
+  const emptyClient = (
+    <ProfitCenterClient
+      stores={stores}
+      departments={[]}
+      deals={[]}
+      trades={[]}
+      salespeople={[]}
+      dealSalespeople={[]}
+      buyBoxSettings={DEFAULT_BUY_BOX_SETTINGS}
+      groupName={group?.name ?? ""}
+      preset={preset}
+      range={range}
+    />
+  );
 
   if (storeIds.length === 0) {
-    return (
-      <ProfitCenterClient
-        stores={[]}
-        deals={[]}
-        trades={[]}
-        salespeople={[]}
-        dealSalespeople={[]}
-        preset={preset}
-        year={Number.isFinite(yearParam) ? yearParam : now.getFullYear()}
-        month={Number.isFinite(monthParam) ? monthParam : now.getMonth() + 1}
-        customFrom={range.from}
-        customTo={range.to}
-        range={range}
-      />
-    );
+    return emptyClient;
   }
 
-  const [dealsRes, spRes] = await Promise.all([
+  const [dealsRes, spRes, deptRes, settingsRes] = await Promise.all([
     fetchAllRows<ProfitDeal>((from, to) =>
       supabase
         .from("deals")
         .select(
-          "id,sale_date,store_id,vehicle_year,vehicle_make,vehicle_model,body_style," +
+          "id,sale_date,store_id,department_id,vehicle_year,vehicle_make,vehicle_model,body_style," +
             "acquisition_source,finance_type,front_profit,back_profit,sale_price," +
             "list_price,list_price_na,age"
         )
@@ -136,11 +120,29 @@ export default async function ProfitCenterPage({
       .from("salespeople")
       .select("id,name,store_id")
       .in("store_id", storeIds),
+    supabase
+      .from("departments")
+      .select("id,name,store_id")
+      .in("store_id", storeIds)
+      .order("name", { ascending: true }),
+    supabase
+      .from("profit_center_settings")
+      .select(
+        "min_volume,weight_front,weight_back,weight_turn,weight_trade,list_size"
+      )
+      .eq("dealer_group_id", dealerGroupId)
+      .maybeSingle(),
   ]);
 
   let deals = dealsRes.data;
+  let buyBoxSettings = settingsFromDbRow(settingsRes.data ?? null);
 
-  // Fallback if migration not yet applied (list_price columns missing)
+  // Settings table may not exist until migration is applied
+  if (settingsRes.error) {
+    buyBoxSettings = DEFAULT_BUY_BOX_SETTINGS;
+  }
+
+  // Fallback if list_price columns missing
   if (dealsRes.error?.message?.includes("list_price")) {
     const fallback = await fetchAllRows<
       Omit<ProfitDeal, "list_price" | "list_price_na">
@@ -148,7 +150,7 @@ export default async function ProfitCenterPage({
       supabase
         .from("deals")
         .select(
-          "id,sale_date,store_id,vehicle_year,vehicle_make,vehicle_model,body_style," +
+          "id,sale_date,store_id,department_id,vehicle_year,vehicle_make,vehicle_model,body_style," +
             "acquisition_source,finance_type,front_profit,back_profit,sale_price,age"
         )
         .in("store_id", storeIds)
@@ -171,6 +173,9 @@ export default async function ProfitCenterPage({
     if (typeof d.list_price_na !== "boolean") {
       (d as { list_price_na: boolean }).list_price_na = false;
     }
+    if (d.department_id === undefined) {
+      (d as { department_id: string | null }).department_id = null;
+    }
   }
 
   const dealIds = deals.map((d) => d.id);
@@ -190,23 +195,21 @@ export default async function ProfitCenterPage({
         .range(from, to)
     ),
   ]);
-  const trades = tradesRes.data;
-  const dealSalespeople = dspRes.data;
 
   const salespeople = (spRes.data ?? []) as Salesperson[];
+  const departments = (deptRes.data ?? []) as Department[];
 
   return (
     <ProfitCenterClient
       stores={stores}
+      departments={departments}
       deals={deals}
-      trades={trades}
+      trades={tradesRes.data}
       salespeople={salespeople}
-      dealSalespeople={dealSalespeople}
+      dealSalespeople={dspRes.data}
+      buyBoxSettings={buyBoxSettings}
+      groupName={group?.name ?? ""}
       preset={preset}
-      year={Number.isFinite(yearParam) ? yearParam : now.getFullYear()}
-      month={Number.isFinite(monthParam) ? monthParam : now.getMonth() + 1}
-      customFrom={customFrom ?? range.from}
-      customTo={customTo ?? range.to}
       range={range}
     />
   );

@@ -86,6 +86,52 @@ export async function updateAutoGroup(formData: FormData) {
   revalidateGroup(id);
 }
 
+export async function updateProfitCenterSettings(formData: FormData) {
+  const supabase = await requireAdminServiceClient();
+
+  const dealer_group_id = String(formData.get("dealer_group_id") || "").trim();
+  if (!dealer_group_id) throw new Error("Group id is required");
+
+  const min_volume = Math.max(1, parseInt(String(formData.get("min_volume") || "3"), 10) || 3);
+  const list_size = Math.max(1, parseInt(String(formData.get("list_size") || "5"), 10) || 5);
+  const weight_front = Number(formData.get("weight_front") || 0.35);
+  const weight_back = Number(formData.get("weight_back") || 0.25);
+  const weight_turn = Number(formData.get("weight_turn") || 0.25);
+  const weight_trade = Number(formData.get("weight_trade") || 0.15);
+
+  if (
+    ![weight_front, weight_back, weight_turn, weight_trade].every(
+      (w) => Number.isFinite(w) && w >= 0
+    )
+  ) {
+    throw new Error("Weights must be non-negative numbers");
+  }
+
+  const sum = weight_front + weight_back + weight_turn + weight_trade;
+  if (sum <= 0) throw new Error("Weights must sum to more than zero");
+
+  const { error } = await supabase.from("profit_center_settings").upsert(
+    {
+      dealer_group_id,
+      min_volume,
+      list_size,
+      weight_front,
+      weight_back,
+      weight_turn,
+      weight_trade,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "dealer_group_id" }
+  );
+
+  if (error) {
+    throw new Error(`Update Profit Center settings failed: ${error.message}`);
+  }
+
+  revalidateGroup(dealer_group_id);
+  revalidatePath("/app/profit-center");
+}
+
 export async function createStoreInGroup(formData: FormData) {
   const supabase = await requireAdminServiceClient();
 

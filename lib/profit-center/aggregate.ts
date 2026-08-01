@@ -6,6 +6,7 @@ export type ProfitDeal = {
   id: string;
   sale_date: string;
   store_id: string;
+  department_id: string | null;
   vehicle_year: number;
   vehicle_make: string;
   vehicle_model: string;
@@ -40,6 +41,7 @@ export type Dimension =
   | "acquisition"
   | "body_style"
   | "truck_class"
+  | "department"
   | "salesperson";
 
 export type RollupRow = {
@@ -70,6 +72,7 @@ export type AggregateContext = {
   tradesByDeal: Map<string, ProfitTrade[]>;
   dealSalespeople: ProfitDealSalesperson[];
   salespersonNames: Map<string, string>;
+  departmentNames: Map<string, string>;
 };
 
 function n(v: number | null | undefined): number {
@@ -111,6 +114,17 @@ function dimensionKey(
     case "truck_class": {
       const label = inferTruckClass(deal.vehicle_make, deal.vehicle_model);
       return [{ key: label.toLowerCase(), label }];
+    }
+    case "department": {
+      if (!deal.department_id) {
+        return [{ key: "(unassigned)", label: "(Unassigned)" }];
+      }
+      return [
+        {
+          key: deal.department_id,
+          label: ctx.departmentNames.get(deal.department_id) ?? "Unknown",
+        },
+      ];
     }
     case "salesperson": {
       const splits = ctx.dealSalespeople.filter((s) => s.deal_id === deal.id);
@@ -258,6 +272,8 @@ export function aggregateByDimension(
 
 export type ProfitFilters = {
   storeId: string | "all";
+  /** Department name (not id) so All-stores view matches across stores. */
+  departmentName: string | "all";
   make: string | "all";
   model: string | "all";
   year: string | "all";
@@ -275,10 +291,17 @@ export function filterDeals(
   extras: {
     tradesByDeal: Map<string, ProfitTrade[]>;
     dealSalespeople: ProfitDealSalesperson[];
+    departmentNames?: Map<string, string>;
   }
 ): ProfitDeal[] {
   return deals.filter((d) => {
     if (filters.storeId !== "all" && d.store_id !== filters.storeId) return false;
+    if (filters.departmentName !== "all") {
+      const name = d.department_id
+        ? extras.departmentNames?.get(d.department_id) ?? "(Unknown)"
+        : "(Unassigned)";
+      if (name !== filters.departmentName) return false;
+    }
     if (filters.make !== "all" && d.vehicle_make !== filters.make) return false;
     if (filters.model !== "all" && d.vehicle_model !== filters.model) return false;
     if (filters.year !== "all" && String(d.vehicle_year) !== filters.year) return false;

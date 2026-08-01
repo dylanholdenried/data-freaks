@@ -3,10 +3,12 @@
 export type DatePreset =
   | "mtd"
   | "ytd"
-  | "last_month"
   | "last_3_months"
   | "last_6_months"
   | "last_12_months"
+  | "all_time"
+  /** @deprecated kept for old URLs — resolves then maps via parse */
+  | "last_month"
   | "month"
   | "custom";
 
@@ -34,7 +36,7 @@ function addMonths(d: Date, delta: number): Date {
 }
 
 /**
- * Resolve a preset (or month/custom) to inclusive sale_date bounds.
+ * Resolve a preset (or legacy month/custom) to inclusive sale_date bounds.
  * `now` defaults to today in the local timezone.
  */
 export function resolveDateRange(
@@ -82,6 +84,8 @@ export function resolveDateRange(
         from: toISODate(addMonths(startOfMonth(y, m), -11)),
         to: today,
       };
+    case "all_time":
+      return { from: "2000-01-01", to: today };
     case "month": {
       const year = opts?.year ?? y;
       const month = opts?.month ?? m;
@@ -100,13 +104,16 @@ export function resolveDateRange(
   }
 }
 
+/** Active UI presets (legacy month/custom/last_month omitted). */
 export const DATE_PRESET_OPTIONS: { value: DatePreset; label: string }[] = [
   { value: "mtd", label: "MTD" },
   { value: "ytd", label: "YTD" },
-  { value: "last_month", label: "Last month" },
-  { value: "last_3_months", label: "Last 3 months" },
-  { value: "last_6_months", label: "Last 6 months" },
-  { value: "last_12_months", label: "Last 12 months" },
-  { value: "month", label: "Calendar month" },
-  { value: "custom", label: "Custom range" },
+  { value: "last_3_months", label: "Previous 3 months" },
+  { value: "last_6_months", label: "Previous 6 months" },
+  { value: "last_12_months", label: "Previous 12 months" },
+  { value: "all_time", label: "All time" },
 ];
+
+export const ACTIVE_DATE_PRESETS = new Set<DatePreset>(
+  DATE_PRESET_OPTIONS.map((o) => o.value)
+);

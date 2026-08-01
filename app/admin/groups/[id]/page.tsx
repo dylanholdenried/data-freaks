@@ -11,9 +11,11 @@ import {
   disableUserInGroup,
   sendUserPasswordReset,
   updateAutoGroup,
+  updateProfitCenterSettings,
   updateStoreInGroup,
   updateUserInGroup,
 } from "@/app/admin/actions";
+import { DEFAULT_BUY_BOX_SETTINGS } from "@/lib/profit-center/buyBox";
 import { openStoreViewForGroupAction } from "@/app/app/group-actions";
 import { requireAdminServiceClient } from "@/app/admin/admin-data";
 import StoreAccessFields from "./StoreAccessFields";
@@ -39,7 +41,8 @@ async function getGroupDetail(id: string) {
   }
   if (!group) return null;
 
-  const [{ data: stores }, { data: users }, { data: allGroups }] = await Promise.all([
+  const [{ data: stores }, { data: users }, { data: allGroups }, settingsResult] =
+    await Promise.all([
     supabase
       .from("stores")
       .select("id, name, is_demo, created_at")
@@ -54,7 +57,16 @@ async function getGroupDetail(id: string) {
       .from("dealer_groups")
       .select("id, name")
       .order("name", { ascending: true }),
+    supabase
+      .from("profit_center_settings")
+      .select(
+        "min_volume,weight_front,weight_back,weight_turn,weight_trade,list_size"
+      )
+      .eq("dealer_group_id", id)
+      .maybeSingle(),
   ]);
+
+  const pcSettings = settingsResult.error ? null : settingsResult.data;
 
   const accessKeys = (users ?? []).flatMap((u) => [u.id, u.user_id].filter(Boolean));
   let accessByProfile = new Map<string, string[]>();
@@ -84,6 +96,7 @@ async function getGroupDetail(id: string) {
     users: users ?? [],
     accessByProfile,
     allGroups: allGroups ?? [],
+    pcSettings: pcSettings ?? null,
   };
 }
 
@@ -92,13 +105,30 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
   const detail = await getGroupDetail(id);
   if (!detail) notFound();
 
-  const { group, stores, users, accessByProfile, allGroups } = detail;
+  const { group, stores, users, accessByProfile, allGroups, pcSettings } = detail;
   const storeOptions = stores.map((s) => ({ id: s.id, name: s.name }));
   const storeNameById = new Map(stores.map((s) => [s.id, s.name]));
   const activated = searchParams?.activated === "1";
   const emailError = searchParams?.emailError
     ? decodeURIComponent(searchParams.emailError)
     : null;
+
+  const buyBox = {
+    min_volume: pcSettings?.min_volume ?? DEFAULT_BUY_BOX_SETTINGS.minVolume,
+    weight_front: Number(
+      pcSettings?.weight_front ?? DEFAULT_BUY_BOX_SETTINGS.weightFront
+    ),
+    weight_back: Number(
+      pcSettings?.weight_back ?? DEFAULT_BUY_BOX_SETTINGS.weightBack
+    ),
+    weight_turn: Number(
+      pcSettings?.weight_turn ?? DEFAULT_BUY_BOX_SETTINGS.weightTurn
+    ),
+    weight_trade: Number(
+      pcSettings?.weight_trade ?? DEFAULT_BUY_BOX_SETTINGS.weightTrade
+    ),
+    list_size: pcSettings?.list_size ?? DEFAULT_BUY_BOX_SETTINGS.listSize,
+  };
 
   return (
     <div className="space-y-6">
@@ -168,6 +198,132 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
             <div className="sm:col-span-3">
               <Button type="submit" size="sm">
                 Save group
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold">
+            Profit Center buy-box scoring
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Models need at least the minimum deal count to receive a buy / red-light
+            rating. Score = weighted mix of avg front, avg back, turn (lower age is
+            better), and trade %. Weights are normalized to sum to 1 when saved.
+          </p>
+          <form action={updateProfitCenterSettings} className="grid gap-3 sm:grid-cols-3">
+            <input type="hidden" name="dealer_group_id" value={group.id} />
+            <div>
+              <label
+                className="mb-1 block text-xs font-medium text-slate-600"
+                htmlFor="min_volume"
+              >
+                Min deals to rate
+              </label>
+              <Input
+                id="min_volume"
+                name="min_volume"
+                type="number"
+                min={1}
+                step={1}
+                defaultValue={buyBox.min_volume}
+                required
+              />
+            </div>
+            <div>
+              <label
+                className="mb-1 block text-xs font-medium text-slate-600"
+                htmlFor="list_size"
+              >
+                List size (buy &amp; red)
+              </label>
+              <Input
+                id="list_size"
+                name="list_size"
+                type="number"
+                min={1}
+                step={1}
+                defaultValue={buyBox.list_size}
+                required
+              />
+            </div>
+            <div className="hidden sm:block" />
+            <div>
+              <label
+                className="mb-1 block text-xs font-medium text-slate-600"
+                htmlFor="weight_front"
+              >
+                Weight · front profit
+              </label>
+              <Input
+                id="weight_front"
+                name="weight_front"
+                type="number"
+                min={0}
+                step={0.01}
+                defaultValue={buyBox.weight_front}
+                required
+              />
+            </div>
+            <div>
+              <label
+                className="mb-1 block text-xs font-medium text-slate-600"
+                htmlFor="weight_back"
+              >
+                Weight · back profit
+              </label>
+              <Input
+                id="weight_back"
+                name="weight_back"
+                type="number"
+                min={0}
+                step={0.01}
+                defaultValue={buyBox.weight_back}
+                required
+              />
+            </div>
+            <div>
+              <label
+                className="mb-1 block text-xs font-medium text-slate-600"
+                htmlFor="weight_turn"
+              >
+                Weight · turn
+              </label>
+              <Input
+                id="weight_turn"
+                name="weight_turn"
+                type="number"
+                min={0}
+                step={0.01}
+                defaultValue={buyBox.weight_turn}
+                required
+              />
+            </div>
+            <div>
+              <label
+                className="mb-1 block text-xs font-medium text-slate-600"
+                htmlFor="weight_trade"
+              >
+                Weight · trade %
+              </label>
+              <Input
+                id="weight_trade"
+                name="weight_trade"
+                type="number"
+                min={0}
+                step={0.01}
+                defaultValue={buyBox.weight_trade}
+                required
+              />
+            </div>
+            <div className="sm:col-span-3">
+              <Button type="submit" size="sm">
+                Save buy-box settings
               </Button>
             </div>
           </form>

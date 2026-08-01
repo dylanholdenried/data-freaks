@@ -21,7 +21,7 @@ type Props = {
   month: number;
 };
 
-type DemoDim = Dimension | "department";
+type DemoDim = Dimension;
 
 const DIMS: { id: DemoDim; label: string }[] = [
   { id: "model", label: "Make / Model" },
@@ -66,6 +66,7 @@ export function DemoProfitCenter({ fixture, storeId, month }: Props) {
         id: d.id,
         sale_date: d.sale_date,
         store_id: d.store_id,
+        department_id: d.department_id,
         vehicle_year: d.vehicle_year,
         vehicle_make: d.vehicle_make,
         vehicle_model: d.vehicle_model,
@@ -120,66 +121,21 @@ export function DemoProfitCenter({ fixture, storeId, month }: Props) {
   );
 
   const rows = useMemo((): RollupRow[] => {
-    if (dim === "department") {
-      const groups = new Map<
-        string,
-        { label: string; deals: typeof closedDeals }
-      >();
-      for (const d of closedDeals) {
-        const label = deptNameById.get(d.department_id) ?? "Unknown";
-        const g = groups.get(d.department_id) ?? { label, deals: [] };
-        g.deals.push(d);
-        groups.set(d.department_id, g);
-      }
-      return [...groups.entries()]
-        .map(([key, g]): RollupRow => {
-          const volume = g.deals.length;
-          const front = g.deals.reduce((s, d) => s + d.front_profit, 0);
-          const back = g.deals.reduce((s, d) => s + d.back_profit, 0);
-          const total = front + back;
-          const avgAge =
-            g.deals.reduce((s, d) => s + d.age, 0) / Math.max(1, volume);
-          return {
-            key,
-            label: g.label,
-            volume,
-            front,
-            back,
-            total,
-            avgFront: volume ? front / volume : null,
-            avgBack: volume ? back / volume : null,
-            avgTotal: volume ? total / volume : null,
-            avgAge: volume ? avgAge : null,
-            avgSalePrice: volume
-              ? g.deals.reduce((s, d) => s + d.sale_price, 0) / volume
-              : null,
-            trades: g.deals.filter((d) => d.has_trade).length,
-            tradePct: null,
-            primePct: null,
-            subprimePct: null,
-            cashPct: null,
-            avgLostGross: null,
-            avgTradeHold: null,
-          };
-        })
-        .sort((a, b) => b.total - a.total);
-    }
-
     const { rows: rollups } = aggregateByDimension(dim, {
       deals: profitDeals,
       tradesByDeal,
       dealSalespeople,
       salespersonNames,
+      departmentNames: deptNameById,
     });
     return rollups.filter((r) => !r.isTotal);
   }, [
     dim,
-    closedDeals,
-    deptNameById,
     profitDeals,
     tradesByDeal,
     dealSalespeople,
     salespersonNames,
+    deptNameById,
   ]);
 
   const avgExtent = columnExtent(rows.map((r) => r.avgTotal));
