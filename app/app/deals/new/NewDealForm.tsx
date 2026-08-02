@@ -24,9 +24,14 @@ interface Props {
 }
 
 type Trade = {
+  vin: string;
   year: string;
   make: string;
   model: string;
+  makeId: string;
+  modelId: string;
+  makeIsManual: boolean;
+  modelIsManual: boolean;
   acv: string;
   allowance: string;
   exit_strategy: string;
@@ -38,9 +43,14 @@ type Split = {
 };
 
 const emptyTrade = (): Trade => ({
+  vin: "",
   year: "",
   make: "",
   model: "",
+  makeId: "",
+  modelId: "",
+  makeIsManual: false,
+  modelIsManual: false,
   acv: "",
   allowance: "",
   exit_strategy: "",
@@ -95,6 +105,11 @@ export default function NewDealForm({
   const [modelId, setModelId] = useState("");
   const [modelIsManual, setModelIsManual] = useState(false);
   const [decoded, setDecoded] = useState(false);
+
+  // ── Trade VIN decode state (keyed by trade index) ─────────────────────────────
+  const [tradeDecodingIdx, setTradeDecodingIdx] = useState<number | null>(null);
+  const [tradeDecodeErrors, setTradeDecodeErrors] = useState<Record<number, string>>({});
+  const [tradeDecoded, setTradeDecoded] = useState<Record<number, boolean>>({});
 
   // ── UI state ─────────────────────────────────────────────────────────────────
   const [saving, setSaving] = useState(false);
@@ -200,10 +215,68 @@ export default function NewDealForm({
 
   function removeTrade(idx: number) {
     setTrades(trades.length === 1 ? [emptyTrade()] : trades.filter((_, i) => i !== idx));
+    setTradeDecodeErrors({});
+    setTradeDecoded({});
   }
 
   function updateTrade(idx: number, field: keyof Trade, value: string) {
     setTrades(trades.map((t, i) => (i === idx ? { ...t, [field]: value } : t)));
+  }
+
+  function patchTrade(idx: number, patch: Partial<Trade>) {
+    setTrades((prev) => prev.map((t, i) => (i === idx ? { ...t, ...patch } : t)));
+  }
+
+  async function handleDecodeTradeVin(idx: number) {
+    const v = trades[idx]?.vin.trim() ?? "";
+    if (v.length !== 17) return;
+
+    setTradeDecodingIdx(idx);
+    setTradeDecodeErrors((prev) => {
+      const next = { ...prev };
+      delete next[idx];
+      return next;
+    });
+
+    try {
+      const d = await decodeVin(v);
+      const matchedMake = vehicleMakes.find(
+        (m) => m.name.toLowerCase() === d.make.toLowerCase()
+      );
+      const resolvedMakeId = matchedMake?.id ?? "";
+      const makeIsManual = !matchedMake;
+      const matchedModel = vehicleModels.find(
+        (m) =>
+          m.make_id === resolvedMakeId &&
+          m.name.toLowerCase() === d.model.toLowerCase()
+      );
+
+      setTrades((prev) =>
+        prev.map((t, i) =>
+          i === idx
+            ? {
+                ...t,
+                year: d.year !== null ? String(d.year) : t.year,
+                make: d.make || t.make,
+                model: d.model || t.model,
+                makeId: resolvedMakeId,
+                makeIsManual,
+                modelId: matchedModel?.id ?? "",
+                modelIsManual: !matchedModel,
+              }
+            : t
+        )
+      );
+      setTradeDecoded((prev) => ({ ...prev, [idx]: true }));
+    } catch (err) {
+      const msg =
+        err instanceof VinDecodeError
+          ? err.message
+          : "Could not decode this VIN — enter details manually.";
+      setTradeDecodeErrors((prev) => ({ ...prev, [idx]: msg }));
+    } finally {
+      setTradeDecodingIdx(null);
+    }
   }
 
   // ── Form reset ───────────────────────────────────────────────────────────────
@@ -232,6 +305,9 @@ export default function NewDealForm({
     setModelId("");
     setModelIsManual(false);
     setDecoded(false);
+    setTradeDecodingIdx(null);
+    setTradeDecodeErrors({});
+    setTradeDecoded({});
   }
 
   // ── Validation ───────────────────────────────────────────────────────────────
@@ -252,8 +328,6 @@ export default function NewDealForm({
         if (!t.year.trim()) errs.push(`Trade year is required${label}`);
         if (!t.make.trim()) errs.push(`Trade make is required${label}`);
         if (!t.model.trim()) errs.push(`Trade model is required${label}`);
-        if (!t.acv.trim()) errs.push(`Trade ACV is required${label}`);
-        if (!t.exit_strategy) errs.push(`Trade exit strategy is required${label}`);
       });
     }
     return errs;
@@ -296,6 +370,7 @@ export default function NewDealForm({
           body_style: bodyStyle || null,
           drivetrain: drivetrain || null,
           status: "pending",
+          trade_status: hasTrade ? "has_trade" : "no_trade",
           entered_by: userId,
         })
         .select("id")
@@ -332,12 +407,13 @@ export default function NewDealForm({
         const { error: tradeError } = await supabase.from("trades").insert(
           trades.map((t) => ({
             deal_id: dealId,
+            vin: t.vin.trim() || null,
             year: parseInt(t.year, 10),
             make: t.make.trim(),
             model: t.model.trim(),
-            acv: parseFloat(t.acv),
+            acv: t.acv.trim() ? parseFloat(t.acv) : null,
             allowance: t.allowance.trim() ? parseFloat(t.allowance) : null,
-            exit_strategy: t.exit_strategy,
+            exit_strategy: t.exit_strategy || null,
           }))
         );
         if (tradeError) throw new Error(`Trade insert failed: ${tradeError.message}`);
@@ -476,6 +552,35 @@ export default function NewDealForm({
         </CardHeader>
         <CardContent className="space-y-4">
 
+          {/* Sale Date | Customer Last Name | Stock # */}
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-1">
+              <label className={LBL}>Sale Date *</label>
+              <Input
+                type="date"
+                value={saleDate}
+                onChange={(e) => setSaleDate(e.target.value)}
+                className={emptyCls(saleDate)}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className={LBL}>Customer Last Name *</label>
+              <Input
+                value={customerLastName}
+                onChange={(e) => setCustomerLastName(e.target.value)}
+                className={emptyCls(customerLastName)}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className={LBL}>Stock # *</label>
+              <Input
+                value={stockNumber}
+                onChange={(e) => setStockNumber(e.target.value)}
+                className={emptyCls(stockNumber)}
+              />
+            </div>
+          </div>
+
           {/* VIN */}
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-1 sm:col-span-2">
@@ -492,7 +597,7 @@ export default function NewDealForm({
                     if (vin.trim().length === 17) handleDecodeVin();
                   }}
                   disabled={decoding}
-                  className={`font-mono ${emptyCls(vin)}`}
+                  className="font-mono"
                 />
                 <Button
                   type="button"
@@ -539,35 +644,6 @@ export default function NewDealForm({
               </button>
             </div>
           )}
-
-          {/* Sale Date | Customer Last Name | Stock # */}
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="space-y-1">
-              <label className={LBL}>Sale Date *</label>
-              <Input
-                type="date"
-                value={saleDate}
-                onChange={(e) => setSaleDate(e.target.value)}
-                className={emptyCls(saleDate)}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className={LBL}>Customer Last Name *</label>
-              <Input
-                value={customerLastName}
-                onChange={(e) => setCustomerLastName(e.target.value)}
-                className={emptyCls(customerLastName)}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className={LBL}>Stock # *</label>
-              <Input
-                value={stockNumber}
-                onChange={(e) => setStockNumber(e.target.value)}
-                className={emptyCls(stockNumber)}
-              />
-            </div>
-          </div>
 
           {/* Year | Make | Model */}
           <div className="grid gap-4 sm:grid-cols-3">
@@ -841,6 +917,93 @@ export default function NewDealForm({
                     </Button>
                   </div>
                 )}
+
+                {/* Trade VIN */}
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className={LBL}>VIN (optional)</label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={trade.vin}
+                        onChange={(e) => {
+                          updateTrade(idx, "vin", e.target.value);
+                          setTradeDecodeErrors((prev) => {
+                            const next = { ...prev };
+                            delete next[idx];
+                            return next;
+                          });
+                          setTradeDecoded((prev) => {
+                            const next = { ...prev };
+                            delete next[idx];
+                            return next;
+                          });
+                        }}
+                        onBlur={() => {
+                          if (trade.vin.trim().length === 17) handleDecodeTradeVin(idx);
+                        }}
+                        disabled={tradeDecodingIdx === idx}
+                        className="font-mono"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => handleDecodeTradeVin(idx)}
+                        disabled={
+                          trade.vin.trim().length !== 17 || tradeDecodingIdx === idx
+                        }
+                        className="shrink-0"
+                      >
+                        {tradeDecodingIdx === idx ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          "Decode VIN"
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                {tradeDecoded[idx] && (
+                  <p className="text-sm text-green-700">
+                    ✓ Decoded from VIN —{" "}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setTradeDecoded((prev) => {
+                          const next = { ...prev };
+                          delete next[idx];
+                          return next;
+                        })
+                      }
+                      className="text-xs text-green-600 underline hover:text-green-900"
+                    >
+                      Edit manually
+                    </button>
+                  </p>
+                )}
+
+                {tradeDecodeErrors[idx] && (
+                  <div className="flex items-start gap-2 rounded-lg border border-[color-mix(in_srgb,var(--da-amber)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-amber)_12%,transparent)] p-3">
+                    <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                    <p className="flex-1 text-sm text-amber-800">
+                      {tradeDecodeErrors[idx]}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setTradeDecodeErrors((prev) => {
+                          const next = { ...prev };
+                          delete next[idx];
+                          return next;
+                        })
+                      }
+                      className="shrink-0 text-xs text-amber-600 underline hover:text-amber-900"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                )}
+
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="space-y-1">
                     <label className={LBL}>Year *</label>
@@ -848,34 +1011,103 @@ export default function NewDealForm({
                       type="number"
                       value={trade.year}
                       onChange={(e) => updateTrade(idx, "year", e.target.value)}
+                      disabled={tradeDecoded[idx]}
                       className={emptyCls(trade.year)}
                     />
                   </div>
                   <div className="space-y-1">
                     <label className={LBL}>Make *</label>
-                    <Input
-                      value={trade.make}
-                      onChange={(e) => updateTrade(idx, "make", e.target.value)}
-                      className={emptyCls(trade.make)}
-                    />
+                    {trade.makeIsManual ? (
+                      <>
+                        <Input
+                          value={trade.make}
+                          onChange={(e) => updateTrade(idx, "make", e.target.value)}
+                          disabled={tradeDecoded[idx]}
+                          className={emptyCls(trade.make)}
+                        />
+                        {!tradeDecoded[idx] && (
+                          <p className="text-xs text-amber-600">
+                            ⚠ Not in vehicle list — verify or ask an admin to add it
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <select
+                        value={trade.makeId}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          const found = vehicleMakes.find((m) => m.id === id);
+                          patchTrade(idx, {
+                            makeId: id,
+                            make: found?.name ?? "",
+                            modelId: "",
+                            model: "",
+                            modelIsManual: false,
+                          });
+                        }}
+                        disabled={tradeDecoded[idx]}
+                        className={cn(SEL, emptyCls(trade.makeId))}
+                      >
+                        <option value="">Select make</option>
+                        {vehicleMakes.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                   <div className="space-y-1">
                     <label className={LBL}>Model *</label>
-                    <Input
-                      value={trade.model}
-                      onChange={(e) => updateTrade(idx, "model", e.target.value)}
-                      className={emptyCls(trade.model)}
-                    />
+                    {trade.makeIsManual || trade.modelIsManual ? (
+                      <>
+                        <Input
+                          value={trade.model}
+                          onChange={(e) => updateTrade(idx, "model", e.target.value)}
+                          disabled={tradeDecoded[idx]}
+                          className={emptyCls(trade.model)}
+                        />
+                        {trade.modelIsManual && !trade.makeIsManual && !tradeDecoded[idx] && (
+                          <p className="text-xs text-amber-600">
+                            ⚠ Not in vehicle list — verify or ask an admin to add it
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <select
+                        value={trade.modelId}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          const found = vehicleModels.find((m) => m.id === id);
+                          patchTrade(idx, {
+                            modelId: id,
+                            model: found?.name ?? "",
+                          });
+                        }}
+                        disabled={tradeDecoded[idx] || !trade.makeId}
+                        className={cn(SEL, emptyCls(trade.modelId))}
+                      >
+                        <option value="">
+                          {trade.makeId ? "Select model" : "Select make first"}
+                        </option>
+                        {vehicleModels
+                          .filter((m) => m.make_id === trade.makeId)
+                          .map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name}
+                            </option>
+                          ))}
+                      </select>
+                    )}
                   </div>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="space-y-1">
-                    <label className={LBL}>ACV *</label>
+                    <label className={LBL}>ACV</label>
                     <Input
                       type="number"
                       value={trade.acv}
                       onChange={(e) => updateTrade(idx, "acv", e.target.value)}
-                      className={emptyCls(trade.acv)}
                     />
                   </div>
                   <div className="space-y-1">
@@ -884,15 +1116,14 @@ export default function NewDealForm({
                       type="number"
                       value={trade.allowance}
                       onChange={(e) => updateTrade(idx, "allowance", e.target.value)}
-                      className={emptyCls(trade.allowance)}
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className={LBL}>Exit Strategy *</label>
+                    <label className={LBL}>Exit Strategy</label>
                     <select
                       value={trade.exit_strategy}
                       onChange={(e) => updateTrade(idx, "exit_strategy", e.target.value)}
-                      className={cn(SEL, emptyCls(trade.exit_strategy))}
+                      className={SEL}
                     >
                       <option value="">Select...</option>
                       <option value="retail">Retail</option>

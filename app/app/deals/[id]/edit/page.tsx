@@ -41,6 +41,8 @@ type VehicleModelRow = { id: string; name: string; make_id: string };
 type DeptOption = { id: string; name: string };
 
 type TradeRow = {
+  id: string;
+  vin: string | null;
   year: number | null;
   make: string | null;
   model: string | null;
@@ -144,7 +146,7 @@ export default async function EditDealPage({ params }: { params: { id: string } 
         .order("name"),
       supabase
         .from("trades")
-        .select("year,make,model,acv,allowance,exit_strategy")
+        .select("id,vin,year,make,model,acv,allowance,exit_strategy")
         .eq("deal_id", deal.id),
       supabase
         .from("vehicle_makes")

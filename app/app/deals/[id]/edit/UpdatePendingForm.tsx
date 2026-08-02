@@ -12,12 +12,30 @@ import { canClose } from "@/lib/can-close";
 import { cn } from "@/lib/utils";
 
 type TradeRow = {
+  id: string;
+  vin: string | null;
   year: number | null;
   make: string | null;
   model: string | null;
   acv: number | null;
   allowance: number | null;
   exit_strategy: string | null;
+};
+
+type EditableTrade = {
+  clientKey: string;
+  id: string | null;
+  vin: string;
+  year: string;
+  make: string;
+  model: string;
+  makeId: string;
+  modelId: string;
+  makeIsManual: boolean;
+  modelIsManual: boolean;
+  acv: string;
+  allowance: string;
+  exit_strategy: string;
 };
 
 type Split = {
@@ -85,6 +103,71 @@ function numStr(v: number | null): string {
   return v !== null ? String(v) : "";
 }
 
+function emptyEditableTrade(): EditableTrade {
+  return {
+    clientKey: `new-${crypto.randomUUID()}`,
+    id: null,
+    vin: "",
+    year: "",
+    make: "",
+    model: "",
+    makeId: "",
+    modelId: "",
+    makeIsManual: false,
+    modelIsManual: false,
+    acv: "",
+    allowance: "",
+    exit_strategy: "",
+  };
+}
+
+function resolveTradeMakeModel(
+  make: string,
+  model: string,
+  vehicleMakes: { id: string; name: string }[],
+  vehicleModels: { id: string; name: string; make_id: string }[]
+) {
+  const matchedMake = vehicleMakes.find(
+    (m) => m.name.toLowerCase() === make.toLowerCase()
+  );
+  const makeId = matchedMake?.id ?? "";
+  const makeIsManual = Boolean(make) && !matchedMake;
+  const matchedModel = matchedMake
+    ? vehicleModels.find(
+        (m) =>
+          m.make_id === matchedMake.id &&
+          m.name.toLowerCase() === model.toLowerCase()
+      )
+    : undefined;
+  return {
+    makeId,
+    makeIsManual,
+    modelId: matchedModel?.id ?? "",
+    modelIsManual: Boolean(model) && !matchedModel,
+  };
+}
+
+function toEditableTrade(
+  t: TradeRow,
+  vehicleMakes: { id: string; name: string }[],
+  vehicleModels: { id: string; name: string; make_id: string }[]
+): EditableTrade {
+  const make = t.make ?? "";
+  const model = t.model ?? "";
+  return {
+    clientKey: t.id,
+    id: t.id,
+    vin: t.vin ?? "",
+    year: numStr(t.year),
+    make,
+    model,
+    ...resolveTradeMakeModel(make, model, vehicleMakes, vehicleModels),
+    acv: numStr(t.acv),
+    allowance: numStr(t.allowance),
+    exit_strategy: t.exit_strategy ?? "",
+  };
+}
+
 
 function StatusBadge({ status }: { status: string }) {
   const cfg: Record<string, string> = {
@@ -140,7 +223,7 @@ export default function UpdatePendingForm({
   departmentMakes,
   salespeople,
   initialSplits,
-  trades,
+  trades: initialTrades,
 }: Props) {
   const router = useRouter();
 
@@ -160,6 +243,17 @@ export default function UpdatePendingForm({
       share: String(s.share_percent ?? 100),
     }));
   });
+
+  // ── Trades (editable) ─────────────────────────────────────────────────────────
+  const [persistedTradeIds, setPersistedTradeIds] = useState(() =>
+    initialTrades.map((t) => t.id)
+  );
+  const [tradeRows, setTradeRows] = useState<EditableTrade[]>(() =>
+    initialTrades.map((t) => toEditableTrade(t, vehicleMakes, vehicleModels))
+  );
+  const [tradeDecodingKey, setTradeDecodingKey] = useState<string | null>(null);
+  const [tradeDecodeErrors, setTradeDecodeErrors] = useState<Record<string, string>>({});
+  const [tradeDecoded, setTradeDecoded] = useState<Record<string, boolean>>({});
 
   // ── Decoded vehicle identity (saved via buildPayload) ─────────────────────────
   const [displayYear, setDisplayYear] = useState<number>(vehicleYear);
@@ -344,6 +438,148 @@ export default function UpdatePendingForm({
     if (spError) throw new Error(`Salespeople update failed: ${spError.message}`);
   }
 
+  function tradePayload(t: EditableTrade) {
+    return {
+      vin: t.vin.trim() || null,
+      year: t.year.trim() ? parseInt(t.year, 10) : null,
+      make: t.make.trim() || null,
+      model: t.model.trim() || null,
+      acv: t.acv.trim() ? parseFloat(t.acv) : null,
+      allowance: t.allowance.trim() ? parseFloat(t.allowance) : null,
+      exit_strategy: t.exit_strategy || null,
+    };
+  }
+
+  async function saveTrades(
+    supabase: ReturnType<typeof createSupabaseBrowserClient>
+  ) {
+    const currentIds = tradeRows
+      .map((t) => t.id)
+      .filter((id): id is string => Boolean(id));
+    const toDelete = persistedTradeIds.filter((id) => !currentIds.includes(id));
+
+    if (toDelete.length > 0) {
+      const { error: delError } = await supabase
+        .from("trades")
+        .delete()
+        .in("id", toDelete);
+      if (delError) throw new Error(`Trade delete failed: ${delError.message}`);
+    }
+
+    const nextRows: EditableTrade[] = [];
+    for (const t of tradeRows) {
+      const payload = tradePayload(t);
+      if (t.id) {
+        const { error } = await supabase
+          .from("trades")
+          .update(payload)
+          .eq("id", t.id);
+        if (error) throw new Error(`Trade update failed: ${error.message}`);
+        nextRows.push(t);
+      } else {
+        const { data, error } = await supabase
+          .from("trades")
+          .insert({ deal_id: dealId, ...payload })
+          .select("id")
+          .single();
+        if (error) throw new Error(`Trade insert failed: ${error.message}`);
+        nextRows.push({ ...t, id: data.id, clientKey: data.id });
+      }
+    }
+    setTradeRows(nextRows);
+    setPersistedTradeIds(
+      nextRows.map((t) => t.id).filter((id): id is string => Boolean(id))
+    );
+  }
+
+  // ── Trade helpers ─────────────────────────────────────────────────────────────
+  function addTrade() {
+    setTradeRows((prev) => [...prev, emptyEditableTrade()]);
+  }
+
+  function removeTrade(clientKey: string) {
+    setTradeRows((prev) => prev.filter((t) => t.clientKey !== clientKey));
+    setTradeDecodeErrors((prev) => {
+      const next = { ...prev };
+      delete next[clientKey];
+      return next;
+    });
+    setTradeDecoded((prev) => {
+      const next = { ...prev };
+      delete next[clientKey];
+      return next;
+    });
+  }
+
+  function updateTrade(
+    clientKey: string,
+    field: keyof EditableTrade,
+    value: string
+  ) {
+    setTradeRows((prev) =>
+      prev.map((t) => (t.clientKey === clientKey ? { ...t, [field]: value } : t))
+    );
+  }
+
+  function patchTrade(clientKey: string, patch: Partial<EditableTrade>) {
+    setTradeRows((prev) =>
+      prev.map((t) => (t.clientKey === clientKey ? { ...t, ...patch } : t))
+    );
+  }
+
+  async function handleDecodeTradeVin(clientKey: string) {
+    const trade = tradeRows.find((t) => t.clientKey === clientKey);
+    const v = trade?.vin.trim() ?? "";
+    if (v.length !== 17) return;
+
+    setTradeDecodingKey(clientKey);
+    setTradeDecodeErrors((prev) => {
+      const next = { ...prev };
+      delete next[clientKey];
+      return next;
+    });
+
+    try {
+      const d = await decodeVin(v);
+      const matchedMake = vehicleMakes.find(
+        (m) => m.name.toLowerCase() === d.make.toLowerCase()
+      );
+      const resolvedMakeId = matchedMake?.id ?? "";
+      const makeIsManual = !matchedMake;
+      const matchedModel = vehicleModels.find(
+        (m) =>
+          m.make_id === resolvedMakeId &&
+          m.name.toLowerCase() === d.model.toLowerCase()
+      );
+
+      setTradeRows((prev) =>
+        prev.map((t) =>
+          t.clientKey === clientKey
+            ? {
+                ...t,
+                year: d.year !== null ? String(d.year) : t.year,
+                make: d.make || t.make,
+                model: d.model || t.model,
+                makeId: resolvedMakeId,
+                makeIsManual,
+                modelId: matchedModel?.id ?? "",
+                modelIsManual: !matchedModel,
+              }
+            : t
+        )
+      );
+      setTradeDecoded((prev) => ({ ...prev, [clientKey]: true }));
+    } catch (err) {
+      const msg =
+        err instanceof VinDecodeError
+          ? err.message
+          : "Could not decode this VIN — enter details manually.";
+      setTradeDecodeErrors((prev) => ({ ...prev, [clientKey]: msg }));
+    } finally {
+      setTradeDecodingKey(null);
+    }
+  }
+
   // ── Payload builder ───────────────────────────────────────────────────────────
   function buildPayload() {
     return {
@@ -376,6 +612,7 @@ export default function UpdatePendingForm({
           ? parseFloat(listPrice)
           : null,
       age: age.trim() ? parseInt(age, 10) : null,
+      trade_status: tradeRows.length > 0 ? "has_trade" : "no_trade",
     };
   }
 
@@ -395,6 +632,7 @@ export default function UpdatePendingForm({
 
       if (error) throw new Error(error.message);
       await saveSalespeople(supabase);
+      await saveTrades(supabase);
       setSaved(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err: unknown) {
@@ -465,13 +703,15 @@ export default function UpdatePendingForm({
     }
 
     // Trades
-    trades.forEach((t, i) => {
-      const label = trades.length > 1 ? ` (trade ${i + 1})` : "";
-      if (t.year === null) errs.push(`Trade year is required${label}`);
-      if (!t.make?.trim()) errs.push(`Trade make is required${label}`);
-      if (!t.model?.trim()) errs.push(`Trade model is required${label}`);
-      if (t.acv === null) errs.push(`Trade ACV is required${label}`);
-      if (!t.exit_strategy?.trim())
+    tradeRows.forEach((t, i) => {
+      const label = tradeRows.length > 1 ? ` (trade ${i + 1})` : "";
+      if (!t.year.trim()) errs.push(`Trade year is required${label}`);
+      if (!t.make.trim()) errs.push(`Trade make is required${label}`);
+      if (!t.model.trim()) errs.push(`Trade model is required${label}`);
+      if (!t.vin.trim()) errs.push(`Trade VIN is required${label}`);
+      if (!t.acv.trim()) errs.push(`Trade ACV is required${label}`);
+      if (!t.allowance.trim()) errs.push(`Trade allowance is required${label}`);
+      if (!t.exit_strategy.trim())
         errs.push(`Trade exit strategy is required${label}`);
     });
 
@@ -553,6 +793,7 @@ export default function UpdatePendingForm({
 
       if (error) throw new Error(error.message);
       await saveSalespeople(supabase);
+      await saveTrades(supabase);
       setClosed(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
       setTimeout(() => router.push("/app/deals"), 2000);
@@ -583,6 +824,7 @@ export default function UpdatePendingForm({
 
       if (error) throw new Error(error.message);
       await saveSalespeople(supabase);
+      await saveTrades(supabase);
       setMarkedLost(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
       setTimeout(() => router.push("/app/deals"), 2000);
@@ -1203,6 +1445,308 @@ export default function UpdatePendingForm({
               </select>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Trade-In ─────────────────────────────────────────────────────────── */}
+      <Card className="app-panel border-border shadow-none">
+        <CardHeader className="border-border">
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle className="text-lg">Trade-In</CardTitle>
+            {!isLocked && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addTrade}
+                disabled={busy}
+              >
+                <PlusCircle className="mr-1.5 h-3.5 w-3.5" />
+                {tradeRows.length === 0 ? "Add trade" : "Add another trade"}
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {tradeRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No trade-in on this deal.</p>
+          ) : (
+            tradeRows.map((trade, idx) => (
+              <div
+                key={trade.clientKey}
+                className="space-y-3 rounded-xl border border-border bg-muted p-4"
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Trade {idx + 1}
+                  </p>
+                  {!isLocked && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeTrade(trade.clientKey)}
+                      className="h-7 px-2 text-muted-foreground hover:text-red-500"
+                    >
+                      <Trash2 className="mr-1 h-3.5 w-3.5" />
+                      Remove
+                    </Button>
+                  )}
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className={LBL}>VIN</label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={trade.vin}
+                        onChange={(e) => {
+                          updateTrade(trade.clientKey, "vin", e.target.value);
+                          setTradeDecodeErrors((prev) => {
+                            const next = { ...prev };
+                            delete next[trade.clientKey];
+                            return next;
+                          });
+                          setTradeDecoded((prev) => {
+                            const next = { ...prev };
+                            delete next[trade.clientKey];
+                            return next;
+                          });
+                        }}
+                        onBlur={() => {
+                          if (trade.vin.trim().length === 17) {
+                            handleDecodeTradeVin(trade.clientKey);
+                          }
+                        }}
+                        disabled={isLocked || tradeDecodingKey === trade.clientKey}
+                        className={cn(
+                          "font-mono",
+                          emptyCls(trade.vin, isLocked)
+                        )}
+                      />
+                      {!isLocked && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => handleDecodeTradeVin(trade.clientKey)}
+                          disabled={
+                            trade.vin.trim().length !== 17 ||
+                            tradeDecodingKey === trade.clientKey
+                          }
+                          className="shrink-0"
+                        >
+                          {tradeDecodingKey === trade.clientKey ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            "Decode VIN"
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {tradeDecoded[trade.clientKey] && !isLocked && (
+                  <p className="text-sm text-green-700">
+                    ✓ Decoded from VIN —{" "}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setTradeDecoded((prev) => {
+                          const next = { ...prev };
+                          delete next[trade.clientKey];
+                          return next;
+                        })
+                      }
+                      className="text-xs text-green-600 underline hover:text-green-900"
+                    >
+                      Edit manually
+                    </button>
+                  </p>
+                )}
+
+                {tradeDecodeErrors[trade.clientKey] && (
+                  <div className="flex items-start gap-2 rounded-lg border border-[color-mix(in_srgb,var(--da-amber)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-amber)_12%,transparent)] p-3">
+                    <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                    <p className="flex-1 text-sm text-amber-800">
+                      {tradeDecodeErrors[trade.clientKey]}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setTradeDecodeErrors((prev) => {
+                          const next = { ...prev };
+                          delete next[trade.clientKey];
+                          return next;
+                        })
+                      }
+                      className="shrink-0 text-xs text-amber-600 underline hover:text-amber-900"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                )}
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="space-y-1">
+                    <label className={LBL}>Year</label>
+                    <Input
+                      type="number"
+                      value={trade.year}
+                      onChange={(e) =>
+                        updateTrade(trade.clientKey, "year", e.target.value)
+                      }
+                      disabled={isLocked || tradeDecoded[trade.clientKey]}
+                      className={emptyCls(trade.year, isLocked)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className={LBL}>Make</label>
+                    {trade.makeIsManual ? (
+                      <>
+                        <Input
+                          value={trade.make}
+                          onChange={(e) =>
+                            updateTrade(trade.clientKey, "make", e.target.value)
+                          }
+                          disabled={isLocked || tradeDecoded[trade.clientKey]}
+                          className={emptyCls(trade.make, isLocked)}
+                        />
+                        {!isLocked && !tradeDecoded[trade.clientKey] && (
+                          <p className="text-xs text-amber-600">
+                            ⚠ Not in vehicle list — verify or ask an admin to add it
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <select
+                        value={trade.makeId}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          const found = vehicleMakes.find((m) => m.id === id);
+                          patchTrade(trade.clientKey, {
+                            makeId: id,
+                            make: found?.name ?? "",
+                            modelId: "",
+                            model: "",
+                            modelIsManual: false,
+                          });
+                        }}
+                        disabled={isLocked || tradeDecoded[trade.clientKey]}
+                        className={cn(SEL, emptyCls(trade.makeId, isLocked))}
+                      >
+                        <option value="">Select make</option>
+                        {vehicleMakes.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <label className={LBL}>Model</label>
+                    {trade.makeIsManual || trade.modelIsManual ? (
+                      <>
+                        <Input
+                          value={trade.model}
+                          onChange={(e) =>
+                            updateTrade(trade.clientKey, "model", e.target.value)
+                          }
+                          disabled={isLocked || tradeDecoded[trade.clientKey]}
+                          className={emptyCls(trade.model, isLocked)}
+                        />
+                        {trade.modelIsManual &&
+                          !trade.makeIsManual &&
+                          !isLocked &&
+                          !tradeDecoded[trade.clientKey] && (
+                            <p className="text-xs text-amber-600">
+                              ⚠ Not in vehicle list — verify or ask an admin to add it
+                            </p>
+                          )}
+                      </>
+                    ) : (
+                      <select
+                        value={trade.modelId}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          const found = vehicleModels.find((m) => m.id === id);
+                          patchTrade(trade.clientKey, {
+                            modelId: id,
+                            model: found?.name ?? "",
+                          });
+                        }}
+                        disabled={
+                          isLocked ||
+                          tradeDecoded[trade.clientKey] ||
+                          !trade.makeId
+                        }
+                        className={cn(SEL, emptyCls(trade.modelId, isLocked))}
+                      >
+                        <option value="">
+                          {trade.makeId ? "Select model" : "Select make first"}
+                        </option>
+                        {vehicleModels
+                          .filter((m) => m.make_id === trade.makeId)
+                          .map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name}
+                            </option>
+                          ))}
+                      </select>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="space-y-1">
+                    <label className={LBL}>ACV</label>
+                    <Input
+                      type="number"
+                      value={trade.acv}
+                      onChange={(e) =>
+                        updateTrade(trade.clientKey, "acv", e.target.value)
+                      }
+                      disabled={isLocked}
+                      className={emptyCls(trade.acv, isLocked)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className={LBL}>Allowance</label>
+                    <Input
+                      type="number"
+                      value={trade.allowance}
+                      onChange={(e) =>
+                        updateTrade(trade.clientKey, "allowance", e.target.value)
+                      }
+                      disabled={isLocked}
+                      className={emptyCls(trade.allowance, isLocked)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className={LBL}>Exit Strategy</label>
+                    <select
+                      value={trade.exit_strategy}
+                      onChange={(e) =>
+                        updateTrade(
+                          trade.clientKey,
+                          "exit_strategy",
+                          e.target.value
+                        )
+                      }
+                      disabled={isLocked}
+                      className={cn(SEL, emptyCls(trade.exit_strategy, isLocked))}
+                    >
+                      <option value="">Select...</option>
+                      <option value="retail">Retail</option>
+                      <option value="wholesale">Wholesale</option>
+                      <option value="unknown">Unknown</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </CardContent>
       </Card>
 
