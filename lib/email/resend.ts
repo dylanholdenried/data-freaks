@@ -35,7 +35,7 @@ export async function sendActivationEmail(
         bodyHtml: `
           <p style="margin:0 0 12px;">Hi ${escapeHtml(input.firstName)},</p>
           <p style="margin:0 0 12px;">
-            <strong style="color:#FFB020;">${escapeHtml(input.groupName)}</strong> is active. You can sign in and finish setting up
+            <strong style="color:#4A9EFF;">${escapeHtml(input.groupName)}</strong> is active. You can sign in and finish setting up
             your stores (salespeople, finance managers, acquisition sources, and goals).
           </p>
         `,
@@ -76,7 +76,7 @@ export async function sendInviteEmail(
         bodyHtml: `
           <p style="margin:0 0 12px;">Hi ${escapeHtml(input.firstName || "there")},</p>
           <p style="margin:0 0 12px;">
-            An account has been set up for you on <strong style="color:#FFB020;">${escapeHtml(input.groupName)}</strong>.
+            An account has been set up for you on <strong style="color:#4A9EFF;">${escapeHtml(input.groupName)}</strong>.
             Click below to create your password and sign in.
           </p>
         `,

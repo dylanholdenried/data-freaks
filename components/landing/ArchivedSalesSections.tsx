@@ -149,7 +149,7 @@ export function ArchivedPricingSection() {
                 )}
               </ul>
               <a
-                className={`da-btn ${plan.amber ? "da-btn-amber" : "da-btn-ghost"}`}
+                className={`da-btn ${plan.amber ? "da-btn-green" : "da-btn-ghost"}`}
                 href={plan.href}
               >
                 {plan.cta}

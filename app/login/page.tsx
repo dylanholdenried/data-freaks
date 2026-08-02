@@ -147,7 +147,7 @@ export default function LoginPage() {
             >
               Log in
             </a>
-            <a className="da-btn da-btn-amber" href="/signup">
+            <a className="da-btn da-btn-green" href="/signup">
               Sign up
             </a>
           </div>
@@ -220,7 +220,7 @@ export default function LoginPage() {
                   placeholder="Enter your password"
                 />
               </label>
-              <button type="submit" className="da-btn da-btn-amber da-login-submit" disabled={submitting}>
+              <button type="submit" className="da-btn da-btn-green da-login-submit" disabled={submitting}>
                 {submitting ? "Signing in..." : "Sign in"}
               </button>
             </form>

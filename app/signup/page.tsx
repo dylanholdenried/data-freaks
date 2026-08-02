@@ -106,7 +106,7 @@ export default function SignupPage() {
             <a className="da-nav-text da-nav-login" href="/login">
               Log in
             </a>
-            <a className="da-btn da-btn-amber" href="/signup" aria-current="page">
+            <a className="da-btn da-btn-green" href="/signup" aria-current="page">
               Sign up
             </a>
           </div>
@@ -274,7 +274,7 @@ export default function SignupPage() {
                     </p>
                     <button
                       type="submit"
-                      className="da-btn da-btn-amber da-signup-submit"
+                      className="da-btn da-btn-green da-signup-submit"
                       disabled={submitting}
                     >
                       {submitting ? "Creating..." : "Create account"}

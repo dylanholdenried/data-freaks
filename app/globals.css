@@ -258,12 +258,13 @@ main:has(.da-app) + footer {
 }
 
 .da-acq {
-  color: #ffb020;
+  color: #4a9eff;
 }
 
 /* ---------- DealerACQ 3a brand mark (colored only) ---------- */
 .da-brand-logo {
   --da-logo-red: #ff5a52;
+  --da-logo-amber: #ffb020;
   --da-logo-blue: #4a9eff;
   --da-logo-green: #2ecc71;
   --da-logo-dealer: #e8ecf2;
@@ -364,9 +365,9 @@ main:has(.da-app) + footer {
   background: var(--da-logo-red);
 }
 
-.da-logo-bars--lg .da-logo-bar--blue {
+.da-logo-bars--lg .da-logo-bar--amber {
   height: 4px;
-  background: var(--da-logo-blue);
+  background: var(--da-logo-amber);
 }
 
 .da-logo-bars--lg .da-logo-bar--green {
@@ -379,9 +380,9 @@ main:has(.da-app) + footer {
   background: var(--da-logo-red);
 }
 
-.da-logo-bars--sm .da-logo-bar--blue {
+.da-logo-bars--sm .da-logo-bar--amber {
   height: 3px;
-  background: var(--da-logo-blue);
+  background: var(--da-logo-amber);
 }
 
 .da-logo-bars--sm .da-logo-bar--green {
@@ -403,7 +404,7 @@ main:has(.da-app) + footer {
   font-size: 14px;
   letter-spacing: -0.04em;
   line-height: 1;
-  color: #ffb020;
+  color: #4a9eff;
 }
 
 .da-logo-lockup {
@@ -482,6 +483,24 @@ main:has(.da-app) + footer {
   background: #ffc24d;
 }
 
+.da-btn-blue {
+  background: var(--da-blue);
+  color: #ffffff;
+}
+
+.da-btn-blue:hover {
+  background: #6bb0ff;
+}
+
+.da-btn-green {
+  background: var(--da-green);
+  color: #0b0e13;
+}
+
+.da-btn-green:hover {
+  background: #3fd887;
+}
+
 .da-btn-ghost {
   border-color: var(--da-line);
   color: var(--da-text);
@@ -524,7 +543,7 @@ main:has(.da-app) + footer {
 }
 
 .da-hl {
-  color: var(--da-amber);
+  color: var(--da-blue);
 }
 
 .da-sub {
@@ -2436,7 +2455,7 @@ main:has(.da-app) + footer {
 }
 
 .da-demo-page .da-footer a {
-  color: var(--da-amber);
+  color: var(--da-blue);
 }
 
 @media (max-width: 1100px) {

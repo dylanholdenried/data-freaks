@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 56" role="img" aria-label="DealerACQ">
   <text x="0" y="32" font-family="Arial Black, Arial, sans-serif" font-weight="800" font-size="32" fill="#E8ECF2" letter-spacing="-1">Dealer</text>
-  <text x="118" y="32" font-family="Arial Black, Arial, sans-serif" font-weight="800" font-size="32" fill="#FFB020" letter-spacing="-1">ACQ</text>
+  <text x="118" y="32" font-family="Arial Black, Arial, sans-serif" font-weight="800" font-size="32" fill="#4A9EFF" letter-spacing="-1">ACQ</text>
   <rect x="0" y="42" width="175" height="2" rx="1" fill="#3A4252"/>
   <rect x="185" y="46" width="28" height="4" rx="1" fill="#FF5A52"/>
-  <rect x="217" y="42" width="28" height="8" rx="1" fill="#4A9EFF"/>
+  <rect x="217" y="42" width="28" height="8" rx="1" fill="#FFB020"/>
   <rect x="249" y="38" width="28" height="12" rx="1" fill="#2ECC71"/>
 </svg>

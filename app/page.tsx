@@ -124,7 +124,7 @@ export default function LandingPage() {
             <a className="da-nav-text da-nav-login" href="/login">
               Log in
             </a>
-            <a className="da-btn da-btn-amber" href="/signup">
+            <a className="da-btn da-btn-green" href="/signup">
               Sign up
             </a>
           </div>
@@ -144,7 +144,7 @@ export default function LandingPage() {
             you want the answers.
           </p>
           <div className="da-hero-ctas">
-            <a className="da-btn da-btn-amber da-btn-lg" href="/signup">
+            <a className="da-btn da-btn-green da-btn-lg" href="/signup">
               Start for Free
             </a>
             <a className="da-btn da-btn-ghost da-btn-lg" href="#how">
@@ -265,7 +265,7 @@ export default function LandingPage() {
         <p className="da-sec-sub">
           Free forever for the sales log. Upgrade when your own data convinces you.
         </p>
-        <a className="da-btn da-btn-amber da-btn-lg" href="/signup">
+        <a className="da-btn da-btn-green da-btn-lg" href="/signup">
           Start for Free
         </a>
       </section>

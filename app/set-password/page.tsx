@@ -170,7 +170,7 @@ export default function SetPasswordPage() {
             <a className="da-nav-text da-nav-login" href="/login">
               Log in
             </a>
-            <a className="da-btn da-btn-amber" href="/signup">
+            <a className="da-btn da-btn-green" href="/signup">
               Sign up
             </a>
           </div>
@@ -275,7 +275,7 @@ export default function SetPasswordPage() {
                     </label>
                     <button
                       type="submit"
-                      className="da-btn da-btn-amber da-login-submit"
+                      className="da-btn da-btn-green da-login-submit"
                       disabled={submitting}
                     >
                       {submitting ? "Saving…" : "Save password"}

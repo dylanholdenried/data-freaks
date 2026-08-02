@@ -81,7 +81,7 @@ export default function DemoApp() {
             <a className="da-nav-text da-nav-login" href="/login">
               Log in
             </a>
-            <a className="da-btn da-btn-amber" href="/signup">
+            <a className="da-btn da-btn-green" href="/signup">
               Sign up
             </a>
           </div>

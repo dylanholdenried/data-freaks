@@ -17,7 +17,7 @@ function SignalBars({ size }: { size: "sm" | "lg" }) {
   return (
     <span className={`da-logo-bars da-logo-bars--${size}`} aria-hidden="true">
       <span className="da-logo-bar da-logo-bar--red" />
-      <span className="da-logo-bar da-logo-bar--blue" />
+      <span className="da-logo-bar da-logo-bar--amber" />
       <span className="da-logo-bar da-logo-bar--green" />
     </span>
   );

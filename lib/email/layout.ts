@@ -10,13 +10,13 @@ function escapeHtml(value: string) {
     .replace(/"/g, "&quot;");
 }
 
-/** Colored 3a wordmark as email-safe nested tables (no mono / no image dependency). */
+/** Colored 3a wordmark as email-safe nested tables (blue ACQ, red→amber→green tape). */
 function emailLogoHtml() {
   return `
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 28px;">
       <tr>
         <td style="font-family:Arial,Helvetica,sans-serif;font-size:28px;font-weight:800;letter-spacing:-1px;line-height:1;color:#E8ECF2;">Dealer</td>
-        <td style="font-family:Arial,Helvetica,sans-serif;font-size:28px;font-weight:800;letter-spacing:-1px;line-height:1;color:#FFB020;">ACQ</td>
+        <td style="font-family:Arial,Helvetica,sans-serif;font-size:28px;font-weight:800;letter-spacing:-1px;line-height:1;color:#4A9EFF;">ACQ</td>
       </tr>
       <tr>
         <td colspan="2" style="padding-top:8px;">
@@ -28,7 +28,7 @@ function emailLogoHtml() {
                 <div style="height:4px;line-height:4px;font-size:4px;">&nbsp;</div>
               </td>
               <td width="4" style="font-size:0;line-height:0;">&nbsp;</td>
-              <td width="28" valign="bottom" style="background:#4A9EFF;font-size:0;line-height:0;">
+              <td width="28" valign="bottom" style="background:#FFB020;font-size:0;line-height:0;">
                 <div style="height:8px;line-height:8px;font-size:8px;">&nbsp;</div>
               </td>
               <td width="4" style="font-size:0;line-height:0;">&nbsp;</td>
