@@ -315,7 +315,7 @@ export async function resendAdminUserInvite(formData: FormData) {
     }
   }
 
-  let groupName = "Data Freaks";
+  let groupName = "DealerACQ";
   if (target.dealer_group_id) {
     const { data: groupRow } = await service
       .from("dealer_groups")
@@ -324,7 +324,7 @@ export async function resendAdminUserInvite(formData: FormData) {
       .maybeSingle();
     if (groupRow?.name) groupName = groupRow.name;
   } else if (isPlatformStaff(target.role)) {
-    groupName = "Data Freaks Platform";
+    groupName = "DealerACQ Platform";
   }
 
   const linkResult = await generatePasswordSetupLink(service, target.email);

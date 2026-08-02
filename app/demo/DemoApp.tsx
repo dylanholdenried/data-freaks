@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Archivo, IBM_Plex_Mono, Inter } from "next/font/google";
+import DealerAcqLogo from "@/components/brand/DealerAcqLogo";
 import { getAcqAutoGroupFixture, DEMO_TODAY } from "@/lib/demo/acq-auto-group";
 import { DemoDashboard } from "./DemoDashboard";
 import { DemoRegistry } from "./DemoRegistry";
@@ -72,9 +73,7 @@ export default function DemoApp() {
 
       <nav className="da-nav">
         <div className="da-wrap da-nav-in">
-          <a className="da-logo" href="/">
-            Dealer<span className="da-acq">ACQ</span>
-          </a>
+          <DealerAcqLogo href="/" />
           <div className="da-nav-links">
             <a href="/#how">How it works</a>
             <a href="/#pricing">Pricing</a>

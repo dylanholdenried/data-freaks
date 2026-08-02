@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Archivo, IBM_Plex_Mono, Inter } from "next/font/google";
 import { z } from "zod";
+import DealerAcqLogo from "@/components/brand/DealerAcqLogo";
 
 const archivo = Archivo({
   subsets: ["latin"],
@@ -97,9 +98,7 @@ export default function SignupPage() {
 
       <nav className="da-nav">
         <div className="da-wrap da-nav-in">
-          <a className="da-logo" href="/">
-            Dealer<span className="da-acq">ACQ</span>
-          </a>
+          <DealerAcqLogo href="/" />
           <div className="da-nav-links">
             <a href="/#how">How it works</a>
             <a href="/#pricing">Pricing</a>

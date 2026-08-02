@@ -1,9 +1,13 @@
 import "./globals.css";
 import type { ReactNode } from "react";
+import type { Metadata } from "next";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "DealerACQ — Acquisition intelligence for used car departments",
-  description: "DealerACQ turns dealership sales logs into acquisition intelligence and cleaner KPIs."
+  description: "DealerACQ turns dealership sales logs into acquisition intelligence and cleaner KPIs.",
+  icons: {
+    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

@@ -9,6 +9,7 @@ import { isPlatformStaff } from "@/lib/roles";
 import { Button } from "@/components/ui/button";
 import { DaAppThemeProvider } from "@/components/theme/theme-context";
 import ThemeToggle from "@/components/theme/ThemeToggle";
+import DealerAcqLogo from "@/components/brand/DealerAcqLogo";
 import { signOut } from "@/app/app/actions";
 import AdminMobileMenu from "./AdminMobileMenu";
 import AdminSidebarNav from "./AdminSidebarNav";
@@ -43,11 +44,8 @@ export default async function AdminLayout({ children }: { children: ReactNode })
       <div className="app-canvas flex min-h-screen">
         <aside className="fixed inset-y-0 left-0 z-30 hidden w-[248px] overflow-y-auto border-r border-[var(--da-line)] bg-[var(--da-panel)] text-[var(--da-text)] lg:flex lg:flex-col">
           <div className="border-b border-[var(--da-line)] px-5 py-5">
-            <div className="mb-1 flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--da-blue)] text-[10px] font-semibold text-white">
-                DA
-              </div>
-              <div className="text-sm font-semibold tracking-tight">DealerACQ</div>
+            <div className="mb-1">
+              <DealerAcqLogo href="/admin" desktopVariant="lockup" />
             </div>
             <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--da-muted)]">
               Platform Admin

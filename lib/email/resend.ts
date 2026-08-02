@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { escapeHtml, renderDealerAcqEmail, siteUrl } from "@/lib/email/layout";
 
 function getResendClient() {
   const apiKey = process.env.RESEND_API_KEY;
@@ -8,12 +9,8 @@ function getResendClient() {
   return new Resend(apiKey);
 }
 
-function siteUrl() {
-  return (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, "");
-}
-
 function fromAddress() {
-  return process.env.EMAIL_FROM || "Data Freaks <onboarding@datafreaks.app>";
+  return process.env.EMAIL_FROM || "DealerACQ <onboarding@dealeracq.com>";
 }
 
 export type ActivationEmailInput = {
@@ -32,26 +29,20 @@ export async function sendActivationEmail(
     const { error } = await resend.emails.send({
       from: fromAddress(),
       to: input.to,
-      subject: "Your Data Freaks account is active",
-      html: `
-        <div style="font-family: system-ui, -apple-system, sans-serif; line-height: 1.5; color: #0f172a;">
-          <h1 style="font-size: 20px; margin: 0 0 12px;">Welcome to Data Freaks</h1>
-          <p style="margin: 0 0 12px;">Hi ${escapeHtml(input.firstName)},</p>
-          <p style="margin: 0 0 12px;">
-            <strong>${escapeHtml(input.groupName)}</strong> is active. You can sign in and finish setting up
+      subject: "Your DealerACQ account is active",
+      html: renderDealerAcqEmail({
+        title: "Welcome to DealerACQ",
+        bodyHtml: `
+          <p style="margin:0 0 12px;">Hi ${escapeHtml(input.firstName)},</p>
+          <p style="margin:0 0 12px;">
+            <strong style="color:#FFB020;">${escapeHtml(input.groupName)}</strong> is active. You can sign in and finish setting up
             your stores (salespeople, finance managers, acquisition sources, and goals).
           </p>
-          <p style="margin: 0 0 20px;">
-            <a href="${loginUrl}" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600;">
-              Sign in
-            </a>
-          </p>
-          <p style="margin: 0; font-size: 13px; color: #64748b;">
-            If the button does not work, open: ${loginUrl}
-          </p>
-        </div>
-      `,
-      text: `Hi ${input.firstName},\n\n${input.groupName} is active on Data Freaks.\nSign in: ${loginUrl}\n`,
+        `,
+        ctaLabel: "Sign in",
+        ctaHref: loginUrl,
+      }),
+      text: `Hi ${input.firstName},\n\n${input.groupName} is active on DealerACQ.\nSign in: ${loginUrl}\n\n© DealerACQ · dealeracq.com\n`,
     });
 
     if (error) {
@@ -79,26 +70,20 @@ export async function sendInviteEmail(
     const { error } = await resend.emails.send({
       from: fromAddress(),
       to: input.to,
-      subject: "Your Data Freaks account is ready",
-      html: `
-        <div style="font-family: system-ui, -apple-system, sans-serif; line-height: 1.5; color: #0f172a;">
-          <h1 style="font-size: 20px; margin: 0 0 12px;">You're ready to log in</h1>
-          <p style="margin: 0 0 12px;">Hi ${escapeHtml(input.firstName || "there")},</p>
-          <p style="margin: 0 0 12px;">
-            An account has been set up for you on <strong>${escapeHtml(input.groupName)}</strong>.
+      subject: "Your DealerACQ account is ready",
+      html: renderDealerAcqEmail({
+        title: "You're ready to log in",
+        bodyHtml: `
+          <p style="margin:0 0 12px;">Hi ${escapeHtml(input.firstName || "there")},</p>
+          <p style="margin:0 0 12px;">
+            An account has been set up for you on <strong style="color:#FFB020;">${escapeHtml(input.groupName)}</strong>.
             Click below to create your password and sign in.
           </p>
-          <p style="margin: 0 0 20px;">
-            <a href="${escapeHtml(input.actionLink)}" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600;">
-              Create password &amp; log in
-            </a>
-          </p>
-          <p style="margin: 0; font-size: 13px; color: #64748b;">
-            If the button does not work, open:<br/>${escapeHtml(input.actionLink)}
-          </p>
-        </div>
-      `,
-      text: `Hi ${input.firstName || "there"},\n\nYour Data Freaks account for ${input.groupName} is ready.\nCreate your password and log in:\n${input.actionLink}\n`,
+        `,
+        ctaLabel: "Create password & log in",
+        ctaHref: input.actionLink,
+      }),
+      text: `Hi ${input.firstName || "there"},\n\nYour DealerACQ account for ${input.groupName} is ready.\nCreate your password and log in:\n${input.actionLink}\n\n© DealerACQ · dealeracq.com\n`,
     });
 
     if (error) {
@@ -124,26 +109,20 @@ export async function sendPasswordResetEmail(
     const { error } = await resend.emails.send({
       from: fromAddress(),
       to: input.to,
-      subject: "Reset your Data Freaks password",
-      html: `
-        <div style="font-family: system-ui, -apple-system, sans-serif; line-height: 1.5; color: #0f172a;">
-          <h1 style="font-size: 20px; margin: 0 0 12px;">Reset your password</h1>
-          <p style="margin: 0 0 12px;">Hi ${escapeHtml(input.firstName || "there")},</p>
-          <p style="margin: 0 0 12px;">
-            A password reset was requested for your Data Freaks account. Click below to choose a new password.
+      subject: "Reset your DealerACQ password",
+      html: renderDealerAcqEmail({
+        title: "Reset your password",
+        bodyHtml: `
+          <p style="margin:0 0 12px;">Hi ${escapeHtml(input.firstName || "there")},</p>
+          <p style="margin:0 0 12px;">
+            A password reset was requested for your DealerACQ account. Click below to choose a new password.
           </p>
-          <p style="margin: 0 0 20px;">
-            <a href="${escapeHtml(input.actionLink)}" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600;">
-              Reset password
-            </a>
-          </p>
-          <p style="margin: 0; font-size: 13px; color: #64748b;">
-            If you did not expect this email, you can ignore it.<br/>
-            If the button does not work, open:<br/>${escapeHtml(input.actionLink)}
-          </p>
-        </div>
-      `,
-      text: `Hi ${input.firstName || "there"},\n\nReset your Data Freaks password:\n${input.actionLink}\n\nIf you did not expect this, ignore this email.\n`,
+        `,
+        ctaLabel: "Reset password",
+        ctaHref: input.actionLink,
+        footerNote: "If you did not expect this email, you can ignore it.",
+      }),
+      text: `Hi ${input.firstName || "there"},\n\nReset your DealerACQ password:\n${input.actionLink}\n\nIf you did not expect this, ignore this email.\n\n© DealerACQ · dealeracq.com\n`,
     });
 
     if (error) {
@@ -153,12 +132,4 @@ export async function sendPasswordResetEmail(
   } catch (err: any) {
     return { ok: false, error: err?.message || "Failed to send password reset email" };
   }
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }

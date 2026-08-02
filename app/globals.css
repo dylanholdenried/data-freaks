@@ -258,7 +258,178 @@ main:has(.da-app) + footer {
 }
 
 .da-acq {
-  color: var(--da-amber);
+  color: #ffb020;
+}
+
+/* ---------- DealerACQ 3a brand mark (colored only) ---------- */
+.da-brand-logo {
+  --da-logo-red: #ff5a52;
+  --da-logo-blue: #4a9eff;
+  --da-logo-green: #2ecc71;
+  --da-logo-dealer: #e8ecf2;
+  --da-logo-tape: #3a4252;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  text-decoration: none;
+  color: inherit;
+}
+
+.da-logo-mobile {
+  display: inline-flex;
+}
+
+.da-logo-desktop {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .da-logo-mobile {
+    display: none;
+  }
+
+  .da-logo-desktop {
+    display: inline-flex;
+  }
+}
+
+.da-logo-wordmark {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.da-logo-word {
+  font-family: var(--da-display), Archivo, sans-serif;
+  font-weight: 800;
+  font-size: 21px;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.da-logo-dealer {
+  color: var(--da-logo-dealer);
+}
+
+.da-landing .da-logo-dealer,
+.da-app .da-logo-dealer {
+  color: var(--da-logo-dealer);
+}
+
+.app-canvas .da-logo-dealer {
+  color: var(--da-text);
+}
+
+.da-logo-tape {
+  display: flex;
+  align-items: flex-end;
+  gap: 7px;
+  height: 6px;
+  width: 100%;
+}
+
+.da-logo-tape-run {
+  flex: 1;
+  height: 2px;
+  background: var(--da-logo-tape);
+  border-radius: 1px;
+}
+
+.da-logo-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.da-logo-bars--lg {
+  width: 49px;
+  height: 6px;
+  gap: 2px;
+}
+
+.da-logo-bars--sm {
+  width: 27px;
+  height: 5px;
+  gap: 2px;
+}
+
+.da-logo-bar {
+  flex: 1;
+  border-radius: 1px;
+  min-width: 0;
+}
+
+.da-logo-bars--lg .da-logo-bar--red {
+  height: 2px;
+  background: var(--da-logo-red);
+}
+
+.da-logo-bars--lg .da-logo-bar--blue {
+  height: 4px;
+  background: var(--da-logo-blue);
+}
+
+.da-logo-bars--lg .da-logo-bar--green {
+  height: 6px;
+  background: var(--da-logo-green);
+}
+
+.da-logo-bars--sm .da-logo-bar--red {
+  height: 2px;
+  background: var(--da-logo-red);
+}
+
+.da-logo-bars--sm .da-logo-bar--blue {
+  height: 3px;
+  background: var(--da-logo-blue);
+}
+
+.da-logo-bars--sm .da-logo-bar--green {
+  height: 5px;
+  background: var(--da-logo-green);
+}
+
+.da-logo-mark {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.da-logo-mark-acq {
+  font-family: var(--da-display), Archivo, sans-serif;
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: #ffb020;
+}
+
+.da-logo-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.da-logo-lockup-label {
+  font-family: var(--da-display), Archivo, sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--da-text, #e8ecf2);
+}
+
+.app-canvas .da-logo-tape-run {
+  background: #3a4252;
+}
+
+.da-app.light .da-logo-tape-run {
+  background: #a8b0bd;
+}
+
+.da-app.light .da-logo-dealer {
+  color: #0b0e13;
 }
 
 .da-nav-links {
