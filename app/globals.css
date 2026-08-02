@@ -1594,8 +1594,13 @@ main:has(.da-app) + footer {
     display: none;
   }
 
-  .da-nav-actions .da-nav-text {
+  /* Keep Log in visible on mobile; hide secondary text links (e.g. View Demo) */
+  .da-nav-actions .da-nav-text:not(.da-nav-login) {
     display: none;
+  }
+
+  .da-nav-actions {
+    gap: 12px;
   }
 
   .da-stat {

@@ -136,16 +136,15 @@ export default function LoginPage() {
       <nav className="da-nav">
         <div className="da-wrap da-nav-in">
           <DealerAcqLogo href="/" />
-          <div className="da-nav-links">
-            <a href="/#how">How it works</a>
-            <a href="/#pricing">Pricing</a>
-            <a href="/#founder">Who built it</a>
-          </div>
           <div className="da-nav-actions">
             <a className="da-nav-text" href="/demo">
               View Demo
             </a>
-            <a className="da-nav-text da-nav-current" href="/login" aria-current="page">
+            <a
+              className="da-nav-text da-nav-login da-nav-current"
+              href="/login"
+              aria-current="page"
+            >
               Log in
             </a>
             <a className="da-btn da-btn-amber" href="/signup">

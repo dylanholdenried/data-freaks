@@ -74,16 +74,11 @@ export default function DemoApp() {
       <nav className="da-nav">
         <div className="da-wrap da-nav-in">
           <DealerAcqLogo href="/" />
-          <div className="da-nav-links">
-            <a href="/#how">How it works</a>
-            <a href="/#pricing">Pricing</a>
-            <a href="/#founder">Who built it</a>
-          </div>
           <div className="da-nav-actions">
             <a className="da-nav-text da-nav-current" href="/demo" aria-current="page">
               View Demo
             </a>
-            <a className="da-nav-text" href="/login">
+            <a className="da-nav-text da-nav-login" href="/login">
               Log in
             </a>
             <a className="da-btn da-btn-amber" href="/signup">
