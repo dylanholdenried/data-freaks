@@ -77,7 +77,7 @@ const FINANCE_TYPES = [
 ];
 
 const SEL =
-  "h-9 w-full rounded-md border border-input bg-background px-3 text-sm " +
+  "h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground " +
   "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 " +
   "disabled:cursor-not-allowed disabled:opacity-50";
 

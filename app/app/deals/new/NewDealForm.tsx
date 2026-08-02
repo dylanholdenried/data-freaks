@@ -48,7 +48,7 @@ const emptyTrade = (): Trade => ({
 
 // Matches the styling of the Input component so selects are visually consistent
 const SEL =
-  "h-10 w-full rounded-md border border-input bg-background px-3 text-sm " +
+  "h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground " +
   "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 " +
   "disabled:cursor-not-allowed disabled:opacity-60";
 

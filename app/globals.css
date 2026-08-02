@@ -74,6 +74,10 @@ body {
   font-family: var(--da-body);
   background: var(--da-bg);
   min-height: 100vh;
+  /* Tell native controls (select/option, date, etc.) to use a dark UA theme.
+     Without this, Windows Chrome often paints light option popups while the
+     closed select inherits light text → unreadable dropdowns. */
+  color-scheme: dark;
 }
 
 .da-app.light {
@@ -109,6 +113,20 @@ body {
   --border: var(--da-line);
   --input: var(--da-line);
   --ring: var(--da-blue);
+
+  color-scheme: light;
+}
+
+/* Native <select> popups: force readable fg/bg on Windows Chrome dark mode */
+.da-app select {
+  color: var(--da-text);
+  background-color: var(--background);
+}
+
+.da-app select option,
+.da-app select optgroup {
+  color: var(--da-text);
+  background-color: var(--da-panel);
 }
 
 .app-canvas {

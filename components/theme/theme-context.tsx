@@ -43,6 +43,16 @@ export function DaAppThemeProvider({ children }: { children: ReactNode }) {
     setReady(true);
   }, []);
 
+  // Keep the document color-scheme in sync so native form controls (esp.
+  // Windows Chrome <select> popups) match the app theme, not the OS theme.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.colorScheme = theme;
+    return () => {
+      root.style.colorScheme = "";
+    };
+  }, [theme]);
+
   const setTheme = useCallback((next: AppTheme) => {
     setThemeState(next);
     try {
