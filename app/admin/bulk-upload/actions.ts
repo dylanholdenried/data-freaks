@@ -219,6 +219,7 @@ export async function createBatchFromCsv(input: {
         .from("deals")
         .select("stock_number")
         .eq("store_id", storeId)
+        .in("status", ["pending", "delivered", "closed"])
         .order("id", { ascending: true })
         .range(from, to)
     ),

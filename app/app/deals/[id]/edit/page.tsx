@@ -200,6 +200,7 @@ export default async function EditDealPage({ params }: { params: { id: string } 
       vehicleYear={deal.vehicle_year}
       vehicleMake={deal.vehicle_make}
       vehicleModel={deal.vehicle_model}
+      storeId={deal.store_id}
       storeName={storeName}
       initialSaleDate={deal.sale_date}
       initialDepartmentId={deal.department_id}

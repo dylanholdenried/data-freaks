@@ -388,7 +388,10 @@ create table public.deals (
 create index deals_store_id_idx on public.deals(store_id);
 create index deals_dealer_group_id_idx on public.deals(dealer_group_id);
 create index deals_status_idx on public.deals(status);
-create unique index deals_store_stock_unique on public.deals(store_id, stock_number);
+-- Unique among active deals only; dead/unwound stock numbers may be reused.
+create unique index deals_store_stock_active_unique
+  on public.deals (store_id, lower(trim(stock_number)))
+  where status in ('pending', 'delivered', 'closed');
 
 create table public.deal_salespeople (
   id uuid primary key default gen_random_uuid(),

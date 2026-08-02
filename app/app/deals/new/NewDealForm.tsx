@@ -1,12 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CheckCircle2, Loader2, PlusCircle, Trash2, XCircle } from "lucide-react";
 import { BODY_STYLES, DRIVETRAINS, decodeVin, isMakeAllowedForDepartment, VinDecodeError } from "@/lib/vehicle";
+import {
+  classifyStockMatches,
+  findStockMatches,
+  findVinMatches,
+  isUniqueViolation,
+  type DealMatch,
+} from "@/lib/deals/duplicate-checks";
 import { cn } from "@/lib/utils";
 
 type Store = { id: string; name: string };
@@ -118,6 +126,13 @@ export default function NewDealForm({
     stockNumber: string;
     customerLastName: string;
   } | null>(null);
+
+  // ── Duplicate checks ─────────────────────────────────────────────────────────
+  const [stockBlockingMatch, setStockBlockingMatch] = useState<DealMatch | null>(null);
+  const [stockReuseMatch, setStockReuseMatch] = useState<DealMatch | null>(null);
+  const [vinMatch, setVinMatch] = useState<DealMatch | null>(null);
+  const [checkingStock, setCheckingStock] = useState(false);
+  const [stockCheckError, setStockCheckError] = useState<string | null>(null);
 
   // ── Derived: filter dropdown options to selected store ───────────────────────
   const storeDepts = departments.filter((d) => d.store_id === storeId);
@@ -279,6 +294,83 @@ export default function NewDealForm({
     }
   }
 
+  // ── Duplicate lookups (as soon as stock / VIN is entered) ─────────────────────
+  useEffect(() => {
+    if (!stockNumber.trim()) {
+      setStockBlockingMatch(null);
+      setStockReuseMatch(null);
+      setStockCheckError(null);
+      setCheckingStock(false);
+      return;
+    }
+    if (!storeId) {
+      setStockBlockingMatch(null);
+      setStockReuseMatch(null);
+      setStockCheckError("Select a store first to check for duplicate stock numbers.");
+      setCheckingStock(false);
+      return;
+    }
+
+    let cancelled = false;
+    setCheckingStock(true);
+    setStockCheckError(null);
+    const timer = window.setTimeout(async () => {
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const matches = await findStockMatches(supabase, {
+          storeId,
+          stockNumber,
+        });
+        if (cancelled) return;
+        const { blockingMatch, reuseMatch } = classifyStockMatches(matches);
+        setStockBlockingMatch(blockingMatch);
+        setStockReuseMatch(reuseMatch);
+        setStockCheckError(null);
+      } catch (err) {
+        if (!cancelled) {
+          setStockBlockingMatch(null);
+          setStockReuseMatch(null);
+          setStockCheckError(
+            err instanceof Error
+              ? `Could not check stock number: ${err.message}`
+              : "Could not check stock number."
+          );
+        }
+      } finally {
+        if (!cancelled) setCheckingStock(false);
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [storeId, stockNumber]);
+
+  useEffect(() => {
+    if (!storeId || vin.trim().length !== 17) {
+      setVinMatch(null);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const matches = await findVinMatches(supabase, { storeId, vin });
+        if (cancelled) return;
+        setVinMatch(matches[0] ?? null);
+      } catch {
+        if (!cancelled) setVinMatch(null);
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [storeId, vin]);
+
   // ── Form reset ───────────────────────────────────────────────────────────────
   function resetForm() {
     setStoreId("");
@@ -308,6 +400,11 @@ export default function NewDealForm({
     setTradeDecodingIdx(null);
     setTradeDecodeErrors({});
     setTradeDecoded({});
+    setStockBlockingMatch(null);
+    setStockReuseMatch(null);
+    setVinMatch(null);
+    setCheckingStock(false);
+    setStockCheckError(null);
   }
 
   // ── Validation ───────────────────────────────────────────────────────────────
@@ -341,6 +438,11 @@ export default function NewDealForm({
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
+    if (stockBlockingMatch) {
+      setErrors(["Duplicate Stock Number Found — open the existing deal before saving."]);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
     setErrors([]);
     setSaving(true);
 
@@ -349,9 +451,22 @@ export default function NewDealForm({
     const savedCustomer = customerLastName.trim();
     const savedMake = vehicleMake.trim();
     const shouldFlagMismatch = makeDeptMismatch;
+    const vinMatchAtSave = vinMatch;
 
     try {
       const supabase = createSupabaseBrowserClient();
+
+      // Re-check stock right before insert (race with another manager)
+      const latestMatches = await findStockMatches(supabase, {
+        storeId,
+        stockNumber: savedStock,
+      });
+      const { blockingMatch } = classifyStockMatches(latestMatches);
+      if (blockingMatch) {
+        setStockBlockingMatch(blockingMatch);
+        setStockReuseMatch(null);
+        throw new Error("Duplicate Stock Number Found");
+      }
 
       // 1. Insert deal
       const { data: deal, error: dealError } = await supabase
@@ -376,7 +491,12 @@ export default function NewDealForm({
         .select("id")
         .single();
 
-      if (dealError) throw new Error(`Deal insert failed: ${dealError.message}`);
+      if (dealError) {
+        if (isUniqueViolation(dealError.message)) {
+          throw new Error("Duplicate Stock Number Found");
+        }
+        throw new Error(`Deal insert failed: ${dealError.message}`);
+      }
       const dealId = deal.id;
 
       // 1b. Flag make/department mismatch (warn-only; save was already allowed)
@@ -385,6 +505,16 @@ export default function NewDealForm({
           deal_id: dealId,
           flag_type: "make_dept_mismatch",
           detail: `${savedMake} not allowed for department`,
+        });
+        if (flagError) throw new Error(`Deal flag insert failed: ${flagError.message}`);
+      }
+
+      // 1c. Flag VIN collision (soft warning; save was allowed)
+      if (vinMatchAtSave) {
+        const { error: flagError } = await supabase.from("deal_flags").insert({
+          deal_id: dealId,
+          flag_type: "duplicate_vin",
+          detail: `VIN matches deal ${vinMatchAtSave.id} (stock ${vinMatchAtSave.stock_number}, status ${vinMatchAtSave.status})`,
         });
         if (flagError) throw new Error(`Deal flag insert failed: ${flagError.message}`);
       }
@@ -501,6 +631,26 @@ export default function NewDealForm({
         </div>
       )}
 
+      {/* VIN soft duplicate warning (stock warnings render inline under Stock #) */}
+      {vinMatch && (
+        <div className="rounded-2xl border border-[color-mix(in_srgb,var(--da-amber)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-amber)_12%,transparent)] p-5">
+          <p className="text-sm font-semibold text-amber-900">Possible duplicate VIN</p>
+          <p className="mt-1 text-sm text-amber-800">
+            This VIN is already on stock{" "}
+            <span className="font-mono font-semibold">#{vinMatch.stock_number}</span> (
+            {vinMatch.status}
+            {vinMatch.customer_last_name ? ` · ${vinMatch.customer_last_name}` : ""}). You can
+            still save; this deal will be flagged.
+          </p>
+          <Link
+            href={`/app/deals/${vinMatch.id}/edit`}
+            className="mt-2 inline-block text-sm font-medium text-amber-900 underline underline-offset-2"
+          >
+            View matching deal
+          </Link>
+        </div>
+      )}
+
       {/* ── Store & Department ─────────────────────────────────────────────── */}
       <Card className="app-panel border-border shadow-none">
         <CardHeader className="border-border">
@@ -576,10 +726,64 @@ export default function NewDealForm({
               <Input
                 value={stockNumber}
                 onChange={(e) => setStockNumber(e.target.value)}
-                className={emptyCls(stockNumber)}
+                className={cn(
+                  emptyCls(stockNumber),
+                  stockBlockingMatch &&
+                    "border-[var(--da-red)] bg-[color-mix(in_srgb,var(--da-red)_12%,transparent)] focus-visible:ring-[var(--da-red)]"
+                )}
+                aria-invalid={!!stockBlockingMatch}
               />
+              {checkingStock && (
+                <p className="text-xs text-muted-foreground">Checking stock number…</p>
+              )}
             </div>
           </div>
+
+          {stockCheckError && (
+            <div className="rounded-xl border border-[color-mix(in_srgb,var(--da-amber)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-amber)_12%,transparent)] px-4 py-3">
+              <p className="text-sm text-amber-900">{stockCheckError}</p>
+            </div>
+          )}
+
+          {stockBlockingMatch && (
+            <div className="rounded-xl border border-[color-mix(in_srgb,var(--da-red)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-red)_12%,transparent)] px-4 py-3">
+              <p className="text-sm font-semibold text-[var(--da-red)]">
+                Duplicate Stock Number Found
+              </p>
+              <p className="mt-1 text-sm text-[var(--da-red)]">
+                Stock{" "}
+                <span className="font-mono font-semibold">#{stockBlockingMatch.stock_number}</span>{" "}
+                is already on a {stockBlockingMatch.status} deal
+                {stockBlockingMatch.customer_last_name
+                  ? ` for ${stockBlockingMatch.customer_last_name}`
+                  : ""}
+                . Saving is blocked so this deal is not double-logged.
+              </p>
+              <Link
+                href={`/app/deals/${stockBlockingMatch.id}/edit`}
+                className="mt-2 inline-block text-sm font-medium text-[var(--da-red)] underline underline-offset-2"
+              >
+                View existing deal
+              </Link>
+            </div>
+          )}
+
+          {!stockBlockingMatch && stockReuseMatch && (
+            <div className="rounded-xl border border-[color-mix(in_srgb,var(--da-amber)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-amber)_12%,transparent)] px-4 py-3">
+              <p className="text-sm font-semibold text-amber-900">Stock number previously used</p>
+              <p className="mt-1 text-sm text-amber-800">
+                Stock{" "}
+                <span className="font-mono font-semibold">#{stockReuseMatch.stock_number}</span> was
+                used on a {stockReuseMatch.status} deal. You can still save this as pending.
+              </p>
+              <Link
+                href={`/app/deals/${stockReuseMatch.id}/edit`}
+                className="mt-2 inline-block text-sm font-medium text-amber-900 underline underline-offset-2"
+              >
+                View previous deal
+              </Link>
+            </div>
+          )}
 
           {/* VIN */}
           <div className="grid gap-4 sm:grid-cols-3">
@@ -1166,7 +1370,7 @@ export default function NewDealForm({
         <Button
           type="button"
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || !!stockBlockingMatch || checkingStock}
           className="min-w-[160px]"
         >
           {saving ? "Saving…" : "Save as Pending"}

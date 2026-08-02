@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +10,13 @@ import { Input } from "@/components/ui/input";
 import { CheckCircle2, Info, Loader2, PlusCircle, Trash2, XCircle } from "lucide-react";
 import { COLORS, BODY_STYLES, DRIVETRAINS, decodeVin, VinDecodeError } from "@/lib/vehicle";
 import { canClose } from "@/lib/can-close";
+import {
+  classifyStockMatches,
+  findStockMatches,
+  findVinMatches,
+  isUniqueViolation,
+  type DealMatch,
+} from "@/lib/deals/duplicate-checks";
 import { cn } from "@/lib/utils";
 
 type TradeRow = {
@@ -57,6 +65,7 @@ interface Props {
   vehicleYear: number;
   vehicleMake: string;
   vehicleModel: string;
+  storeId: string;
   storeName: string;
   // Step 2 fields (null = not yet entered)
   initialVin: string | null;
@@ -200,6 +209,7 @@ export default function UpdatePendingForm({
   vehicleYear,
   vehicleMake,
   vehicleModel,
+  storeId,
   storeName,
   initialVin,
   initialTrim,
@@ -229,6 +239,10 @@ export default function UpdatePendingForm({
 
   // ── Step 1 editable state ─────────────────────────────────────────────────────
   const [stockNumber, setStockNumber] = useState(initialStockNumber);
+  const [stockBlockingMatch, setStockBlockingMatch] = useState<DealMatch | null>(null);
+  const [stockReuseMatch, setStockReuseMatch] = useState<DealMatch | null>(null);
+  const [vinMatch, setVinMatch] = useState<DealMatch | null>(null);
+  const [checkingStock, setCheckingStock] = useState(false);
   const [customerLastName, setCustomerLastName] = useState(initialCustomerLastName);
   const [saleDate, setSaleDate] = useState(initialSaleDate ?? "");
   const [departmentId, setDepartmentId] = useState(initialDepartmentId ?? "");
@@ -333,6 +347,73 @@ export default function UpdatePendingForm({
   const [closing, setClosing] = useState(false);
   const [closeErrors, setCloseErrors] = useState<string[]>([]);
   const [closed, setClosed] = useState(false);
+
+  // ── Duplicate lookups ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!storeId || !stockNumber.trim()) {
+      setStockBlockingMatch(null);
+      setStockReuseMatch(null);
+      setCheckingStock(false);
+      return;
+    }
+
+    let cancelled = false;
+    setCheckingStock(true);
+    const timer = window.setTimeout(async () => {
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const matches = await findStockMatches(supabase, {
+          storeId,
+          stockNumber,
+          excludeDealId: dealId,
+        });
+        if (cancelled) return;
+        const { blockingMatch, reuseMatch } = classifyStockMatches(matches);
+        setStockBlockingMatch(blockingMatch);
+        setStockReuseMatch(reuseMatch);
+      } catch {
+        if (!cancelled) {
+          setStockBlockingMatch(null);
+          setStockReuseMatch(null);
+        }
+      } finally {
+        if (!cancelled) setCheckingStock(false);
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [storeId, stockNumber, dealId]);
+
+  useEffect(() => {
+    if (!storeId || vin.trim().length !== 17) {
+      setVinMatch(null);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const matches = await findVinMatches(supabase, {
+          storeId,
+          vin,
+          excludeDealId: dealId,
+        });
+        if (cancelled) return;
+        setVinMatch(matches[0] ?? null);
+      } catch {
+        if (!cancelled) setVinMatch(null);
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [storeId, vin, dealId]);
   const [showLostConfirm, setShowLostConfirm] = useState(false);
   const [markingLost, setMarkingLost] = useState(false);
   const [markedLost, setMarkedLost] = useState(false);
@@ -624,15 +705,45 @@ export default function UpdatePendingForm({
     setCloseErrors([]);
 
     try {
+      if (stockBlockingMatch) {
+        throw new Error("Duplicate Stock Number Found");
+      }
+
       const supabase = createSupabaseBrowserClient();
+
+      const latestMatches = await findStockMatches(supabase, {
+        storeId,
+        stockNumber,
+        excludeDealId: dealId,
+      });
+      const { blockingMatch } = classifyStockMatches(latestMatches);
+      if (blockingMatch) {
+        setStockBlockingMatch(blockingMatch);
+        setStockReuseMatch(null);
+        throw new Error("Duplicate Stock Number Found");
+      }
+
       const { error } = await supabase
         .from("deals")
         .update(buildPayload())
         .eq("id", dealId);
 
-      if (error) throw new Error(error.message);
+      if (error) {
+        if (isUniqueViolation(error.message)) {
+          throw new Error("Duplicate Stock Number Found");
+        }
+        throw new Error(error.message);
+      }
       await saveSalespeople(supabase);
       await saveTrades(supabase);
+
+      if (vinMatch) {
+        await ensureOpenFlag(
+          "duplicate_vin",
+          `VIN matches deal ${vinMatch.id} (stock ${vinMatch.stock_number}, status ${vinMatch.status})`
+        );
+      }
+
       setSaved(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err: unknown) {
@@ -718,7 +829,10 @@ export default function UpdatePendingForm({
     return errs;
   }
 
-  async function ensureOpenFlag(flagType: "no_vin_at_close" | "make_dept_mismatch", detail: string) {
+  async function ensureOpenFlag(
+    flagType: "no_vin_at_close" | "make_dept_mismatch" | "duplicate_vin",
+    detail: string
+  ) {
     const supabase = createSupabaseBrowserClient();
     const { data: existing } = await supabase
       .from("deal_flags")
@@ -847,7 +961,14 @@ export default function UpdatePendingForm({
     closed ||
     markedLost;
 
-  const busy = saving || closing || closed || markingLost || markedLost;
+  const busy =
+    saving ||
+    closing ||
+    closed ||
+    markingLost ||
+    markedLost ||
+    !!stockBlockingMatch ||
+    checkingStock;
 
   function renderActionButtons() {
     return (
@@ -1000,6 +1121,25 @@ export default function UpdatePendingForm({
         </div>
       )}
 
+      {vinMatch && (
+        <div className="rounded-2xl border border-[color-mix(in_srgb,var(--da-amber)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-amber)_12%,transparent)] p-5">
+          <p className="text-sm font-semibold text-amber-900">Possible duplicate VIN</p>
+          <p className="mt-1 text-sm text-amber-800">
+            This VIN is already on stock{" "}
+            <span className="font-mono font-semibold">#{vinMatch.stock_number}</span> (
+            {vinMatch.status}
+            {vinMatch.customer_last_name ? ` · ${vinMatch.customer_last_name}` : ""}). You can
+            still save; this deal will be flagged.
+          </p>
+          <Link
+            href={`/app/deals/${vinMatch.id}/edit`}
+            className="mt-2 inline-block text-sm font-medium text-amber-900 underline underline-offset-2"
+          >
+            View matching deal
+          </Link>
+        </div>
+      )}
+
       {/* ── Deal Details (Step 1 — editable until closed) ────────────────────── */}
       <Card className="app-panel border-border shadow-none">
         <CardHeader className="border-border">
@@ -1033,10 +1173,58 @@ export default function UpdatePendingForm({
                 value={stockNumber}
                 onChange={(e) => setStockNumber(e.target.value)}
                 disabled={isLocked}
-                className={emptyCls(stockNumber, isLocked)}
+                className={cn(
+                  emptyCls(stockNumber, isLocked),
+                  stockBlockingMatch &&
+                    "border-[var(--da-red)] bg-[color-mix(in_srgb,var(--da-red)_12%,transparent)] focus-visible:ring-[var(--da-red)]"
+                )}
+                aria-invalid={!!stockBlockingMatch}
               />
+              {checkingStock && (
+                <p className="text-xs text-muted-foreground">Checking stock number…</p>
+              )}
             </div>
           </div>
+
+          {stockBlockingMatch && (
+            <div className="rounded-xl border border-[color-mix(in_srgb,var(--da-red)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-red)_12%,transparent)] px-4 py-3">
+              <p className="text-sm font-semibold text-[var(--da-red)]">
+                Duplicate Stock Number Found
+              </p>
+              <p className="mt-1 text-sm text-[var(--da-red)]">
+                Stock{" "}
+                <span className="font-mono font-semibold">#{stockBlockingMatch.stock_number}</span>{" "}
+                is already on a {stockBlockingMatch.status} deal
+                {stockBlockingMatch.customer_last_name
+                  ? ` for ${stockBlockingMatch.customer_last_name}`
+                  : ""}
+                . Saving is blocked so this deal is not double-logged.
+              </p>
+              <Link
+                href={`/app/deals/${stockBlockingMatch.id}/edit`}
+                className="mt-2 inline-block text-sm font-medium text-[var(--da-red)] underline underline-offset-2"
+              >
+                View existing deal
+              </Link>
+            </div>
+          )}
+
+          {!stockBlockingMatch && stockReuseMatch && (
+            <div className="rounded-xl border border-[color-mix(in_srgb,var(--da-amber)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-amber)_12%,transparent)] px-4 py-3">
+              <p className="text-sm font-semibold text-amber-900">Stock number previously used</p>
+              <p className="mt-1 text-sm text-amber-800">
+                Stock{" "}
+                <span className="font-mono font-semibold">#{stockReuseMatch.stock_number}</span> was
+                used on a {stockReuseMatch.status} deal. You can still save.
+              </p>
+              <Link
+                href={`/app/deals/${stockReuseMatch.id}/edit`}
+                className="mt-2 inline-block text-sm font-medium text-amber-900 underline underline-offset-2"
+              >
+                View previous deal
+              </Link>
+            </div>
+          )}
 
           {/* Row 2: Department | Store (read-only) | Vehicle (read-only computed) */}
           <div className="grid gap-4 sm:grid-cols-3">
