@@ -5,11 +5,15 @@ function authRedirectBase() {
 }
 
 /**
- * Build an invite/reset URL that our /auth/callback can verify with verifyOtp.
+ * Build an invite/reset URL for /set-password.
  *
- * admin.generateLink() does NOT produce PKCE `?code=` redirects. Using the raw
- * action_link lands on /auth/callback without a code (tokens are often in the hash,
- * which the server never sees). Instead we embed hashed_token + type on our own URL.
+ * Important: we do NOT verify the recovery OTP on GET. Corporate email scanners
+ * (Safe Links, Proofpoint, etc.) prefetch invite URLs and would burn a one-time
+ * token before the user opens the email. The token is verified only when the user
+ * submits the set-password form.
+ *
+ * admin.generateLink() does NOT produce PKCE `?code=` redirects. We embed
+ * hashed_token + type on our own URL instead of using the raw action_link.
  */
 export async function generatePasswordSetupLink(
   service: ReturnType<typeof createSupabaseServiceClient>,
@@ -28,11 +32,11 @@ export async function generatePasswordSetupLink(
   const params = new URLSearchParams({
     token_hash: hashedToken,
     type: "recovery",
-    next: "/set-password",
+    email: email.trim().toLowerCase(),
   });
 
   return {
     ok: true,
-    actionLink: `${authRedirectBase()}/auth/callback?${params.toString()}`,
+    actionLink: `${authRedirectBase()}/set-password?${params.toString()}`,
   };
 }

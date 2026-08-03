@@ -1,12 +1,24 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import type { EmailOtpType } from "@supabase/supabase-js";
 import { createSupabaseRouteHandlerClient } from "@/lib/supabase/route-handler";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 
+const OTP_TYPES = new Set<EmailOtpType>([
+  "recovery",
+  "invite",
+  "magiclink",
+  "signup",
+  "email",
+  "email_change",
+]);
+
 const schema = z.object({
   confirmedEmail: z.string().email(),
   password: z.string().min(8),
+  token_hash: z.string().min(1).optional(),
+  type: z.string().optional(),
 });
 
 function normalizeEmail(email: string) {
@@ -14,17 +26,56 @@ function normalizeEmail(email: string) {
 }
 
 /**
- * Set password for the invite/recovery session user, then activate invited → active.
- * Uses the same route-handler cookie pattern as /api/auth/login (avoids Server Action
- * "fetch failed" when cookie writes throw).
+ * Set password for an invite/recovery user, then activate invited → active.
+ *
+ * Prefers verifying token_hash on POST (not GET) so corporate email scanners
+ * cannot burn the one-time recovery link by prefetching the invite URL.
+ * Falls back to an existing recovery session when token_hash is absent.
  */
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const parsed = schema.parse(body);
     const confirmedEmail = normalizeEmail(parsed.confirmedEmail);
+    const tokenHash = parsed.token_hash?.trim() || null;
+    const otpType =
+      parsed.type && OTP_TYPES.has(parsed.type as EmailOtpType)
+        ? (parsed.type as EmailOtpType)
+        : "recovery";
 
     const supabase = createSupabaseRouteHandlerClient();
+
+    if (tokenHash) {
+      // Clear any leftover admin/owner session before establishing the invitee session.
+      await supabase.auth.signOut();
+
+      const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
+        type: otpType,
+        token_hash: tokenHash,
+      });
+
+      if (verifyError || !verifyData.user?.email) {
+        return NextResponse.json(
+          {
+            error:
+              "This link has expired or is invalid. Ask your admin to send a new invite.",
+          },
+          { status: 401 }
+        );
+      }
+
+      if (normalizeEmail(verifyData.user.email) !== confirmedEmail) {
+        await supabase.auth.signOut();
+        return NextResponse.json(
+          {
+            error:
+              "Email does not match the account for this invite link. Check the address shown above and try again.",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     const {
       data: { user },
       error: userError,

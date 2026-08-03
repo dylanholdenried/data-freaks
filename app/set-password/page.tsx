@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Archivo, IBM_Plex_Mono, Inter } from "next/font/google";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import DealerAcqLogo from "@/components/brand/DealerAcqLogo";
@@ -40,45 +40,102 @@ export default function SetPasswordPage() {
   const [confirm, setConfirm] = useState("");
   const [confirmEmail, setConfirmEmail] = useState("");
   const [accountEmail, setAccountEmail] = useState<string | null>(null);
+  const [tokenHash, setTokenHash] = useState<string | null>(null);
+  const [tokenType, setTokenType] = useState("recovery");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [ready, setReady] = useState(false);
-  const [hasSession, setHasSession] = useState(false);
+  const [canSetPassword, setCanSetPassword] = useState(false);
+  const hasInviteTokenRef = useRef(false);
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
-
     let cancelled = false;
+    const storageKey = "da_invite_token";
 
-    async function loadUser() {
+    async function loadInviteContext() {
+      const params = new URLSearchParams(window.location.search);
+      let hashFromUrl = params.get("token_hash");
+      let typeFromUrl = params.get("type") || "recovery";
+      let emailFromUrl = params.get("email");
+
+      if (hashFromUrl) {
+        try {
+          sessionStorage.setItem(
+            storageKey,
+            JSON.stringify({
+              token_hash: hashFromUrl,
+              type: typeFromUrl,
+              email: emailFromUrl,
+            })
+          );
+        } catch {
+          // sessionStorage may be blocked; keep going with in-memory token.
+        }
+        // Strip secrets from the address bar after reading (keeps share/screenshot safer).
+        window.history.replaceState({}, "", "/set-password");
+      } else {
+        try {
+          const raw = sessionStorage.getItem(storageKey);
+          if (raw) {
+            const saved = JSON.parse(raw) as {
+              token_hash?: string;
+              type?: string;
+              email?: string | null;
+            };
+            hashFromUrl = saved.token_hash || null;
+            typeFromUrl = saved.type || "recovery";
+            emailFromUrl = saved.email || null;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (hashFromUrl) {
+        hasInviteTokenRef.current = true;
+        setTokenHash(hashFromUrl);
+        setTokenType(typeFromUrl);
+        if (emailFromUrl) {
+          setAccountEmail(emailFromUrl.trim().toLowerCase());
+        }
+        setCanSetPassword(true);
+        setReady(true);
+        return;
+      }
+
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (cancelled) return;
       if (user?.email) {
         setAccountEmail(user.email);
-        setHasSession(true);
+        setCanSetPassword(true);
       } else {
         setAccountEmail(null);
-        setHasSession(false);
+        setCanSetPassword(false);
       }
       setReady(true);
     }
 
-    void loadUser();
+    void loadInviteContext();
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
+      // Invite token flow does not need a session until form submit.
+      if (hasInviteTokenRef.current) return;
       if (event === "PASSWORD_RECOVERY" || event === "SIGNED_IN" || event === "INITIAL_SESSION") {
         const email = session?.user?.email ?? null;
-        setAccountEmail(email);
-        setHasSession(Boolean(email));
+        if (email) {
+          setAccountEmail(email);
+          setCanSetPassword(true);
+        }
         setReady(true);
       }
       if (event === "SIGNED_OUT") {
         setAccountEmail(null);
-        setHasSession(false);
+        setCanSetPassword(false);
         setReady(true);
       }
     });
@@ -93,12 +150,13 @@ export default function SetPasswordPage() {
     e.preventDefault();
     setError(null);
 
-    if (!accountEmail) {
+    if (!canSetPassword || (!accountEmail && !confirmEmail.trim())) {
       setError("This link has expired or is invalid. Ask your admin to send a new invite.");
       return;
     }
 
-    if (confirmEmail.trim().toLowerCase() !== accountEmail.trim().toLowerCase()) {
+    const emailToConfirm = confirmEmail.trim().toLowerCase();
+    if (accountEmail && emailToConfirm !== accountEmail.trim().toLowerCase()) {
       setError(
         "Email does not match the account for this invite link. Check the address shown above and try again."
       );
@@ -120,8 +178,14 @@ export default function SetPasswordPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          confirmedEmail: confirmEmail,
+          confirmedEmail: emailToConfirm,
           password,
+          ...(tokenHash
+            ? {
+                token_hash: tokenHash,
+                type: tokenType,
+              }
+            : {}),
         }),
       });
 
@@ -131,6 +195,12 @@ export default function SetPasswordPage() {
           typeof body.error === "string" ? body.error : `Could not save password (${res.status})`
         );
         return;
+      }
+
+      try {
+        sessionStorage.removeItem("da_invite_token");
+      } catch {
+        // ignore
       }
 
       window.location.href = "/app";
@@ -212,7 +282,7 @@ export default function SetPasswordPage() {
 
               {!ready ? (
                 <p className="da-login-note">Checking your invite link…</p>
-              ) : !hasSession || !accountEmail ? (
+              ) : !canSetPassword ? (
                 <div className="space-y-3">
                   <div className="da-login-error" role="alert">
                     This link has expired or is invalid. Ask your admin to send a new invite email.
@@ -229,10 +299,16 @@ export default function SetPasswordPage() {
                     </div>
                   ) : null}
 
-                  <p className="da-login-note" style={{ marginBottom: "1rem" }}>
-                    Setting password for{" "}
-                    <strong style={{ color: "var(--da-text, #0f172a)" }}>{accountEmail}</strong>
-                  </p>
+                  {accountEmail ? (
+                    <p className="da-login-note" style={{ marginBottom: "1rem" }}>
+                      Setting password for{" "}
+                      <strong style={{ color: "var(--da-text, #0f172a)" }}>{accountEmail}</strong>
+                    </p>
+                  ) : (
+                    <p className="da-login-note" style={{ marginBottom: "1rem" }}>
+                      Enter the email this invite was sent to, then choose a password.
+                    </p>
+                  )}
 
                   <form className="da-login-form" onSubmit={handleSubmit}>
                     <label>

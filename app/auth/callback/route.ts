@@ -15,11 +15,12 @@ const OTP_TYPES = new Set<EmailOtpType>([
  * Supabase Auth redirect target for invite / recovery / magic links.
  *
  * Supports:
- * - token_hash + type (admin generateLink / custom Resend invites) via verifyOtp
+ * - token_hash + type for password setup: pass through to /set-password WITHOUT
+ *   verifying on GET (email scanners prefetch and burn one-time OTPs)
+ * - token_hash + type for other flows via verifyOtp
  * - code (PKCE) via exchangeCodeForSession
  *
- * Cookies are written onto the redirect NextResponse. Any existing session is
- * signed out first so an owner still logged in cannot survive into /set-password.
+ * Cookies are written onto the redirect NextResponse when a session is established.
  */
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
@@ -50,6 +51,17 @@ export async function GET(request: NextRequest) {
     const login = new URL("/login", url.origin);
     login.searchParams.set("error", "invite_link_invalid");
     return NextResponse.redirect(login);
+  }
+
+  // Invite/recovery password setup: do not verifyOtp on GET.
+  // Scanners follow the link; verifying here would invalidate the token before the user acts.
+  if (isSetPassword && hasTokenHash && tokenHash && otpType) {
+    const dest = new URL("/set-password", url.origin);
+    dest.searchParams.set("token_hash", tokenHash);
+    dest.searchParams.set("type", otpType);
+    const email = url.searchParams.get("email");
+    if (email) dest.searchParams.set("email", email);
+    return NextResponse.redirect(dest);
   }
 
   if (!hasTokenHash && !hasCode) {

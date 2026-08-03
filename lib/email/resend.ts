@@ -77,7 +77,7 @@ export async function sendInviteEmail(
           <p style="margin:0 0 12px;">Hi ${escapeHtml(input.firstName || "there")},</p>
           <p style="margin:0 0 12px;">
             An account has been set up for you on <strong style="color:#4A9EFF;">${escapeHtml(input.groupName)}</strong>.
-            Click below to create your password and sign in.
+            Open the link below, confirm your email, and create your password to sign in.
           </p>
         `,
         ctaLabel: "Create password & log in",
