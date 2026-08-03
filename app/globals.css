@@ -3206,7 +3206,13 @@ main:has(.da-app) + footer {
   gap: 16px;
 }
 
-@media (min-width: 900px) {
+@media (min-width: 700px) {
+  .dash-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
   .dash-card-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -3221,6 +3227,8 @@ main:has(.da-app) + footer {
   border-radius: 12px;
   padding: 18px 18px 16px;
   min-width: 0;
+  container-type: inline-size;
+  container-name: dash-card;
 }
 
 .dash-card-head {
@@ -3233,12 +3241,15 @@ main:has(.da-app) + footer {
 .dash-card-title {
   font-family: var(--da-display);
   font-weight: 800;
-  font-size: clamp(16px, 1.35vw, 20px);
+  font-size: clamp(15px, 1.35vw, 20px);
+  font-size: clamp(15px, 4.5cqi, 20px);
   letter-spacing: 0.03em;
   text-transform: uppercase;
   margin: 0;
   color: var(--da-text);
   line-height: 1.2;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .dash-status {
@@ -3315,7 +3326,8 @@ main:has(.da-app) + footer {
 .dash-sold-proj-num {
   font-family: var(--da-display);
   font-weight: 800;
-  font-size: clamp(40px, 4.2vw, 52px);
+  font-size: clamp(32px, 4.2vw, 52px);
+  font-size: clamp(32px, 12cqi, 52px);
   line-height: 0.95;
   color: var(--da-text);
   font-variant-numeric: tabular-nums;
@@ -3346,9 +3358,11 @@ main:has(.da-app) + footer {
 .dash-sold-proj-delta {
   font-family: var(--da-display);
   font-weight: 800;
-  font-size: clamp(18px, 1.8vw, 24px);
+  font-size: clamp(16px, 1.8vw, 24px);
+  font-size: clamp(16px, 5cqi, 24px);
   margin-top: 6px;
   font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
 }
 
 .dash-vol-bar {
@@ -3407,9 +3421,10 @@ main:has(.da-app) + footer {
 
 .dash-vol-stats {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 14px 24px;
-  align-items: center;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  gap: 14px 20px;
+  align-items: start;
+  min-width: 0;
 }
 
 .dash-vol-key {
@@ -3417,7 +3432,6 @@ main:has(.da-app) + footer {
   flex-direction: column;
   gap: 8px;
   min-width: 0;
-  width: max-content;
   max-width: 100%;
 }
 
@@ -3435,7 +3449,7 @@ main:has(.da-app) + footer {
   font-size: 13.5px;
   letter-spacing: 0.04em;
   color: var(--da-muted);
-  white-space: nowrap;
+  min-width: 0;
 }
 
 .dash-vol-key-value {
@@ -3445,6 +3459,7 @@ main:has(.da-app) + footer {
   line-height: 1.1;
   color: var(--da-text);
   font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
 }
 
 .dash-gross-legend {
@@ -3496,7 +3511,7 @@ main:has(.da-app) + footer {
 .dash-mini-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px 10px;
   min-width: 0;
 }
 
@@ -3505,15 +3520,19 @@ main:has(.da-app) + footer {
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+  overflow: hidden;
 }
 
 .dash-mini-value {
   font-family: var(--da-display);
   font-weight: 800;
-  font-size: clamp(28px, 2.8vw, 36px);
+  font-size: clamp(20px, 2.8vw, 36px);
+  font-size: clamp(20px, 8cqi, 36px);
   line-height: 1.05;
   color: var(--da-text);
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .dash-mini-value.is-blue {
@@ -3522,10 +3541,13 @@ main:has(.da-app) + footer {
 
 .dash-mini-label {
   font-family: var(--da-mono);
-  font-size: 11px;
-  letter-spacing: 0.1em;
+  font-size: 10px;
+  font-size: clamp(9px, 2.8cqi, 11px);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--da-muted);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .dash-card-gross {
@@ -3547,7 +3569,8 @@ main:has(.da-app) + footer {
 .dash-card-gross-total {
   font-family: var(--da-display);
   font-weight: 800;
-  font-size: clamp(26px, 2.6vw, 34px);
+  font-size: clamp(22px, 2.6vw, 34px);
+  font-size: clamp(22px, 8cqi, 34px);
   line-height: 1.05;
   color: var(--da-text);
   font-variant-numeric: tabular-nums;
@@ -3587,9 +3610,47 @@ main:has(.da-app) + footer {
   color: var(--da-muted);
 }
 
+/* Stack legend + KPI row when the card itself is too narrow */
+@container dash-card (max-width: 380px) {
+  .dash-vol-stats {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .dash-sold-proj-num {
+    font-size: clamp(28px, 14cqi, 40px);
+  }
+
+  .dash-mini-value {
+    font-size: clamp(22px, 10cqi, 32px);
+  }
+}
+
+@container dash-card (max-width: 300px) {
+  .dash-mini-row {
+    gap: 6px 8px;
+  }
+
+  .dash-mini-label {
+    letter-spacing: 0.04em;
+  }
+
+  .dash-card-head {
+    flex-wrap: wrap;
+  }
+}
+
 @media (max-width: 640px) {
   .dash-vol-stats {
     grid-template-columns: 1fr;
+  }
+
+  .dash-sold-proj-num {
+    font-size: clamp(28px, 10vw, 40px);
+  }
+
+  .dash-mini-value {
+    font-size: clamp(22px, 7vw, 30px);
   }
 }
 
