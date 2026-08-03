@@ -86,9 +86,14 @@ const fmtPct = (v: number | null) => {
   return `${v.toFixed(0)}%`;
 };
 
+/** Compact store pill labels (e.g. Jim Butler Centralia → CENTRALIA). */
 function storePillLabel(name: string) {
-  const first = name.trim().split(/\s+/)[0] ?? name;
-  return first.toUpperCase();
+  const n = name.trim();
+  const jb = /^jim\s+butler\s+(.+)$/i.exec(n);
+  if (jb) return jb[1].trim().toUpperCase();
+  const parts = n.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return parts[parts.length - 1]!.toUpperCase();
+  return n.toUpperCase();
 }
 
 type ColDef = {
