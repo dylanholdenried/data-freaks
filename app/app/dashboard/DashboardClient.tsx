@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -43,6 +43,21 @@ type Props = {
   isFutureMonth: boolean;
   currentYear: number;
   currentMonth: number;
+};
+
+type DeptSectionData = {
+  id: string;
+  title: string;
+  sold: number;
+  goal: number | null;
+  pace: ReturnType<typeof computePaceSnapshot>;
+  front: number;
+  back: number;
+  totalGross: number;
+  closedCount: number;
+  avgTotal: number | null;
+  sourceMix: { name: string; value: string; width: number }[];
+  financeMix: { name: string; value: string; width: number }[];
 };
 
 function isBooked(status: string) {
@@ -94,6 +109,22 @@ function countBy(
     .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
 }
 
+/** Compact store pill labels (e.g. Jim Butler Centralia → JB CENTRALIA). */
+function shortStoreLabel(name: string): string {
+  const n = name.trim();
+  const jb = /^jim\s+butler\s+(.+)$/i.exec(n);
+  if (jb) return `JB ${jb[1].trim().toUpperCase()}`;
+  const parts = n.split(/\s+/).filter(Boolean);
+  if (parts.length >= 3) {
+    const initials = parts
+      .slice(0, -1)
+      .map((p) => p[0] ?? "")
+      .join("");
+    return `${initials} ${parts[parts.length - 1]}`.toUpperCase();
+  }
+  return n.toUpperCase();
+}
+
 export default function DashboardClient({
   stores,
   deals,
@@ -113,12 +144,10 @@ export default function DashboardClient({
   );
   const [updatedAt, setUpdatedAt] = useState(() => new Date());
 
-  // Sync store selection if stores list changes
   useEffect(() => {
     if (stores.length === 1) setSelectedStore(stores[0].id);
   }, [stores]);
 
-  // 60s auto-refresh
   useEffect(() => {
     const tick = () => {
       if (document.visibilityState === "hidden") return;
@@ -147,136 +176,150 @@ export default function DashboardClient({
     return years.sort((a, b) => b - a);
   }, [currentYear, year]);
 
-  const { monthLabel, workingMeta, deptSections } =
-    useMemo(() => {
-      const selectedStoreIds =
-        selectedStore === "all" ? stores.map((s) => s.id) : [selectedStore];
-      const storeById = new Map(stores.map((s) => [s.id, s.name]));
+  const { monthLabel, workingMeta, deptSections, aggregates } = useMemo(() => {
+    const selectedStoreIds =
+      selectedStore === "all" ? stores.map((s) => s.id) : [selectedStore];
+    const storeById = new Map(stores.map((s) => [s.id, s.name]));
 
-      const mtdDeals = deals.filter((d) => {
-        if (!selectedStoreIds.includes(d.store_id)) return false;
-        const sm = saleMonth(d.sale_date);
-        return sm.year === year && sm.month === month;
+    const mtdDeals = deals.filter((d) => {
+      if (!selectedStoreIds.includes(d.store_id)) return false;
+      const sm = saleMonth(d.sale_date);
+      return sm.year === year && sm.month === month;
+    });
+
+    const scopedDepts = departments
+      .filter(
+        (d) =>
+          selectedStoreIds.includes(d.store_id) && !isFiDepartment(d.name)
+      )
+      .sort((a, b) => {
+        const sa = storeById.get(a.store_id) ?? "";
+        const sb = storeById.get(b.store_id) ?? "";
+        return sa.localeCompare(sb) || a.name.localeCompare(b.name);
       });
 
-      const scopedDepts = departments
-        .filter(
-          (d) =>
-            selectedStoreIds.includes(d.store_id) && !isFiDepartment(d.name)
-        )
-        .sort((a, b) => {
-          const sa = storeById.get(a.store_id) ?? "";
-          const sb = storeById.get(b.store_id) ?? "";
-          return sa.localeCompare(sb) || a.name.localeCompare(b.name);
-        });
+    const goalMap = new Map(goals.map((g) => [g.department_id, g.volume_goal]));
 
-      const goalMap = new Map(
-        goals.map((g) => [g.department_id, g.volume_goal])
+    const workingDays = computeWorkingDays(
+      year,
+      month,
+      calendarDays,
+      selectedStoreIds
+    );
+
+    const samplePace = computePaceSnapshot(
+      0,
+      null,
+      year,
+      month,
+      workingDays,
+      isCurrentMonth,
+      isFutureMonth
+    );
+
+    const deptSections: DeptSectionData[] = scopedDepts.map((dept) => {
+      const deptWorkingDays = computeWorkingDays(year, month, calendarDays, [
+        dept.store_id,
+      ]);
+      const booked = mtdDeals.filter(
+        (d) => d.department_id === dept.id && isBooked(d.status)
       );
-
-      const workingDays = computeWorkingDays(
+      const closed = mtdDeals.filter(
+        (d) => d.department_id === dept.id && isClosed(d.status)
+      );
+      const sold = booked.length;
+      const goal = goalMap.get(dept.id) ?? null;
+      const pace = computePaceSnapshot(
+        sold,
+        goal,
         year,
         month,
-        calendarDays,
-        selectedStoreIds
-      );
-
-      // Shared calendar meta for header (store-scoped)
-      const samplePace = computePaceSnapshot(
-        0,
-        null,
-        year,
-        month,
-        workingDays,
+        deptWorkingDays,
         isCurrentMonth,
         isFutureMonth
       );
 
-      // ── Per-department sections ───────────────────────────────────────────
-      const deptSections = scopedDepts.map((dept) => {
-        // Working days for this department's store only
-        const deptWorkingDays = computeWorkingDays(
-          year,
-          month,
-          calendarDays,
-          [dept.store_id]
-        );
-        const booked = mtdDeals.filter(
-          (d) => d.department_id === dept.id && isBooked(d.status)
-        );
-        const closed = mtdDeals.filter(
-          (d) => d.department_id === dept.id && isClosed(d.status)
-        );
-        const sold = booked.length;
-        const goal = goalMap.get(dept.id) ?? null;
-        const pace = computePaceSnapshot(
-          sold,
-          goal,
-          year,
-          month,
-          deptWorkingDays,
-          isCurrentMonth,
-          isFutureMonth
-        );
+      const front = closed.reduce((s, d) => s + (d.front_profit ?? 0), 0);
+      const back = closed.reduce((s, d) => s + (d.back_profit ?? 0), 0);
+      const totalGross = front + back;
+      const closedCount = closed.length;
 
-        const front = closed.reduce((s, d) => s + (d.front_profit ?? 0), 0);
-        const back = closed.reduce((s, d) => s + (d.back_profit ?? 0), 0);
-        const totalGross = front + back;
-        const closedCount = closed.length;
-
-        const sourceCounts = countBy(booked, (d) => {
-          const s = d.acquisition_source?.trim();
-          return s ? s : "Unspecified";
-        });
-        const financeCounts = countBy(closed, (d) =>
-          financeLabel(d.finance_type)
-        );
-
-        const storeName = storeById.get(dept.store_id) ?? "";
-        const title =
-          selectedStore === "all" && stores.length > 1
-            ? `${storeName} · ${dept.name}`
-            : dept.name;
-
-        return {
-          id: dept.id,
-          title,
-          storeName,
-          deptName: dept.name,
-          sold,
-          goal,
-          pace,
-          front,
-          back,
-          totalGross,
-          closedCount,
-          avgFront: closedCount > 0 ? front / closedCount : null,
-          avgBack: closedCount > 0 ? back / closedCount : null,
-          avgTotal: closedCount > 0 ? totalGross / closedCount : null,
-          sourceMix: mixRows(sourceCounts, false, booked.length),
-          financeMix: mixRows(financeCounts, true, closedCount),
-        };
+      const sourceCounts = countBy(booked, (d) => {
+        const s = d.acquisition_source?.trim();
+        return s ? s : "Unspecified";
       });
+      const financeCounts = countBy(closed, (d) =>
+        financeLabel(d.finance_type)
+      );
 
-      const monthLabel = `${MONTH_NAMES[month - 1]} ${year}`;
+      const storeName = storeById.get(dept.store_id) ?? "";
+      const title =
+        selectedStore === "all" && stores.length > 1
+          ? `${storeName} · ${dept.name}`
+          : dept.name;
 
       return {
-        monthLabel,
-        workingMeta: samplePace,
-        deptSections,
+        id: dept.id,
+        title,
+        sold,
+        goal,
+        pace,
+        front,
+        back,
+        totalGross,
+        closedCount,
+        avgTotal: closedCount > 0 ? totalGross / closedCount : null,
+        sourceMix: mixRows(sourceCounts, false, booked.length),
+        financeMix: mixRows(financeCounts, true, closedCount),
       };
-    }, [
-      selectedStore,
-      stores,
-      deals,
-      departments,
-      calendarDays,
-      goals,
-      year,
-      month,
-      isCurrentMonth,
-      isFutureMonth,
-    ]);
+    });
+
+    let soldSum = 0;
+    let goalSum = 0;
+    let hasAnyGoal = false;
+    let projSum = 0;
+    let hasAnyProj = false;
+    let grossSum = 0;
+    for (const d of deptSections) {
+      soldSum += d.sold;
+      grossSum += d.totalGross;
+      if (d.goal !== null && d.goal > 0) {
+        goalSum += d.goal;
+        hasAnyGoal = true;
+      }
+      if (d.pace.monthEndProjection !== null) {
+        projSum += d.pace.monthEndProjection;
+        hasAnyProj = true;
+      }
+    }
+
+    const projVsGoal =
+      hasAnyProj && hasAnyGoal ? projSum - goalSum : null;
+
+    return {
+      monthLabel: `${MONTH_NAMES[month - 1]} ${year}`,
+      workingMeta: samplePace,
+      deptSections,
+      aggregates: {
+        soldSum,
+        goalSum: hasAnyGoal ? goalSum : null,
+        projSum: hasAnyProj ? projSum : null,
+        projVsGoal,
+        grossSum,
+      },
+    };
+  }, [
+    selectedStore,
+    stores,
+    deals,
+    departments,
+    calendarDays,
+    goals,
+    year,
+    month,
+    isCurrentMonth,
+    isFutureMonth,
+  ]);
 
   const updatedLabel = updatedAt.toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -285,31 +328,29 @@ export default function DashboardClient({
 
   return (
     <div className={cn("pc-command dash-tv space-y-5")}>
-      {/* ── Controls ──────────────────────────────────────────────────────── */}
       <header className="pc-head dash-tv-head">
         <div>
           <p className="pc-kicker">Sales command</p>
           <h1 className="pc-title">{monthLabel}</h1>
           <p className="pc-meta">
-            {workingMeta.completedWorkingDays} of {workingMeta.totalWorkingDays}{" "}
-            working days
+            Day {workingMeta.completedWorkingDays} of{" "}
+            {workingMeta.totalWorkingDays} working days
             {workingMeta.remainingWorkingDays > 0
               ? ` · ${workingMeta.remainingWorkingDays} remaining`
               : isCurrentMonth
                 ? ""
                 : " · Month complete"}
             {" · "}
-            Live · refreshed {updatedLabel}
+            live {updatedLabel}
           </p>
-        </div>
-
-        <div className="dash-tv-controls">
-          <div className="dash-tv-selects">
+          <div className="dash-tv-selects dash-tv-selects-inline">
             <label>
               <span>Month</span>
               <select
                 value={month}
-                onChange={(e) => navigateMonth(year, parseInt(e.target.value, 10))}
+                onChange={(e) =>
+                  navigateMonth(year, parseInt(e.target.value, 10))
+                }
               >
                 {MONTH_NAMES.map((name, i) => (
                   <option key={name} value={i + 1}>
@@ -322,7 +363,9 @@ export default function DashboardClient({
               <span>Year</span>
               <select
                 value={year}
-                onChange={(e) => navigateMonth(parseInt(e.target.value, 10), month)}
+                onChange={(e) =>
+                  navigateMonth(parseInt(e.target.value, 10), month)
+                }
               >
                 {yearOptions.map((y) => (
                   <option key={y} value={y}>
@@ -339,7 +382,9 @@ export default function DashboardClient({
               Current Month
             </button>
           </div>
+        </div>
 
+        <div className="dash-tv-controls">
           {stores.length > 0 && (
             <div className="pc-store-pills" role="group" aria-label="Store">
               <button
@@ -347,7 +392,7 @@ export default function DashboardClient({
                 className={cn("pc-pill", selectedStore === "all" && "is-active")}
                 onClick={() => setSelectedStore("all")}
               >
-                ALL
+                All stores
               </button>
               {stores.map((store) => (
                 <button
@@ -359,53 +404,84 @@ export default function DashboardClient({
                   )}
                   onClick={() => setSelectedStore(store.id)}
                 >
-                  {store.name}
+                  {shortStoreLabel(store.name)}
                 </button>
               ))}
             </div>
           )}
+
+          <div className="dash-agg">
+            <div className="dash-agg-item">
+              <span className="dash-agg-label">Store MTD</span>
+              <span className="dash-agg-value">
+                {aggregates.soldSum}
+                {aggregates.goalSum !== null && (
+                  <span className="dash-agg-muted">
+                    {" "}
+                    / {aggregates.goalSum}
+                  </span>
+                )}
+              </span>
+            </div>
+            <div className="dash-agg-item">
+              <span className="dash-agg-label">Proj</span>
+              <span
+                className={cn(
+                  "dash-agg-value",
+                  aggregates.projVsGoal !== null &&
+                    (aggregates.projVsGoal >= 0 ? "is-good" : "is-warn")
+                )}
+              >
+                {aggregates.projSum !== null ? aggregates.projSum : "—"}
+                {aggregates.projVsGoal !== null && (
+                  <span className="dash-agg-delta">
+                    {" "}
+                    {formatSigned(aggregates.projVsGoal)}
+                  </span>
+                )}
+              </span>
+            </div>
+            <div className="dash-agg-item">
+              <span className="dash-agg-label">Gross</span>
+              <span className="dash-agg-value">
+                {fmtCurrency(aggregates.grossSum)}
+              </span>
+            </div>
+          </div>
         </div>
       </header>
 
-      {/* ── Department sections ───────────────────────────────────────────── */}
       {deptSections.length === 0 ? (
         <div className="pc-panel">
-          <p className="dash-tv-empty">No departments configured for this view.</p>
+          <p className="dash-tv-empty">
+            No departments configured for this view.
+          </p>
         </div>
       ) : (
-        deptSections.map((dept) => (
-          <DepartmentSection
-            key={dept.id}
-            dept={dept}
-            year={year}
-            month={month}
-          />
-        ))
+        <>
+          <div className="dash-card-grid">
+            {deptSections.map((dept) => (
+              <DepartmentCard
+                key={dept.id}
+                dept={dept}
+                year={year}
+                month={month}
+              />
+            ))}
+          </div>
+
+          <div className="dash-mix-stack">
+            {deptSections.map((dept) => (
+              <MixPanel key={`mix-${dept.id}`} dept={dept} />
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
 }
 
-// ── Department section ───────────────────────────────────────────────────────
-
-type DeptSectionData = {
-  id: string;
-  title: string;
-  sold: number;
-  goal: number | null;
-  pace: ReturnType<typeof computePaceSnapshot>;
-  front: number;
-  back: number;
-  totalGross: number;
-  closedCount: number;
-  avgFront: number | null;
-  avgBack: number | null;
-  avgTotal: number | null;
-  sourceMix: { name: string; value: string; width: number }[];
-  financeMix: { name: string; value: string; width: number }[];
-};
-
-function DepartmentSection({
+function DepartmentCard({
   dept,
   year,
   month,
@@ -416,19 +492,46 @@ function DepartmentSection({
 }) {
   const { pace, goal, sold } = dept;
   const hasGoal = goal !== null && goal > 0;
+  const onTrack = pace.vsPace !== null && pace.vsPace >= 0;
+  const behind = pace.vsPace !== null && pace.vsPace < 0;
+  const projTone =
+    pace.projectionVsGoal === null
+      ? undefined
+      : pace.projectionVsGoal >= 0
+        ? "good"
+        : "warn";
+
+  const frontPct =
+    dept.totalGross > 0 ? (dept.front / dept.totalGross) * 100 : 0;
+  const backPct =
+    dept.totalGross > 0 ? (dept.back / dept.totalGross) * 100 : 0;
+
+  const soldPct = hasGoal ? Math.min(100, (sold / goal!) * 100) : 0;
+  const pacePct =
+    hasGoal && pace.paceLineToday !== null
+      ? Math.min(100, (pace.paceLineToday / goal!) * 100)
+      : null;
 
   return (
-    <section className="dash-dept">
-      <div className="dash-dept-head">
-        <h2>{dept.title}</h2>
-        <span>
-          {hasGoal ? `Goal ${goal}` : "No volume goal"} · {sold} sold MTD
-        </span>
+    <section className="dash-card">
+      <div className="dash-card-head">
+        <h2 className="dash-card-title">{dept.title}</h2>
+        {!hasGoal ? (
+          <span className="dash-status is-muted">No goal</span>
+        ) : behind ? (
+          <span className="dash-status is-behind">Behind pace</span>
+        ) : onTrack ? (
+          <span className="dash-status is-on-track">On track</span>
+        ) : (
+          <span className="dash-status is-muted">—</span>
+        )}
       </div>
 
       {!hasGoal ? (
-        <div className="dash-no-goal">
-          <p>No goal set for this month.</p>
+        <div className="dash-no-goal dash-no-goal-compact">
+          <p>
+            {sold} sold MTD · no volume goal set
+          </p>
           <Link
             href={`/app/setup?year=${year}&month=${month}#goals`}
             className="pc-pill is-active"
@@ -438,209 +541,205 @@ function DepartmentSection({
         </div>
       ) : (
         <>
-          <div className="dash-pace-kpis">
-            <PaceKpi label="Sold MTD" value={String(sold)} />
-            <PaceKpi
-              label="Pace Line Today"
-              value={
-                pace.paceLineToday !== null ? String(pace.paceLineToday) : "—"
-              }
-              accent="amber"
-            />
-            <PaceKpi
-              label="vs Pace"
-              value={
-                pace.vsPace !== null ? formatSigned(pace.vsPace) : "—"
-              }
-              accent={
-                pace.vsPace === null
-                  ? undefined
-                  : pace.vsPace >= 0
-                    ? "green"
-                    : "red"
-              }
-            />
-            <PaceKpi
-              label={`To Go (${goal})`}
-              value={
-                pace.toGo === null
-                  ? "—"
-                  : pace.toGo <= 0
-                    ? `+${Math.abs(pace.toGo)}`
-                    : String(pace.toGo)
-              }
-            />
-            <PaceKpi
-              label="Need / Biz Day"
-              value={<NeededValue n={pace.needed} />}
-              accent="blue"
-            />
-          </div>
-
-          <div className="dash-pace-bar-panel">
-            <p className="dash-pace-bar-title">
-              Month progress to {goal} — {dept.title}
-            </p>
-            <div className="dash-pace-track">
-              <div
-                className="dash-pace-fill"
-                style={{
-                  width: `${Math.min(100, (sold / goal) * 100)}%`,
-                }}
-              />
-              {pace.paceLineToday !== null && (
-                <div
-                  className="dash-pace-marker"
-                  style={{
-                    left: `${Math.min(100, (pace.paceLineToday / goal) * 100)}%`,
-                  }}
-                  title={`Pace line today: ${pace.paceLineToday}`}
-                />
-              )}
-            </div>
-            <p className="dash-pace-caption">
-              {sold} of {goal}. Amber line = pace today (
-              {pace.paceLineToday ?? "—"}).{" "}
-              {pace.remainingWorkingDays > 0
-                ? `${pace.remainingWorkingDays} business days left`
-                : "Month complete"}
-              {pace.needed.kind === "rate"
-                ? ` → ${pace.needed.rate.toFixed(1)}/business day.`
-                : "."}
-            </p>
-            <p className="dash-pace-projection">
-              Month-end projection:{" "}
-              <b>
+          <div className="dash-sold-proj">
+            <div className="dash-sold-proj-main">
+              <span className="dash-sold-proj-num">{sold}</span>
+              <span className="dash-sold-proj-arrow" aria-hidden>
+                →
+              </span>
+              <span
+                className={cn(
+                  "dash-sold-proj-num",
+                  projTone === "good" && "is-good",
+                  projTone === "warn" && "is-warn"
+                )}
+              >
                 {pace.monthEndProjection !== null
                   ? pace.monthEndProjection
                   : "—"}
-              </b>
-              {" vs goal "}
-              <b>{goal}</b>
-              {pace.projectionVsGoal !== null && (
-                <>
-                  {" "}
-                  (
-                  <span
-                    className={
-                      pace.projectionVsGoal >= 0 ? "good" : "warn"
-                    }
-                  >
-                    {formatSigned(pace.projectionVsGoal)}
-                  </span>
-                  )
-                </>
+              </span>
+              <span className="dash-sold-proj-label">Sold MTD</span>
+              <span className="dash-sold-proj-arrow-spacer" aria-hidden />
+              <span className="dash-sold-proj-label">Pace</span>
+            </div>
+            {pace.projectionVsGoal !== null && (
+              <span
+                className={cn(
+                  "dash-sold-proj-delta",
+                  pace.projectionVsGoal >= 0 ? "is-good" : "is-warn"
+                )}
+              >
+                {formatSigned(pace.projectionVsGoal)}
+              </span>
+            )}
+          </div>
+
+          <div className="dash-vol-bar">
+            <div className="dash-pace-track dash-pace-track-compact">
+              <div
+                className="dash-pace-fill"
+                style={{ width: `${soldPct}%` }}
+              />
+              {pacePct !== null && (
+                <div
+                  className="dash-pace-marker"
+                  style={{ left: `${pacePct}%` }}
+                  title={`Pace line today: ${pace.paceLineToday}`}
+                />
               )}
-            </p>
+              <div className="dash-goal-tick" title={`Goal ${goal}`} />
+            </div>
+          </div>
+
+          <div className="dash-vol-stats">
+            <div className="dash-vol-key">
+              <div className="dash-vol-key-row">
+                <span className="dash-vol-key-label">
+                  <i className="dash-leg-sold" />
+                  Sold&nbsp;:
+                </span>
+                <span className="dash-vol-key-value">{sold}</span>
+              </div>
+              <div className="dash-vol-key-row">
+                <span className="dash-vol-key-label">
+                  <i className="dash-leg-pace" />
+                  Target Pace&nbsp;:
+                </span>
+                <span className="dash-vol-key-value">
+                  {pace.paceLineToday ?? "—"}
+                </span>
+              </div>
+              <div className="dash-vol-key-row">
+                <span className="dash-vol-key-label">
+                  <i className="dash-leg-goal" />
+                  Goal&nbsp;:
+                </span>
+                <span className="dash-vol-key-value">{goal}</span>
+              </div>
+            </div>
+
+            <div className="dash-mini-row">
+              <div className="dash-mini">
+                <span className="dash-mini-value is-blue">
+                  <NeededValue n={pace.needed} />
+                </span>
+                <span className="dash-mini-label">Need / day</span>
+              </div>
+              <div className="dash-mini">
+                <span className="dash-mini-value">
+                  {pace.toGo === null
+                    ? "—"
+                    : pace.toGo <= 0
+                      ? `+${Math.abs(pace.toGo)}`
+                      : String(pace.toGo)}
+                </span>
+                <span className="dash-mini-label">To go</span>
+              </div>
+              <div className="dash-mini">
+                <span
+                  className={cn(
+                    "dash-mini-value",
+                    pace.vsPace === null
+                      ? undefined
+                      : pace.vsPace >= 0
+                        ? "is-good"
+                        : "is-warn"
+                  )}
+                >
+                  {pace.vsPace !== null ? formatSigned(pace.vsPace) : "—"}
+                </span>
+                <span className="dash-mini-label">Vs pace</span>
+              </div>
+            </div>
           </div>
         </>
       )}
 
-      {/* Gross */}
-      <div className="dash-gross-panel">
-        <div className="dash-gross-grid">
-          <GrossStat label="Total Front" value={fmtCurrency(dept.front)} />
-          <GrossStat label="Total Back" value={fmtCurrency(dept.back)} />
-          <GrossStat
-            label="Total Gross"
-            value={fmtCurrency(dept.totalGross)}
-            strong
-          />
-          <GrossStat
-            label="Avg Front"
-            value={
-              dept.avgFront !== null ? fmtCurrency(dept.avgFront) : "—"
-            }
-          />
-          <GrossStat
-            label="Avg Back"
-            value={dept.avgBack !== null ? fmtCurrency(dept.avgBack) : "—"}
-          />
-          <GrossStat
-            label="Avg / Deal"
-            value={
-              dept.avgTotal !== null ? fmtCurrency(dept.avgTotal) : "—"
-            }
-            strong
-          />
+      <div className="dash-card-gross">
+        <div className="dash-card-gross-head">
+          <span className="dash-mini-label">Total gross</span>
+          <span className="dash-card-gross-total">
+            {fmtCurrency(dept.totalGross)}
+          </span>
         </div>
-        <p className="dash-tv-footnote">
-          Totals and averages use closed deals only ({dept.closedCount} closed).
+        <div className="dash-gross-bar" role="img" aria-label="Front and back gross">
+          {dept.totalGross > 0 ? (
+            <>
+              <div
+                className="dash-gross-bar-front"
+                style={{ width: `${frontPct}%` }}
+              />
+              <div
+                className="dash-gross-bar-back"
+                style={{ width: `${backPct}%` }}
+              />
+            </>
+          ) : (
+            <div className="dash-gross-bar-empty" />
+          )}
+        </div>
+        <div className="dash-gross-legend">
+          <span>
+            <i className="dash-leg-front" /> front {fmtCurrency(dept.front)}
+          </span>
+          <span>
+            <i className="dash-leg-back" /> back {fmtCurrency(dept.back)}
+          </span>
+        </div>
+        <p className="dash-card-avg">
+          avg / deal{" "}
+          {dept.avgTotal !== null ? fmtCurrency(dept.avgTotal) : "—"}
         </p>
-      </div>
-
-      {/* Mix */}
-      <div className="da-demo-panel dash-mix-panel">
-        <div className="da-demo-panel-head">
-          <h3>Acquisition &amp; finance mix</h3>
-          <span>Sources = booked · Finance = closed</span>
-        </div>
-        <div className="da-demo-mix">
-          <div>
-            <div className="da-demo-mix-label">Sources</div>
-            {dept.sourceMix.length === 0 ? (
-              <p className="dash-tv-empty">No booked deals.</p>
-            ) : (
-              dept.sourceMix.map((s) => (
-                <div key={s.name} className="da-demo-mix-row">
-                  <div className="da-demo-mix-meta">
-                    <span>{s.name}</span>
-                    <b>{s.value}</b>
-                  </div>
-                  <div className="da-demo-mix-track">
-                    <div style={{ width: `${s.width}%` }} />
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-          <div>
-            <div className="da-demo-mix-label">Finance</div>
-            {dept.financeMix.length === 0 ? (
-              <p className="dash-tv-empty">No closed deals.</p>
-            ) : (
-              dept.financeMix.map((s) => (
-                <div key={s.name} className="da-demo-mix-row">
-                  <div className="da-demo-mix-meta">
-                    <span>{s.name}</span>
-                    <b>{s.value}</b>
-                  </div>
-                  <div className="da-demo-mix-track blue">
-                    <div style={{ width: `${s.width}%` }} />
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
       </div>
     </section>
   );
 }
 
-function PaceKpi({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: ReactNode;
-  accent?: "amber" | "green" | "red" | "blue";
-}) {
+function MixPanel({ dept }: { dept: DeptSectionData }) {
   return (
-    <div className="dash-pace-kpi">
-      <div
-        className={cn(
-          "dash-pace-kpi-value",
-          accent === "amber" && "amber",
-          accent === "green" && "green",
-          accent === "red" && "red",
-          accent === "blue" && "blue"
-        )}
-      >
-        {value}
+    <div className="da-demo-panel dash-mix-panel">
+      <div className="da-demo-panel-head">
+        <h3>{dept.title} — Acquisition &amp; finance mix</h3>
+        <span>Sources = booked · Finance = closed</span>
       </div>
-      <div className="dash-pace-kpi-label">{label}</div>
+      <div className="da-demo-mix">
+        <div>
+          <div className="da-demo-mix-label">Sources</div>
+          {dept.sourceMix.length === 0 ? (
+            <p className="dash-tv-empty">No booked deals.</p>
+          ) : (
+            dept.sourceMix.map((s) => (
+              <div key={s.name} className="da-demo-mix-row">
+                <div className="da-demo-mix-meta">
+                  <span>{s.name}</span>
+                  <b>{s.value}</b>
+                </div>
+                <div className="da-demo-mix-track">
+                  <div style={{ width: `${s.width}%` }} />
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        <div>
+          <div className="da-demo-mix-label">Finance</div>
+          {dept.financeMix.length === 0 ? (
+            <p className="dash-tv-empty">No closed deals.</p>
+          ) : (
+            dept.financeMix.map((s) => (
+              <div key={s.name} className="da-demo-mix-row">
+                <div className="da-demo-mix-meta">
+                  <span>{s.name}</span>
+                  <b>{s.value}</b>
+                </div>
+                <div className="da-demo-mix-track blue">
+                  <div style={{ width: `${s.width}%` }} />
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -649,21 +748,4 @@ function NeededValue({ n }: { n: NeededDisplay }) {
   if (n.kind === "empty") return <>—</>;
   if (n.kind === "surplus") return <>—{n.units}</>;
   return <>{n.rate.toFixed(1)}</>;
-}
-
-function GrossStat({
-  label,
-  value,
-  strong,
-}: {
-  label: string;
-  value: string;
-  strong?: boolean;
-}) {
-  return (
-    <div className={cn("dash-gross-stat", strong && "is-strong")}>
-      <span>{label}</span>
-      <b>{value}</b>
-    </div>
-  );
 }
