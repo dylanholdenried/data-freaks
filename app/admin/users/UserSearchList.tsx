@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { formatProfileName, formatRoleLabel } from "@/lib/profile-display";
+import { formatProfileName, formatRoleLabel, formatStatusLabel } from "@/lib/profile-display";
 
 export type UserListRow = {
   id: string;
@@ -18,7 +18,7 @@ export type UserListRow = {
 
 function statusVariant(status: string): "success" | "warning" | "outline" {
   if (status === "active") return "success";
-  if (status === "invited") return "warning";
+  if (status === "invited" || status === "requested") return "warning";
   return "outline";
 }
 
@@ -74,7 +74,9 @@ export default function UserSearchList({
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5">
                     <Badge variant="outline">{formatRoleLabel(user.role)}</Badge>
-                    <Badge variant={statusVariant(user.status)}>{user.status}</Badge>
+                    <Badge variant={statusVariant(user.status)}>
+                      {formatStatusLabel(user.status)}
+                    </Badge>
                   </div>
                 </Link>
               </li>

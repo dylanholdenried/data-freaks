@@ -28,7 +28,7 @@ end$$;
 do $$
 begin
   if not exists (select 1 from pg_type where typname = 'user_status') then
-    create type user_status as enum ('invited', 'active', 'disabled');
+    create type user_status as enum ('invited', 'requested', 'active', 'disabled');
   end if;
 end$$;
 

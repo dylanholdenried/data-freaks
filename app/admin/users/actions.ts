@@ -12,7 +12,7 @@ import {
 import { generatePasswordSetupLink } from "@/lib/auth/password-setup-link";
 
 type AppRole = "group_admin" | "store_admin";
-type UserStatus = "invited" | "active" | "disabled";
+type UserStatus = "invited" | "requested" | "active" | "disabled";
 type PlatformTargetRole = "platform_admin" | "owner_admin";
 
 function revalidateUserPaths(profileId: string, dealerGroupId?: string | null) {
@@ -154,7 +154,7 @@ export async function updateAdminUser(formData: FormData) {
   if (!email) {
     return { saved: false as const, error: "Email is required" };
   }
-  if (!["invited", "active", "disabled"].includes(status)) {
+  if (!["invited", "requested", "active", "disabled"].includes(status)) {
     return { saved: false as const, error: "Invalid status" };
   }
 

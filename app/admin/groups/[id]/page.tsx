@@ -15,7 +15,7 @@ import {
 import { DEFAULT_BUY_BOX_SETTINGS } from "@/lib/profit-center/buyBox";
 import { openStoreViewForGroupAction } from "@/app/app/group-actions";
 import { requireAdminServiceClient } from "@/app/admin/admin-data";
-import { formatProfileName, formatRoleLabel } from "@/lib/profile-display";
+import { formatProfileName, formatRoleLabel, formatStatusLabel } from "@/lib/profile-display";
 import { isPlatformStaff } from "@/lib/roles";
 import FormWithSaveToast from "./FormWithSaveToast";
 import AddUserModal from "./AddUserModal";
@@ -435,12 +435,12 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
                           variant={
                             user.status === "active"
                               ? "success"
-                              : user.status === "invited"
+                              : user.status === "invited" || user.status === "requested"
                                 ? "warning"
                                 : "outline"
                           }
                         >
-                          {user.status}
+                          {formatStatusLabel(user.status)}
                         </Badge>
                       </div>
                     </Link>

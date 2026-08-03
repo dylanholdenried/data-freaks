@@ -8,8 +8,7 @@ const signupSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
   dealer_group_mode: z.enum(["new", "existing"]),
-  dealer_group_name: z.string().optional(),
-  existing_group_id: z.string().optional(),
+  dealer_group_name: z.string().trim().min(1),
   title: z.string().optional(),
   number_of_stores: z.number().int().positive().optional(),
   website: z.string().min(3).optional()
@@ -56,7 +55,7 @@ export async function POST(req: Request) {
       first_name: parsed.first_name,
       last_name: parsed.last_name,
       role: "store_admin",
-      status: "invited"
+      status: "requested"
     });
 
     if (profileError) {
@@ -70,24 +69,23 @@ export async function POST(req: Request) {
     }
 
     // 3) Register dealer group request (new or existing).
+    // Never auto-link dealer_group_id — admins provision manually.
     const { error: requestError } = await supabase.from("dealer_group_requests").insert({
       first_name: parsed.first_name,
       last_name: parsed.last_name,
       email,
       phone: null,
-      dealer_group_name:
-        parsed.dealer_group_mode === "existing"
-          ? parsed.dealer_group_name ?? "Existing group (ID provided)"
-          : parsed.dealer_group_name ?? "New dealer group",
+      dealer_group_name: parsed.dealer_group_name,
       title: parsed.title ?? null,
-      number_of_stores: parsed.number_of_stores ?? null,
-      website: parsed.website ?? null,
+      number_of_stores:
+        parsed.dealer_group_mode === "new" ? (parsed.number_of_stores ?? null) : null,
+      website: parsed.dealer_group_mode === "new" ? (parsed.website ?? null) : null,
       requested_user_id: user.id,
       status: "pending",
       notes:
         parsed.dealer_group_mode === "existing"
-          ? `Requested access to existing group: ${parsed.existing_group_id ?? "no ID provided"}; auth_user_id=${user.id}`
-          : `New dealer group request via signup; auth_user_id=${user.id}`
+          ? `Requested access to existing group: ${parsed.dealer_group_name}; auth_user_id=${user.id}`
+          : `New dealer group request: ${parsed.dealer_group_name}; auth_user_id=${user.id}`
     });
 
     if (requestError) {

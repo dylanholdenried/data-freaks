@@ -11,7 +11,7 @@ import { generatePasswordSetupLink } from "@/lib/auth/password-setup-link";
 
 type PlanTier = "log" | "analyze" | "advise";
 type AppRole = "group_admin" | "store_admin";
-type UserStatus = "invited" | "active" | "disabled";
+type UserStatus = "invited" | "requested" | "active" | "disabled";
 
 function revalidateGroup(groupId?: string) {
   revalidatePath("/admin/groups");

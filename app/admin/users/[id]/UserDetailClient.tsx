@@ -7,7 +7,7 @@ import StoreAccessFields, { PhoneField } from "@/app/admin/groups/[id]/StoreAcce
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { formatProfileName, formatRoleLabel } from "@/lib/profile-display";
+import { formatProfileName, formatRoleLabel, formatStatusLabel } from "@/lib/profile-display";
 import {
   disableAdminUser,
   resendAdminUserInvite,
@@ -43,7 +43,7 @@ type Props = {
 
 function statusVariant(status: string): "success" | "warning" | "outline" {
   if (status === "active") return "success";
-  if (status === "invited") return "warning";
+  if (status === "invited" || status === "requested") return "warning";
   return "outline";
 }
 
@@ -86,7 +86,7 @@ export default function UserDetailClient({
           </div>
           <div className="flex flex-wrap gap-1.5">
             <Badge variant="outline">{formatRoleLabel(user.role)}</Badge>
-            <Badge variant={statusVariant(user.status)}>{user.status}</Badge>
+            <Badge variant={statusVariant(user.status)}>{formatStatusLabel(user.status)}</Badge>
           </div>
         </div>
       </div>
@@ -130,6 +130,7 @@ export default function UserDetailClient({
                 defaultValue={user.status}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
+                <option value="requested">Requested</option>
                 <option value="invited">Invited</option>
                 <option value="active">Active</option>
                 <option value="disabled">Disabled</option>

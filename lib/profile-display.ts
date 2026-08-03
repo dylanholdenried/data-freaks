@@ -30,3 +30,19 @@ export function formatRoleLabel(role: string | null | undefined): string {
         .join(" ");
   }
 }
+
+export function formatStatusLabel(status: string | null | undefined): string {
+  switch (status) {
+    case "requested":
+      return "Requested";
+    case "invited":
+      return "Invited";
+    case "active":
+      return "Active";
+    case "disabled":
+      return "Disabled";
+    default:
+      if (!status) return "Unknown";
+      return status.charAt(0).toUpperCase() + status.slice(1);
+  }
+}

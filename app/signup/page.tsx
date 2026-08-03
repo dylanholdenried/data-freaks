@@ -41,8 +41,7 @@ const signupSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
   dealer_group_mode: z.enum(["new", "existing"]),
-  dealer_group_name: z.string().optional(),
-  existing_group_id: z.string().optional(),
+  dealer_group_name: z.string().trim().min(1),
   title: z.string().optional(),
   number_of_stores: z.coerce.number().int().positive().optional(),
   website: z.string().min(3).optional()
@@ -52,6 +51,7 @@ export default function SignupPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [dealerGroupMode, setDealerGroupMode] = useState<"new" | "existing">("new");
 
   async function handleSubmit(formData: FormData) {
     setError(null);
@@ -60,7 +60,16 @@ export default function SignupPage() {
 
     try {
       const raw = Object.fromEntries(formData.entries());
-      const parsed = signupSchema.parse(raw);
+      const cleaned = {
+        ...raw,
+        number_of_stores:
+          raw.number_of_stores === "" || raw.number_of_stores === undefined
+            ? undefined
+            : raw.number_of_stores,
+        website:
+          raw.website === "" || raw.website === undefined ? undefined : raw.website
+      };
+      const parsed = signupSchema.parse(cleaned);
 
       const res = await fetch("/api/auth/signup", {
         method: "POST",
@@ -216,49 +225,58 @@ export default function SignupPage() {
                   </label>
 
                   <fieldset className="da-signup-fieldset">
-                    <legend>Dealer group access</legend>
+                    <legend>Dealership / Group access</legend>
                     <div className="da-signup-options">
                       <label>
                         <input
                           type="radio"
                           name="dealer_group_mode"
                           value="new"
-                          defaultChecked
+                          checked={dealerGroupMode === "new"}
+                          onChange={() => setDealerGroupMode("new")}
                         />
-                        <span>Request a new dealer group</span>
+                        <span>Create New Dealership/Group</span>
                       </label>
                       <label>
-                        <input type="radio" name="dealer_group_mode" value="existing" />
-                        <span>Request access to an existing DealerACQ group</span>
-                      </label>
-                    </div>
-                    <div className="da-signup-grid">
-                      <label>
-                        <span>Dealer group name</span>
-                        <input name="dealer_group_name" placeholder="Your Auto Group" />
-                      </label>
-                      <label>
-                        <span>Existing group ID (optional)</span>
                         <input
-                          name="existing_group_id"
-                          placeholder="If you know the internal group ID"
+                          type="radio"
+                          name="dealer_group_mode"
+                          value="existing"
+                          checked={dealerGroupMode === "existing"}
+                          onChange={() => setDealerGroupMode("existing")}
                         />
+                        <span>Access an Existing Dealership/Group</span>
                       </label>
                     </div>
-                    <div className="da-signup-grid">
-                      <label>
-                        <span>Number of stores</span>
-                        <input name="number_of_stores" type="number" min={1} placeholder="e.g. 3" />
-                      </label>
-                      <label>
-                        <span>Dealer group website</span>
-                        <input
-                          name="website"
-                          type="text"
-                          placeholder="exampleautogroup.com"
-                        />
-                      </label>
-                    </div>
+                    <label>
+                      <span>Dealership/Group Name</span>
+                      <input
+                        name="dealer_group_name"
+                        required
+                        placeholder="Your Auto Group"
+                      />
+                    </label>
+                    {dealerGroupMode === "new" && (
+                      <div className="da-signup-grid">
+                        <label>
+                          <span>Number of stores</span>
+                          <input
+                            name="number_of_stores"
+                            type="number"
+                            min={1}
+                            placeholder="e.g. 3"
+                          />
+                        </label>
+                        <label>
+                          <span>Dealer group website</span>
+                          <input
+                            name="website"
+                            type="text"
+                            placeholder="exampleautogroup.com"
+                          />
+                        </label>
+                      </div>
+                    )}
                   </fieldset>
 
                   {error && (
