@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ChevronRight } from "lucide-react";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -189,6 +190,17 @@ export default function DealsClient({
   initialYear,
   initialMonth,
 }: Props) {
+  // ── Local deals (updated when marking delivered without a full refetch) ──────
+  const [localDeals, setLocalDeals] = useState(deals);
+  useEffect(() => {
+    setLocalDeals(deals);
+  }, [deals]);
+
+  // ── Mark Delivered confirm ───────────────────────────────────────────────────
+  const [deliverConfirmDeal, setDeliverConfirmDeal] = useState<Deal | null>(null);
+  const [markingDelivered, setMarkingDelivered] = useState(false);
+  const [deliverError, setDeliverError] = useState<string | null>(null);
+
   // ── Filter state ─────────────────────────────────────────────────────────────
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [storeFilter, setStoreFilter] = useState<"both" | string>(
@@ -197,6 +209,7 @@ export default function DealsClient({
   const [allTime, setAllTime] = useState(false);
   const [yearFilter, setYearFilter] = useState(initialYear);
   const [monthFilter, setMonthFilter] = useState(initialMonth);
+  const [departmentFilter, setDepartmentFilter] = useState("");
   const [salespersonFilter, setSalespersonFilter] = useState("");
   const [financeManagerFilter, setFinanceManagerFilter] = useState("");
   const [financeTypeFilter, setFinanceTypeFilter] = useState("");
@@ -205,6 +218,32 @@ export default function DealsClient({
   // ── Sort state ───────────────────────────────────────────────────────────────
   const [sortCol, setSortCol] = useState<SortCol>("sale_date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  async function handleMarkDelivered() {
+    if (!deliverConfirmDeal) return;
+    setMarkingDelivered(true);
+    setDeliverError(null);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { error } = await supabase
+        .from("deals")
+        .update({ status: "delivered" })
+        .eq("id", deliverConfirmDeal.id);
+      if (error) throw new Error(error.message);
+      setLocalDeals((prev) =>
+        prev.map((d) =>
+          d.id === deliverConfirmDeal.id ? { ...d, status: "delivered" } : d
+        )
+      );
+      setDeliverConfirmDeal(null);
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : "Could not mark deal delivered.";
+      setDeliverError(msg);
+    } finally {
+      setMarkingDelivered(false);
+    }
+  }
 
   function handleSort(col: SortCol) {
     if (sortCol === col) {
@@ -250,7 +289,7 @@ export default function DealsClient({
 
     const search = searchText.toLowerCase().trim();
 
-    const filtered = deals.filter((deal) => {
+    const filtered = localDeals.filter((deal) => {
       if (statusFilter !== "all" && deal.status !== statusFilter) return false;
       if (storeFilter !== "both" && deal.store_id !== storeFilter) return false;
       if (!allTime) {
@@ -258,6 +297,7 @@ export default function DealsClient({
         const m = parseInt(deal.sale_date.slice(5, 7), 10);
         if (y !== yearFilter || m !== monthFilter) return false;
       }
+      if (departmentFilter && deal.department_id !== departmentFilter) return false;
       if (salespersonFilter && !dealSpIdMap.get(deal.id)?.includes(salespersonFilter))
         return false;
       if (financeManagerFilter && deal.finance_manager_id !== financeManagerFilter)
@@ -306,7 +346,7 @@ export default function DealsClient({
 
     return { filteredDeals: sorted, storeById, deptById, dealSpNameMap };
   }, [
-    deals,
+    localDeals,
     stores,
     departments,
     salespeople,
@@ -316,6 +356,7 @@ export default function DealsClient({
     allTime,
     yearFilter,
     monthFilter,
+    departmentFilter,
     salespersonFilter,
     financeManagerFilter,
     financeTypeFilter,
@@ -324,11 +365,34 @@ export default function DealsClient({
     sortDir,
   ]);
 
+  // Departments for the selected store (or all when Both)
+  const departmentOptions = useMemo(() => {
+    const list =
+      storeFilter === "both"
+        ? departments
+        : departments.filter((d) => d.store_id === storeFilter);
+    return [...list].sort((a, b) => a.name.localeCompare(b.name));
+  }, [departments, storeFilter]);
+
+  // Clear department if it no longer belongs to the selected store
+  useEffect(() => {
+    if (
+      departmentFilter &&
+      !departmentOptions.some((d) => d.id === departmentFilter)
+    ) {
+      setDepartmentFilter("");
+    }
+  }, [departmentFilter, departmentOptions]);
+
   // Grid template — Store column only when Both is selected
   const showStore = storeFilter === "both";
   const TGRID = showStore
-    ? "xl:grid-cols-[65px_80px_110px_1fr_90px_100px_115px_90px_68px_68px_76px_20px] xl:gap-2"
-    : "xl:grid-cols-[65px_80px_110px_1fr_100px_115px_90px_68px_68px_76px_20px] xl:gap-2";
+    ? "xl:grid-cols-[65px_80px_110px_1fr_90px_100px_115px_90px_68px_68px_76px_128px] xl:gap-2"
+    : "xl:grid-cols-[65px_80px_110px_1fr_100px_115px_90px_68px_68px_76px_128px] xl:gap-2";
+
+  function canMarkDelivered(status: string) {
+    return status === "pending";
+  }
 
   return (
     <div className="space-y-5">
@@ -385,7 +449,7 @@ export default function DealsClient({
         </div>
 
         {/* Date + dropdowns */}
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {/* Month / Year / All time */}
           <div className="flex items-center gap-2">
             <select
@@ -430,6 +494,27 @@ export default function DealsClient({
               All time
             </button>
           </div>
+
+          {/* Department */}
+          <select
+            value={departmentFilter}
+            onChange={(e) => setDepartmentFilter(e.target.value)}
+            className={SEL}
+          >
+            <option value="">All Departments</option>
+            {departmentOptions.map((dept) => {
+              const storeName = storeById.get(dept.store_id);
+              const label =
+                storeFilter === "both" && storeName
+                  ? `${dept.name} (${storeName})`
+                  : dept.name;
+              return (
+                <option key={dept.id} value={dept.id}>
+                  {label}
+                </option>
+              );
+            })}
+          </select>
 
           {/* Salesperson */}
           <select
@@ -512,7 +597,9 @@ export default function DealsClient({
           <SortHeader col="front_profit" label="Front" right sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
           <SortHeader col="back_profit" label="Back" right sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
           <SortHeader col="total_gross" label="Total" right sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
-          <span />
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Actions
+          </span>
         </div>
 
         {/* Rows */}
@@ -531,92 +618,161 @@ export default function DealsClient({
               const totalGross = hasGross
                 ? (deal.front_profit ?? 0) + (deal.back_profit ?? 0)
                 : null;
+              const showDeliver = canMarkDelivered(deal.status);
 
               return (
-                <Link
+                <div
                   key={deal.id}
-                  href={`/app/deals/${deal.id}/edit`}
-                  prefetch
-                  className={`group flex min-w-0 flex-col px-5 py-3 transition-colors hover:bg-muted xl:grid ${TGRID} xl:items-center`}
+                  className={`group flex min-w-0 items-center gap-3 px-5 py-3 transition-colors hover:bg-muted xl:grid ${TGRID} xl:gap-2`}
                 >
-                  {/* Date — always visible, grid cell 1 */}
-                  <span className="text-sm text-muted-foreground">
-                    {formatDate(deal.sale_date)}
-                  </span>
+                  <Link
+                    href={`/app/deals/${deal.id}/edit`}
+                    prefetch
+                    className="flex min-w-0 flex-1 flex-col xl:contents"
+                  >
+                    {/* Date — always visible, grid cell 1 */}
+                    <span className="text-sm text-muted-foreground">
+                      {formatDate(deal.sale_date)}
+                    </span>
 
-                  {/* Stock # — always visible, grid cell 2 */}
-                  <span className="font-mono text-sm font-semibold text-blue-700">
-                    {deal.stock_number || "—"}
-                  </span>
+                    {/* Stock # — always visible, grid cell 2 */}
+                    <span className="font-mono text-sm font-semibold text-blue-700">
+                      {deal.stock_number || "—"}
+                    </span>
 
-                  {/* Customer — always visible, grid cell 3 */}
-                  <span className="min-w-0 truncate text-sm font-medium text-foreground">
-                    {deal.customer_last_name || "—"}
-                  </span>
+                    {/* Customer — always visible, grid cell 3 */}
+                    <span className="min-w-0 truncate text-sm font-medium text-foreground">
+                      {deal.customer_last_name || "—"}
+                    </span>
 
-                  {/* Vehicle — always visible, grid cell 4 (1fr) */}
-                  <span className="min-w-0 truncate text-sm text-muted-foreground">
-                    {deal.vehicle_year} {deal.vehicle_make} {deal.vehicle_model}
-                  </span>
+                    {/* Vehicle — always visible, grid cell 4 (1fr) */}
+                    <span className="min-w-0 truncate text-sm text-muted-foreground">
+                      {deal.vehicle_year} {deal.vehicle_make} {deal.vehicle_model}
+                    </span>
 
-                  {/* Stacked summary — hidden at xl+, not a grid cell */}
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground xl:hidden">
-                    <StatusBadge status={deal.status} />
-                    {showStore && <span>{storeName}</span>}
-                    <span>{deptName}</span>
-                    {spNames.length > 0 && <span>{spNames.join(", ")}</span>}
-                    {totalGross !== null && (
-                      <span className="font-medium text-muted-foreground">
-                        {fmt$(totalGross)}
+                    {/* Stacked summary — hidden at xl+, not a grid cell */}
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground xl:hidden">
+                      <StatusBadge status={deal.status} />
+                      {showStore && <span>{storeName}</span>}
+                      <span>{deptName}</span>
+                      {spNames.length > 0 && <span>{spNames.join(", ")}</span>}
+                      {totalGross !== null && (
+                        <span className="font-medium text-muted-foreground">
+                          {fmt$(totalGross)}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Store — xl+, Both mode only */}
+                    {showStore && (
+                      <span className="hidden text-sm text-muted-foreground xl:block">
+                        {storeName}
                       </span>
                     )}
-                  </div>
 
-                  {/* Store — xl+, Both mode only */}
-                  {showStore && (
+                    {/* Dept */}
                     <span className="hidden text-sm text-muted-foreground xl:block">
-                      {storeName}
+                      {deptName}
                     </span>
-                  )}
 
-                  {/* Dept */}
-                  <span className="hidden text-sm text-muted-foreground xl:block">
-                    {deptName}
-                  </span>
+                    {/* Salesperson(s) */}
+                    <span className="hidden text-sm text-muted-foreground xl:block">
+                      {spNames.length > 0 ? spNames.join(", ") : "—"}
+                    </span>
 
-                  {/* Salesperson(s) */}
-                  <span className="hidden text-sm text-muted-foreground xl:block">
-                    {spNames.length > 0 ? spNames.join(", ") : "—"}
-                  </span>
+                    {/* Status badge */}
+                    <span className="hidden xl:block">
+                      <StatusBadge status={deal.status} />
+                    </span>
 
-                  {/* Status badge */}
-                  <span className="hidden xl:block">
-                    <StatusBadge status={deal.status} />
-                  </span>
+                    {/* Front */}
+                    <span className="hidden text-right text-sm tabular-nums text-muted-foreground xl:block">
+                      {deal.front_profit !== null ? fmt$(deal.front_profit) : "—"}
+                    </span>
 
-                  {/* Front */}
-                  <span className="hidden text-right text-sm tabular-nums text-muted-foreground xl:block">
-                    {deal.front_profit !== null ? fmt$(deal.front_profit) : "—"}
-                  </span>
+                    {/* Back */}
+                    <span className="hidden text-right text-sm tabular-nums text-muted-foreground xl:block">
+                      {deal.back_profit !== null ? fmt$(deal.back_profit) : "—"}
+                    </span>
 
-                  {/* Back */}
-                  <span className="hidden text-right text-sm tabular-nums text-muted-foreground xl:block">
-                    {deal.back_profit !== null ? fmt$(deal.back_profit) : "—"}
-                  </span>
+                    {/* Total */}
+                    <span className="hidden text-right text-sm tabular-nums font-semibold text-foreground xl:block">
+                      {totalGross !== null ? fmt$(totalGross) : "—"}
+                    </span>
+                  </Link>
 
-                  {/* Total */}
-                  <span className="hidden text-right text-sm tabular-nums font-semibold text-foreground xl:block">
-                    {totalGross !== null ? fmt$(totalGross) : "—"}
-                  </span>
-
-                  {/* Chevron */}
-                  <ChevronRight className="hidden h-4 w-4 text-muted-foreground transition-colors group-hover:text-blue-400 xl:block" />
-                </Link>
+                  {/* Actions — outside Link so button does not navigate */}
+                  <div className="flex shrink-0 items-center justify-end gap-1">
+                    {showDeliver ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setDeliverError(null);
+                          setDeliverConfirmDeal(deal);
+                        }}
+                        className="h-7 whitespace-nowrap bg-blue-600 px-2 text-xs hover:bg-blue-700"
+                      >
+                        Mark Delivered
+                      </Button>
+                    ) : (
+                      <Link
+                        href={`/app/deals/${deal.id}/edit`}
+                        prefetch
+                        className="hidden xl:block"
+                        aria-label="Open deal"
+                      >
+                        <ChevronRight className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-blue-400" />
+                      </Link>
+                    )}
+                  </div>
+                </div>
               );
             })
           )}
         </div>
       </section>
+
+      {/* Mark Delivered confirmation */}
+      {deliverConfirmDeal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="app-panel w-full max-w-md p-6">
+            <h2 className="text-lg font-semibold tracking-tight text-foreground">
+              Would you like to mark{" "}
+              <span className="font-mono">
+                {deliverConfirmDeal.stock_number || "—"}
+              </span>{" "}
+              Delivered?
+            </h2>
+            {deliverError && (
+              <p className="mt-3 text-sm text-red-600">{deliverError}</p>
+            )}
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                disabled={markingDelivered}
+                onClick={() => {
+                  setDeliverConfirmDeal(null);
+                  setDeliverError(null);
+                }}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                disabled={markingDelivered}
+                onClick={handleMarkDelivered}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                {markingDelivered ? "Marking…" : "Yes"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

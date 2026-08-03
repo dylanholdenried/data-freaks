@@ -417,6 +417,9 @@ export default function UpdatePendingForm({
   const [showLostConfirm, setShowLostConfirm] = useState(false);
   const [markingLost, setMarkingLost] = useState(false);
   const [markedLost, setMarkedLost] = useState(false);
+  const [showDeliveredConfirm, setShowDeliveredConfirm] = useState(false);
+  const [markingDelivered, setMarkingDelivered] = useState(false);
+  const [markedDelivered, setMarkedDelivered] = useState(false);
 
   // ── VIN Decoder ───────────────────────────────────────────────────────────────
   async function handleDecodeVin() {
@@ -952,6 +955,37 @@ export default function UpdatePendingForm({
     }
   }
 
+  // ── Mark Delivered ────────────────────────────────────────────────────────────
+  async function handleMarkDelivered() {
+    setShowDeliveredConfirm(false);
+    setMarkingDelivered(true);
+    setSaved(false);
+    setErrors([]);
+    setCloseErrors([]);
+
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { error } = await supabase
+        .from("deals")
+        .update({ ...buildPayload(), status: "delivered" })
+        .eq("id", dealId);
+
+      if (error) throw new Error(error.message);
+      await saveSalespeople(supabase);
+      await saveTrades(supabase);
+      setMarkedDelivered(true);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      setTimeout(() => router.push("/app/deals"), 2000);
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : "An unexpected error occurred. Please try again.";
+      setErrors([`Mark delivered failed: ${msg}`]);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } finally {
+      setMarkingDelivered(false);
+    }
+  }
+
   // isLocked reflects the deal's actual persisted status, not just session state.
   // closed/unwound/dead deals are read-only; Stage 5 adds a Reopen action.
   const isLocked =
@@ -967,8 +1001,12 @@ export default function UpdatePendingForm({
     closed ||
     markingLost ||
     markedLost ||
+    markingDelivered ||
+    markedDelivered ||
     !!stockBlockingMatch ||
     checkingStock;
+
+  const alreadyDelivered = dealStatus === "delivered" || markedDelivered;
 
   function renderActionButtons() {
     return (
@@ -990,6 +1028,16 @@ export default function UpdatePendingForm({
         >
           {closing ? "Closing…" : "Close Deal"}
         </Button>
+        {!alreadyDelivered && (
+          <Button
+            type="button"
+            onClick={() => setShowDeliveredConfirm(true)}
+            disabled={busy}
+            className="min-w-[140px] bg-blue-600 hover:bg-blue-700"
+          >
+            {markingDelivered ? "Marking…" : "Mark Delivered"}
+          </Button>
+        )}
         <Button
           type="button"
           onClick={() => setShowLostConfirm(true)}
@@ -1014,7 +1062,11 @@ export default function UpdatePendingForm({
               <h1 className="text-3xl font-semibold tracking-tight text-foreground">
                 Update Deal
               </h1>
-              <StatusBadge status={markedLost ? "dead" : dealStatus} />
+              <StatusBadge
+                status={
+                  markedLost ? "dead" : markedDelivered ? "delivered" : dealStatus
+                }
+              />
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
               Fill economics and close when ready.
@@ -1038,6 +1090,27 @@ export default function UpdatePendingForm({
             <a
               href="/app/deals"
               className="mt-1 inline-block text-xs text-green-700 underline hover:text-green-900"
+            >
+              Go to Sales Registry →
+            </a>
+          </div>
+        </div>
+      )}
+
+      {/* ── Mark delivered success banner ────────────────────────────────────── */}
+      {markedDelivered && (
+        <div className="flex items-start gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-5">
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-blue-800">Deal marked delivered</p>
+            <p className="mt-0.5 text-sm text-blue-700">
+              Stock{" "}
+              <span className="font-mono font-semibold">#{stockNumber}</span>{" "}
+              has been marked Delivered. Redirecting to Sales Registry…
+            </p>
+            <a
+              href="/app/deals"
+              className="mt-1 inline-block text-xs text-blue-700 underline hover:text-blue-900"
             >
               Go to Sales Registry →
             </a>
@@ -2055,6 +2128,36 @@ export default function UpdatePendingForm({
                 className="bg-red-600 hover:bg-red-700"
               >
                 {markingLost ? "Marking…" : "Yes, Mark Lost"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Mark Delivered confirmation ──────────────────────────────────────── */}
+      {showDeliveredConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="app-panel w-full max-w-md p-6">
+            <h2 className="text-lg font-semibold tracking-tight text-foreground">
+              Would you like to mark{" "}
+              <span className="font-mono">{stockNumber || "—"}</span> Delivered?
+            </h2>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                disabled={markingDelivered}
+                onClick={() => setShowDeliveredConfirm(false)}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                disabled={markingDelivered}
+                onClick={handleMarkDelivered}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                {markingDelivered ? "Marking…" : "Yes"}
               </Button>
             </div>
           </div>
