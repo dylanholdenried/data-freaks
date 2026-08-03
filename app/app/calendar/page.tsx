@@ -2,16 +2,46 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import { getAccessibleStores } from "@/lib/store-access";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { addCalendarDay } from "@/app/app/actions";
+import {
+  getCentralTimeParts,
+  isFiDepartment,
+  type CalendarDay,
+} from "@/lib/dashboard/pace";
 import SelectAutoGroupEmptyState from "../SelectAutoGroupEmptyState";
+import CalendarClient from "./CalendarClient";
 
-export default async function CalendarPage() {
+function parseYm(
+  searchParams: Record<string, string | string[] | undefined>
+): { year: number; month: number } {
+  const ct = getCentralTimeParts();
+  const raw =
+    typeof searchParams.ym === "string" ? searchParams.ym : null;
+  if (!raw || !/^\d{4}-\d{2}$/.test(raw)) {
+    return { year: ct.year, month: ct.month };
+  }
+  const year = Number(raw.slice(0, 4));
+  const month = Number(raw.slice(5, 7));
+  if (!Number.isFinite(year) || year < 2020 || year > 2100) {
+    return { year: ct.year, month: ct.month };
+  }
+  if (!Number.isFinite(month) || month < 1 || month > 12) {
+    return { year: ct.year, month: ct.month };
+  }
+  return { year, month };
+}
+
+function isBooked(status: string) {
+  return status === "pending" || status === "delivered" || status === "closed";
+}
+
+export default async function CalendarPage({
+  searchParams,
+}: {
+  searchParams: Record<string, string | string[] | undefined>;
+}) {
   const supabase = createSupabaseServerClient();
   const {
-    data: { session }
+    data: { session },
   } = await supabase.auth.getSession();
 
   const { data: profile } = await supabase
@@ -26,116 +56,78 @@ export default async function CalendarPage() {
     return <SelectAutoGroupEmptyState />;
   }
 
+  const { year, month } = parseYm(searchParams);
+
+  const firstOfMonth = `${year}-${String(month).padStart(2, "0")}-01`;
+  const lastDay = new Date(year, month, 0).getDate();
+  const lastOfMonth = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
   const stores = await getAccessibleStores(supabase, profile);
   const storeIds = stores.map((s) => s.id);
-  const { data: calendarDays } = storeIds.length
-    ? await supabase
-        .from("store_calendar_days")
-        .select("store_id,date,is_working_day")
-        .in("store_id", storeIds)
-    : { data: [] as { store_id: string; date: string; is_working_day: boolean }[] };
 
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const monthRows = (calendarDays ?? []).filter((d) => {
-    const dt = new Date(d.date);
-    return dt.getFullYear() === year && dt.getMonth() === month;
-  });
+  const [calendarRes, deptsRes, dealsRes] = await Promise.all([
+    storeIds.length
+      ? supabase
+          .from("store_calendar_days")
+          .select("store_id,date,is_working_day")
+          .in("store_id", storeIds)
+          .gte("date", firstOfMonth)
+          .lte("date", lastOfMonth)
+      : Promise.resolve({
+          data: [] as {
+            store_id: string;
+            date: string;
+            is_working_day: boolean;
+          }[],
+        }),
+    storeIds.length
+      ? supabase
+          .from("departments")
+          .select("id,name,store_id")
+          .in("store_id", storeIds)
+          .eq("is_active", true)
+          .order("name")
+      : Promise.resolve({
+          data: [] as { id: string; name: string; store_id: string }[],
+        }),
+    storeIds.length
+      ? supabase
+          .from("deals")
+          .select("store_id,department_id,sale_date,status")
+          .in("store_id", storeIds)
+          .gte("sale_date", firstOfMonth)
+          .lte("sale_date", lastOfMonth)
+      : Promise.resolve({
+          data: [] as {
+            store_id: string;
+            department_id: string;
+            sale_date: string;
+            status: string;
+          }[],
+        }),
+  ]);
 
-  const workingByStore = new Map<string, number>();
-  for (const store of stores) {
-    const count = monthRows.filter((d) => d.store_id === store.id && d.is_working_day).length;
-    workingByStore.set(store.id, count);
-  }
+  const calendarDays = (calendarRes.data ?? []) as CalendarDay[];
+  const departments = (deptsRes.data ?? [])
+    .filter((d) => !isFiDepartment(d.name))
+    .map((d) => ({ id: d.id, name: d.name, store_id: d.store_id }));
 
-  const hasStores = stores.length > 0;
+  const deals = (dealsRes.data ?? [])
+    .filter((d) => isBooked(d.status))
+    .map((d) => ({
+      store_id: d.store_id,
+      department_id: d.department_id,
+      sale_date: d.sale_date,
+    }));
 
   return (
-    <div className="space-y-6">
-      <section className="app-panel p-5">
-        <p className="app-kicker">Pace Configuration</p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">Operating Calendar</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Manage operating days to control MTD pace math and quota projections.
-        </p>
-      </section>
-
-      <div className="grid gap-6 xl:grid-cols-[2fr,1fr]">
-        <Card className="app-panel border-border shadow-none">
-          <CardHeader className="border-border">
-            <CardTitle className="text-lg">Current month working days by store</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {stores.map((store) => (
-              <div key={store.id} className="rounded-xl border border-border bg-muted p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <p className="text-sm font-semibold text-foreground">{store.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {workingByStore.get(store.id) ?? 0} working days
-                  </p>
-                </div>
-                <div className="h-2 rounded-full bg-[var(--da-line)]">
-                  <div
-                    className="h-2 rounded-full bg-[var(--da-blue)]"
-                    style={{
-                      width: `${Math.min(((workingByStore.get(store.id) ?? 0) / 31) * 100, 100)}%`
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
-            {!hasStores && (
-              <p className="text-sm text-muted-foreground">No stores available for your account.</p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="app-panel border-border shadow-none">
-          <CardHeader className="border-border">
-            <CardTitle className="text-lg text-foreground">Quick Day Toggle</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form action={addCalendarDay} className="space-y-3">
-              <div>
-                <label className="text-xs text-muted-foreground">Store</label>
-                <select
-                  name="store_id"
-                  required
-                  disabled={!hasStores}
-                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground disabled:opacity-50"
-                >
-                  {!hasStores && (
-                    <option value="">No accessible stores</option>
-                  )}
-                  {stores.map((store) => (
-                    <option key={store.id} value={store.id}>
-                      {store.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground">Date</label>
-                <Input type="date" name="calendar_date" className="mt-1" required />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground">Working day?</label>
-                <select
-                  name="is_working_day"
-                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
-                >
-                  <option value="true">Yes</option>
-                  <option value="false">Closed</option>
-                </select>
-              </div>
-              <Button type="submit" disabled={!hasStores} className="w-full">
-                Commit changes
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+    <CalendarClient
+      stores={stores.map((s) => ({ id: s.id, name: s.name }))}
+      departments={departments}
+      calendarDays={calendarDays}
+      deals={deals}
+      year={year}
+      month={month}
+    />
   );
 }

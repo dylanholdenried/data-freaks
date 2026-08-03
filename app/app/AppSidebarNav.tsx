@@ -51,7 +51,7 @@ const LOG_LINKS: NavItem[] = [
   },
   {
     href: "/app/calendar",
-    label: "Pace Calendar",
+    label: "Calendar",
     icon: CalendarRange,
     match: (p) => p.startsWith("/app/calendar"),
   },

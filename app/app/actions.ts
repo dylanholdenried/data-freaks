@@ -119,7 +119,7 @@ export async function createSource(formData: FormData) {
   revalidatePath("/app/setup");
 }
 
-export async function addCalendarDay(formData: FormData) {
+export async function toggleCalendarDay(storeId: string, date: string, isWorkingDay: boolean) {
   const supabase = createSupabaseServerClient();
   const {
     data: { session }
@@ -132,20 +132,38 @@ export async function addCalendarDay(formData: FormData) {
     .or(profileMatchAuthUserId(session.user.id))
     .maybeSingle();
 
-  const storeId = String(formData.get("store_id") || "").trim();
-  if (!(await assertStoreAccess(supabase, profile, storeId))) {
+  const sid = String(storeId || "").trim();
+  const dateStr = String(date || "").trim().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    throw new Error("Invalid date");
+  }
+  if (!(await assertStoreAccess(supabase, profile, sid))) {
     throw new Error("Store not allowed");
   }
 
-  // Live column is `date` (unique on store_id, date)
-  await supabase.from("store_calendar_days").upsert(
-    {
-      store_id: storeId,
-      date: String(formData.get("calendar_date")),
-      is_working_day: String(formData.get("is_working_day")) === "true"
-    },
-    { onConflict: "store_id,date" }
-  );
+  const { data: existing, error: existingError } = await supabase
+    .from("store_calendar_days")
+    .select("id")
+    .eq("store_id", sid)
+    .eq("date", dateStr)
+    .maybeSingle();
+  if (existingError) throw new Error(existingError.message);
+
+  if (existing?.id) {
+    const { error } = await supabase
+      .from("store_calendar_days")
+      .update({ is_working_day: isWorkingDay })
+      .eq("id", existing.id);
+    if (error) throw new Error(error.message);
+  } else {
+    const { error } = await supabase.from("store_calendar_days").insert({
+      store_id: sid,
+      date: dateStr,
+      is_working_day: isWorkingDay,
+    });
+    if (error) throw new Error(error.message);
+  }
+
   revalidatePath("/app/calendar");
   revalidatePath("/app/dashboard");
 }

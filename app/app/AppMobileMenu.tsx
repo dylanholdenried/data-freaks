@@ -21,7 +21,7 @@ const SECTIONS: { title: string; links: NavItem[] }[] = [
       { href: "/app/dashboard", label: "Dashboard" },
       { href: "/app/deals", label: "Sales Registry" },
       { href: "/app/setup", label: "Setup & Config" },
-      { href: "/app/calendar", label: "Pace Calendar" },
+      { href: "/app/calendar", label: "Calendar" },
       { href: "/app/deals/new", label: "New Deal" },
     ],
   },

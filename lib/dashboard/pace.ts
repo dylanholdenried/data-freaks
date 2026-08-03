@@ -34,13 +34,97 @@ export function isFiDepartment(name: string): boolean {
   return n === "f&i" || n === "fi" || /^f&i/.test(n);
 }
 
-function isWorkingDayForStore(
+/** YYYY-MM-DD for current Central Time calendar date. */
+export function getCentralDateString(ct = getCentralTimeParts()): string {
+  return `${ct.year}-${String(ct.month).padStart(2, "0")}-${String(ct.day).padStart(2, "0")}`;
+}
+
+/**
+ * Day is completed for pace / calendar slash:
+ * before today CT, or today CT at/after 6:00 PM America/Chicago.
+ */
+export function isDayCompleted(
+  dateStr: string,
+  ct = getCentralTimeParts()
+): boolean {
+  const todayStr = getCentralDateString(ct);
+  if (dateStr < todayStr) return true;
+  if (dateStr > todayStr) return false;
+  return ct.hour >= 18;
+}
+
+/** Default schedule: Mon–Sat open, Sunday closed; honor per-date overrides. */
+export function isWorkingDayForStore(
   dow: number,
   dateStr: string,
   overrides: Map<string, boolean>
 ): boolean {
   if (overrides.has(dateStr)) return overrides.get(dateStr)!;
   return dow >= 1 && dow <= 6;
+}
+
+/** Working-day count for one store in a month (defaults + overrides). */
+export function countWorkingDaysForStore(
+  year: number,
+  month: number,
+  storeId: string,
+  calendarDays: CalendarDay[]
+): number {
+  return computeWorkingDays(year, month, calendarDays, [storeId]).length;
+}
+
+/**
+ * Ms until the next 6:00 PM America/Chicago boundary (for client refresh).
+ * If already past 6pm today CT, targets tomorrow 6pm CT.
+ */
+export function msUntilNextSixPmCentral(now = new Date()): number {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(now);
+  const get = (type: string) =>
+    parseInt(parts.find((p) => p.type === type)!.value, 10);
+  const y = get("year");
+  const m = get("month");
+  const d = get("day");
+  const hour = get("hour");
+  const minute = get("minute");
+  const second = get("second");
+
+  // Approximate offset: compare CT wall clock to UTC instant
+  const asUtcGuess = Date.UTC(y, m - 1, d, hour, minute, second);
+  const offsetMs = asUtcGuess - now.getTime();
+
+  let targetDay = d;
+  let targetMonth = m;
+  let targetYear = y;
+  if (hour > 18 || (hour === 18 && (minute > 0 || second > 0))) {
+    const next = new Date(Date.UTC(y, m - 1, d + 1));
+    targetYear = next.getUTCFullYear();
+    targetMonth = next.getUTCMonth() + 1;
+    targetDay = next.getUTCDate();
+  } else if (hour === 18 && minute === 0 && second === 0) {
+    // exactly 6pm — fire almost immediately
+    return 0;
+  }
+
+  const targetAsUtcGuess = Date.UTC(
+    targetYear,
+    targetMonth - 1,
+    targetDay,
+    18,
+    0,
+    0
+  );
+  const targetInstant = targetAsUtcGuess - offsetMs;
+  return Math.max(0, targetInstant - now.getTime());
 }
 
 /** Working day strings (YYYY-MM-DD) for selected stores (union). */
@@ -107,8 +191,6 @@ export function computePaceSnapshot(
 ): PaceSnapshot {
   const totalWorkingDays = workingDays.length;
   const ct = getCentralTimeParts();
-  const todayStr = `${ct.year}-${String(ct.month).padStart(2, "0")}-${String(ct.day).padStart(2, "0")}`;
-  const pastSixPM = ct.hour >= 18;
 
   let completedWorkingDays: number;
   if (isFutureMonth) {
@@ -117,8 +199,8 @@ export function computePaceSnapshot(
     // Past month — freeze at month end
     completedWorkingDays = totalWorkingDays;
   } else {
-    completedWorkingDays = workingDays.filter(
-      (ds) => ds < todayStr || (ds === todayStr && pastSixPM)
+    completedWorkingDays = workingDays.filter((ds) =>
+      isDayCompleted(ds, ct)
     ).length;
   }
 
