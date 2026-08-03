@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { sendSignupRequestNotificationEmail } from "@/lib/email/resend";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 
 const signupSchema = z.object({
@@ -98,6 +99,21 @@ export async function POST(req: Request) {
         { error: `Request insert failed: ${requestError.message}` },
         { status: 500 }
       );
+    }
+
+    // Notify ops; never block signup on email delivery failure.
+    const notify = await sendSignupRequestNotificationEmail({
+      firstName: parsed.first_name,
+      lastName: parsed.last_name,
+      email,
+      title: parsed.title ?? null,
+      dealerGroupMode: parsed.dealer_group_mode,
+      dealerGroupName: parsed.dealer_group_name,
+      numberOfStores: parsed.number_of_stores ?? null,
+      website: parsed.website ?? null,
+    });
+    if (!notify.ok) {
+      console.error("Signup notification email failed:", notify.error);
     }
 
     return NextResponse.json({ ok: true });
