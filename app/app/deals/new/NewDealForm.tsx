@@ -123,6 +123,7 @@ export default function NewDealForm({
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const [savedDeal, setSavedDeal] = useState<{
+    id: string;
     stockNumber: string;
     customerLastName: string;
   } | null>(null);
@@ -558,7 +559,7 @@ export default function NewDealForm({
       }
 
       // Show success, reset for next entry
-      setSavedDeal({ stockNumber: savedStock, customerLastName: savedCustomer });
+      setSavedDeal({ id: dealId, stockNumber: savedStock, customerLastName: savedCustomer });
       resetForm();
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err: unknown) {
@@ -592,14 +593,23 @@ export default function NewDealForm({
               {" · "}
               {savedDeal.customerLastName} — entered successfully. Form is ready for next entry.
             </p>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <Button
+                asChild
+                size="sm"
+                className="bg-green-700 hover:bg-green-800"
+              >
+                <Link href={`/app/deals/${savedDeal.id}/edit`}>Edit Deal</Link>
+              </Button>
+              <button
+                type="button"
+                onClick={() => setSavedDeal(null)}
+                className="text-xs text-green-600 underline hover:text-green-900"
+              >
+                Dismiss
+              </button>
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setSavedDeal(null)}
-            className="shrink-0 text-xs text-green-600 underline hover:text-green-900"
-          >
-            Dismiss
-          </button>
         </div>
       )}
 
