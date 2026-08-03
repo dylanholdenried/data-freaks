@@ -25,6 +25,15 @@ function parseAuthUserIdFromNotes(notes: string | null | undefined): string | nu
   return match?.[1] ?? null;
 }
 
+function isExistingJoinRequest(request: {
+  request_mode?: string | null;
+  notes?: string | null;
+}): boolean {
+  if (request.request_mode === "existing") return true;
+  if (request.request_mode === "new") return false;
+  return Boolean(request.notes?.toLowerCase().startsWith("requested access to existing group:"));
+}
+
 export async function rejectDealerGroupRequest(requestId: string) {
   const supabase = await requireAdminServiceClient();
   const { error } = await supabase
@@ -53,13 +62,18 @@ export async function saveProvisionDraft(requestId: string, payload: ProvisionDr
   const { data: request, error: requestError } = await supabase
     .from("dealer_group_requests")
     .select(
-      "id, status, email, first_name, last_name, notes, requested_user_id, dealer_group_id, website, number_of_stores"
+      "id, status, email, first_name, last_name, notes, requested_user_id, dealer_group_id, website, number_of_stores, request_mode"
     )
     .eq("id", requestId)
     .maybeSingle();
 
   if (requestError || !request) {
     throw new Error(requestError?.message || "Request not found");
+  }
+  if (isExistingJoinRequest(request)) {
+    throw new Error(
+      "This applicant asked to join an existing dealership/group. Use Assign access instead of creating a new auto group."
+    );
   }
   if (request.status === "rejected") {
     throw new Error("This request was rejected");
@@ -403,4 +417,192 @@ export async function activateAutoGroup(requestId: string): Promise<{ redirectTo
   // Return a URL for the client to navigate — calling redirect() from a
   // client-invoked server action surfaces as a cryptic render error in production.
   return { redirectTo };
+}
+
+async function syncJoinStoreAccess(
+  supabase: Awaited<ReturnType<typeof requireAdminServiceClient>>,
+  userId: string,
+  dealerGroupId: string,
+  role: "group_admin" | "store_admin",
+  storeIds: string[]
+) {
+  await supabase.from("user_store_access").delete().eq("user_id", userId);
+
+  if (role !== "store_admin") return;
+
+  const uniqueIds = Array.from(new Set(storeIds));
+  if (uniqueIds.length === 0) {
+    throw new Error("Select at least one store for a store admin");
+  }
+
+  const { data: validStores, error: storesError } = await supabase
+    .from("stores")
+    .select("id")
+    .eq("dealer_group_id", dealerGroupId)
+    .in("id", uniqueIds);
+
+  if (storesError) {
+    throw new Error(`Validate stores failed: ${storesError.message}`);
+  }
+
+  const validIds = (validStores ?? []).map((s) => s.id as string);
+  if (validIds.length !== uniqueIds.length) {
+    throw new Error("One or more selected stores are not in this auto group");
+  }
+
+  const { error: insertError } = await supabase.from("user_store_access").insert(
+    validIds.map((store_id) => ({ user_id: userId, store_id }))
+  );
+  if (insertError) {
+    throw new Error(`Assign store access failed: ${insertError.message}`);
+  }
+}
+
+/**
+ * Approve a join-existing signup: attach the applicant to an existing auto group
+ * (and optional stores) without creating a new dealer group.
+ */
+export async function approveJoinExistingRequest(formData: FormData): Promise<{
+  saved: boolean;
+  error?: string;
+  message?: string;
+  emailWarning?: string;
+}> {
+  const supabase = await requireAdminServiceClient();
+
+  const requestId = String(formData.get("request_id") || "").trim();
+  const dealerGroupId = String(formData.get("dealer_group_id") || "").trim();
+  const role = String(formData.get("role") || "store_admin") as "group_admin" | "store_admin";
+  const storeIds = formData
+    .getAll("store_ids")
+    .map((v) => String(v).trim())
+    .filter(Boolean);
+
+  if (!requestId) return { saved: false, error: "Request id is required" };
+  if (!dealerGroupId) return { saved: false, error: "Select an auto group" };
+  if (role !== "group_admin" && role !== "store_admin") {
+    return { saved: false, error: "Invalid role" };
+  }
+  if (role === "store_admin" && storeIds.length === 0) {
+    return { saved: false, error: "Select at least one store for a store admin" };
+  }
+
+  const { data: request, error: requestError } = await supabase
+    .from("dealer_group_requests")
+    .select(
+      "id, status, email, first_name, last_name, notes, requested_user_id, dealer_group_id, dealer_group_name, request_mode"
+    )
+    .eq("id", requestId)
+    .maybeSingle();
+
+  if (requestError || !request) {
+    return { saved: false, error: requestError?.message || "Request not found" };
+  }
+  if (request.status === "rejected") {
+    return { saved: false, error: "This request was rejected" };
+  }
+  if (request.status === "active") {
+    return { saved: false, error: "This request is already activated" };
+  }
+  if (!isExistingJoinRequest(request)) {
+    return {
+      saved: false,
+      error: "This is a new dealership/group request — use Start setup instead",
+    };
+  }
+
+  const { data: group, error: groupError } = await supabase
+    .from("dealer_groups")
+    .select("id, name")
+    .eq("id", dealerGroupId)
+    .maybeSingle();
+
+  if (groupError || !group) {
+    return { saved: false, error: groupError?.message || "Auto group not found" };
+  }
+
+  const requestedUserId =
+    request.requested_user_id || parseAuthUserIdFromNotes(request.notes) || null;
+
+  let profileQuery = supabase
+    .from("profiles")
+    .select("id, user_id, email, first_name, status, role, dealer_group_id")
+    .limit(1);
+
+  if (requestedUserId) {
+    profileQuery = profileQuery.or(`user_id.eq.${requestedUserId},id.eq.${requestedUserId}`);
+  } else {
+    profileQuery = profileQuery.eq("email", request.email.trim().toLowerCase());
+  }
+
+  const { data: profile, error: profileError } = await profileQuery.maybeSingle();
+  if (profileError) {
+    return { saved: false, error: `Load profile failed: ${profileError.message}` };
+  }
+  if (!profile) {
+    return {
+      saved: false,
+      error: "No signup profile found for this request. Ask the applicant to sign up again.",
+    };
+  }
+
+  const authUserId = profile.user_id || profile.id;
+
+  try {
+    await syncJoinStoreAccess(supabase, authUserId, dealerGroupId, role, storeIds);
+  } catch (err: any) {
+    return { saved: false, error: err?.message || "Could not assign store access" };
+  }
+
+  const { error: profileUpdateError } = await supabase
+    .from("profiles")
+    .update({
+      role,
+      dealer_group_id: dealerGroupId,
+      status: "active",
+      onboarding_welcome_seen_at: null,
+      onboarding_checklist: {},
+    })
+    .eq("id", profile.id);
+
+  if (profileUpdateError) {
+    return { saved: false, error: `Update profile failed: ${profileUpdateError.message}` };
+  }
+
+  const now = new Date().toISOString();
+  const { error: requestUpdateError } = await supabase
+    .from("dealer_group_requests")
+    .update({
+      status: "active",
+      dealer_group_id: dealerGroupId,
+      activated_at: now,
+      provisioned_at: now,
+      requested_user_id: requestedUserId || authUserId,
+      request_mode: "existing",
+    })
+    .eq("id", requestId);
+
+  if (requestUpdateError) {
+    return { saved: false, error: `Update request failed: ${requestUpdateError.message}` };
+  }
+
+  let emailWarning: string | undefined;
+  const emailResult = await sendActivationEmail({
+    to: profile.email || request.email,
+    firstName: profile.first_name || request.first_name || "there",
+    groupName: group.name,
+  });
+  if (!emailResult.ok) {
+    emailWarning = emailResult.error;
+  }
+
+  revalidatePath("/admin/users");
+  revalidatePath(`/admin/users/${profile.id}`);
+  revalidateProvision(requestId, dealerGroupId);
+
+  return {
+    saved: true,
+    message: `Access granted to ${group.name}`,
+    emailWarning,
+  };
 }

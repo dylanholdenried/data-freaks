@@ -81,6 +81,7 @@ export async function POST(req: Request) {
         parsed.dealer_group_mode === "new" ? (parsed.number_of_stores ?? null) : null,
       website: parsed.dealer_group_mode === "new" ? (parsed.website ?? null) : null,
       requested_user_id: user.id,
+      request_mode: parsed.dealer_group_mode,
       status: "pending",
       notes:
         parsed.dealer_group_mode === "existing"

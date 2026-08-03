@@ -1,5 +1,10 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireAdminServiceClient } from "@/app/admin/admin-data";
+import AssignExistingAccessModal from "@/app/admin/requests/AssignExistingAccessModal";
 import ProvisionWizardClient from "./ProvisionWizardClient";
 
 type PageProps = { params: { id: string } };
@@ -10,6 +15,15 @@ function parseAuthUserIdFromNotes(notes: string | null | undefined): string | nu
   return match?.[1] ?? null;
 }
 
+function isExistingJoinRequest(request: {
+  request_mode?: string | null;
+  notes?: string | null;
+}): boolean {
+  if (request.request_mode === "existing") return true;
+  if (request.request_mode === "new") return false;
+  return Boolean(request.notes?.toLowerCase().startsWith("requested access to existing group:"));
+}
+
 export default async function ProvisionRequestPage({ params }: PageProps) {
   const supabase = await requireAdminServiceClient();
   const id = params.id;
@@ -17,7 +31,7 @@ export default async function ProvisionRequestPage({ params }: PageProps) {
   const { data: request, error } = await supabase
     .from("dealer_group_requests")
     .select(
-      "id, first_name, last_name, email, title, website, number_of_stores, dealer_group_name, status, created_at, notes, requested_user_id, dealer_group_id"
+      "id, first_name, last_name, email, title, website, number_of_stores, dealer_group_name, status, created_at, notes, requested_user_id, dealer_group_id, request_mode"
     )
     .eq("id", id)
     .maybeSingle();
@@ -26,6 +40,55 @@ export default async function ProvisionRequestPage({ params }: PageProps) {
     console.error("Error loading request for provision", error);
   }
   if (!request) notFound();
+
+  if (isExistingJoinRequest(request) && request.status === "pending") {
+    const [{ data: groups }, { data: stores }] = await Promise.all([
+      supabase.from("dealer_groups").select("id, name").order("name", { ascending: true }),
+      supabase
+        .from("stores")
+        .select("id, name, dealer_group_id")
+        .order("name", { ascending: true }),
+    ]);
+
+    return (
+      <div className="mx-auto max-w-lg space-y-4">
+        <Button asChild variant="ghost" size="sm">
+          <Link href="/admin/requests">← Back to requests</Link>
+        </Button>
+        <Card>
+          <CardHeader>
+            <div className="flex flex-wrap items-center gap-2">
+              <CardTitle className="text-base font-semibold">Join existing group</CardTitle>
+              <Badge variant="outline">Join existing</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {request.first_name} {request.last_name} ({request.email}) asked to join{" "}
+              <span className="font-medium text-foreground">{request.dealer_group_name}</span>.
+              Assign them to an existing auto group and store — do not create a new group.
+            </p>
+            <AssignExistingAccessModal
+              request={{
+                id: request.id,
+                first_name: request.first_name,
+                last_name: request.last_name,
+                email: request.email,
+                dealer_group_name: request.dealer_group_name,
+              }}
+              groups={(groups ?? []).map((g) => ({ id: g.id, name: g.name }))}
+              stores={(stores ?? []).map((s) => ({
+                id: s.id,
+                name: s.name,
+                dealer_group_id: s.dealer_group_id,
+              }))}
+              triggerLabel="Assign access"
+            />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const requestedUserId =
     request.requested_user_id || parseAuthUserIdFromNotes(request.notes) || null;

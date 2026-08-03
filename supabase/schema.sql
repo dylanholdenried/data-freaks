@@ -223,6 +223,7 @@ create table public.dealer_group_requests (
   website text,
   requested_user_id uuid references auth.users(id),
   dealer_group_id uuid references public.dealer_groups(id),
+  request_mode text not null default 'new' check (request_mode in ('new', 'existing')),
   status dealer_group_status not null default 'pending',
   notes text,
   provisioned_at timestamptz,

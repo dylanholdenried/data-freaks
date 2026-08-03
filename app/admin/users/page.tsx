@@ -7,6 +7,7 @@ import { isAutoGroupUserRole, isPlatformAdminListRole } from "@/lib/roles";
 import { formatProfileName, formatStatusLabel } from "@/lib/profile-display";
 import UserSearchList, { type UserListRow } from "./UserSearchList";
 import AddAutoGroupUserModal from "./AddAutoGroupUserModal";
+import AssignExistingAccessModal from "@/app/admin/requests/AssignExistingAccessModal";
 
 type UserRequestRow = {
   id: string;
@@ -17,8 +18,21 @@ type UserRequestRow = {
   notes: string | null;
   created_at: string;
   requested_user_id: string | null;
+  request_mode: "new" | "existing";
   profileId: string | null;
 };
+
+function resolveRequestMode(
+  request_mode: string | null | undefined,
+  notes: string | null | undefined
+): "new" | "existing" {
+  if (request_mode === "existing") return "existing";
+  if (request_mode === "new") return "new";
+  if (notes?.toLowerCase().startsWith("requested access to existing group:")) {
+    return "existing";
+  }
+  return "new";
+}
 
 export default async function AdminUsersPage() {
   const supabase = await requireAdminServiceClient();
@@ -37,13 +51,19 @@ export default async function AdminUsersPage() {
       supabase
         .from("dealer_group_requests")
         .select(
-          "id, first_name, last_name, email, dealer_group_name, notes, created_at, requested_user_id, status"
+          "id, first_name, last_name, email, dealer_group_name, notes, created_at, requested_user_id, status, request_mode"
         )
         .eq("status", "pending")
         .order("created_at", { ascending: false }),
     ]);
 
   const groupNameById = new Map((groups ?? []).map((g) => [g.id, g.name]));
+  const groupOptions = (groups ?? []).map((g) => ({ id: g.id, name: g.name }));
+  const storeOptions = (stores ?? []).map((s) => ({
+    id: s.id,
+    name: s.name,
+    dealer_group_id: s.dealer_group_id,
+  }));
 
   const profileIdByAuthId = new Map<string, string>();
   for (const p of profiles ?? []) {
@@ -60,6 +80,7 @@ export default async function AdminUsersPage() {
     notes: r.notes,
     created_at: r.created_at,
     requested_user_id: r.requested_user_id,
+    request_mode: resolveRequestMode(r.request_mode, r.notes),
     profileId: r.requested_user_id
       ? profileIdByAuthId.get(r.requested_user_id) ?? null
       : null,
@@ -114,6 +135,7 @@ export default async function AdminUsersPage() {
             <ul className="divide-y divide-border rounded-lg border border-border">
               {userRequests.map((request) => {
                 const displayName = formatProfileName(request.first_name, request.last_name);
+                const isJoinExisting = request.request_mode === "existing";
                 return (
                   <li
                     key={request.id}
@@ -138,14 +160,25 @@ export default async function AdminUsersPage() {
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge variant="warning">{formatStatusLabel("requested")}</Badge>
+                      <Badge variant={isJoinExisting ? "outline" : "default"}>
+                        {isJoinExisting ? "Join existing" : "New group"}
+                      </Badge>
                       {request.profileId ? (
                         <Button asChild size="sm" variant="ghost">
                           <Link href={`/admin/users/${request.profileId}`}>View user</Link>
                         </Button>
                       ) : null}
-                      <Button asChild size="sm" variant="outline">
-                        <Link href={`/admin/requests/${request.id}/provision`}>Start setup</Link>
-                      </Button>
+                      {isJoinExisting ? (
+                        <AssignExistingAccessModal
+                          request={request}
+                          groups={groupOptions}
+                          stores={storeOptions}
+                        />
+                      ) : (
+                        <Button asChild size="sm" variant="outline">
+                          <Link href={`/admin/requests/${request.id}/provision`}>Start setup</Link>
+                        </Button>
+                      )}
                     </div>
                   </li>
                 );
@@ -178,14 +211,7 @@ export default async function AdminUsersPage() {
           <CardTitle className="text-sm font-semibold">
             Auto Group Users ({autoGroupUsers.length})
           </CardTitle>
-          <AddAutoGroupUserModal
-            groups={(groups ?? []).map((g) => ({ id: g.id, name: g.name }))}
-            stores={(stores ?? []).map((s) => ({
-              id: s.id,
-              name: s.name,
-              dealer_group_id: s.dealer_group_id,
-            }))}
-          />
+          <AddAutoGroupUserModal groups={groupOptions} stores={storeOptions} />
         </CardHeader>
         <CardContent>
           <UserSearchList
