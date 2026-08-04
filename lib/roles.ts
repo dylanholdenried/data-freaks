@@ -19,3 +19,13 @@ export function isPlatformAdminListRole(role: string | null | undefined): boolea
 export function isAutoGroupUserRole(role: string | null | undefined): boolean {
   return role === "group_admin" || role === "store_admin";
 }
+
+/** Roles allowed to reopen locked deals (closed / dead / unwound). */
+export function canReopenDeal(role: string | null | undefined): boolean {
+  return (
+    role === "store_admin" ||
+    role === "group_admin" ||
+    role === "platform_admin" ||
+    role === "owner_admin"
+  );
+}

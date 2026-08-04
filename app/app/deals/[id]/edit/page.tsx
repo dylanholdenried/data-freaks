@@ -3,6 +3,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import { getAccessibleStores } from "@/lib/store-access";
+import { canReopenDeal } from "@/lib/roles";
+import type { DealEventRow } from "@/lib/deals/deal-events";
 import UpdatePendingForm from "./UpdatePendingForm";
 import SelectAutoGroupEmptyState from "../../../SelectAutoGroupEmptyState";
 
@@ -32,6 +34,17 @@ type DealRow = {
   list_price: number | null;
   list_price_na: boolean;
   age: number | null;
+  entered_by: string | null;
+  created_at: string;
+};
+
+type DealEventDbRow = {
+  id: string;
+  event_type: string;
+  from_status: string | null;
+  to_status: string | null;
+  created_at: string;
+  actor_profile_id: string | null;
 };
 
 type SpRow = { salesperson_id: string; share_percent: number };
@@ -82,7 +95,8 @@ export default async function EditDealPage({ params }: { params: { id: string } 
         "vehicle_year,vehicle_make,vehicle_model," +
         "vin,trim,color,body_style,drivetrain,odometer," +
         "acquisition_source,finance_type,finance_manager_id," +
-        "front_profit,back_profit,sale_price,list_price,list_price_na,age"
+        "front_profit,back_profit,sale_price,list_price,list_price_na,age," +
+        "entered_by,created_at"
     )
     .eq("id", params.id)
     .maybeSingle();
@@ -106,7 +120,7 @@ export default async function EditDealPage({ params }: { params: { id: string } 
 
   const storeName = storeById.get(deal.store_id) ?? "Unknown Store";
 
-  // 3. All parallel data: dropdowns + dept name + salespeople + trades + vehicle lists
+  // 3. All parallel data: dropdowns + dept name + salespeople + trades + vehicle lists + audit
   const [
     srcResult,
     fmResult,
@@ -117,6 +131,7 @@ export default async function EditDealPage({ params }: { params: { id: string } 
     vMakesResult,
     vModelsResult,
     deptMakesResult,
+    eventsResult,
   ] = await Promise.all([
       supabase
         .from("acquisition_sources")
@@ -159,6 +174,13 @@ export default async function EditDealPage({ params }: { params: { id: string } 
         .eq("active", true)
         .order("name"),
       supabase.from("department_makes").select("department_id,make"),
+      supabase
+        .from("deal_events")
+        .select(
+          "id,event_type,from_status,to_status,created_at,actor_profile_id"
+        )
+        .eq("deal_id", deal.id)
+        .order("created_at", { ascending: true }),
     ]);
 
   const acquisitionSources = (srcResult.data ?? []) as { id: string; name: string }[];
@@ -191,10 +213,93 @@ export default async function EditDealPage({ params }: { params: { id: string } 
     make: string;
   }[];
 
+  const rawEvents = (eventsResult.data ?? []) as DealEventDbRow[];
+  const actorIds = [
+    ...new Set(
+      rawEvents
+        .map((e) => e.actor_profile_id)
+        .filter((id): id is string => Boolean(id))
+    ),
+  ];
+
+  const actorById = new Map<
+    string,
+    { first_name: string | null; last_name: string | null; role: string | null }
+  >();
+  if (actorIds.length > 0) {
+    const { data: actors } = await supabase
+      .from("profiles")
+      .select("id,first_name,last_name,role")
+      .in("id", actorIds);
+    for (const a of (actors ?? []) as {
+      id: string;
+      first_name: string | null;
+      last_name: string | null;
+      role: string | null;
+    }[]) {
+      actorById.set(a.id, {
+        first_name: a.first_name,
+        last_name: a.last_name,
+        role: a.role,
+      });
+    }
+  }
+
+  let dealEvents: DealEventRow[] = rawEvents.map((e) => {
+    const actor = e.actor_profile_id
+      ? actorById.get(e.actor_profile_id)
+      : undefined;
+    return {
+      id: e.id,
+      event_type: e.event_type,
+      from_status: e.from_status,
+      to_status: e.to_status,
+      created_at: e.created_at,
+      actor_first_name: actor?.first_name ?? null,
+      actor_last_name: actor?.last_name ?? null,
+      actor_role: actor?.role ?? null,
+    };
+  });
+
+  // Fallback Created line if trigger/backfill missed this deal
+  if (
+    dealEvents.length === 0 &&
+    (deal.entered_by || deal.created_at)
+  ) {
+    type ActorBits = {
+      first_name: string | null;
+      last_name: string | null;
+      role: string | null;
+    };
+    let fallbackActor: ActorBits | null = null;
+    if (deal.entered_by) {
+      const { data: enteredProfile } = await supabase
+        .from("profiles")
+        .select("first_name,last_name,role")
+        .or(profileMatchAuthUserId(deal.entered_by))
+        .maybeSingle();
+      fallbackActor = (enteredProfile as ActorBits | null) ?? null;
+    }
+    dealEvents = [
+      {
+        id: `fallback-created-${deal.id}`,
+        event_type: "created",
+        from_status: null,
+        to_status: deal.status,
+        created_at: deal.created_at,
+        actor_first_name: fallbackActor?.first_name ?? null,
+        actor_last_name: fallbackActor?.last_name ?? null,
+        actor_role: fallbackActor?.role ?? null,
+      },
+    ];
+  }
+
   return (
     <UpdatePendingForm
       dealId={deal.id}
       dealStatus={deal.status}
+      canReopen={canReopenDeal(profile.role)}
+      events={dealEvents}
       stockNumber={deal.stock_number}
       customerLastName={deal.customer_last_name ?? ""}
       vehicleYear={deal.vehicle_year}

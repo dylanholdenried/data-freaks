@@ -17,7 +17,10 @@ import {
   isUniqueViolation,
   type DealMatch,
 } from "@/lib/deals/duplicate-checks";
+import type { DealEventRow } from "@/lib/deals/deal-events";
+import { reopenDeal } from "@/app/app/deals/actions";
 import { cn } from "@/lib/utils";
+import DealAuditLog from "./DealAuditLog";
 
 type TradeRow = {
   id: string;
@@ -55,6 +58,8 @@ interface Props {
   // Identifiers
   dealId: string;
   dealStatus: string;
+  canReopen: boolean;
+  events: DealEventRow[];
   // Step 1 fields — editable until closed
   stockNumber: string;
   customerLastName: string;
@@ -199,7 +204,9 @@ function StatusBadge({ status }: { status: string }) {
 
 export default function UpdatePendingForm({
   dealId,
-  dealStatus,
+  dealStatus: initialDealStatus,
+  canReopen,
+  events,
   // Destructure with "initial" aliases so state can own the canonical names
   stockNumber: initialStockNumber,
   customerLastName: initialCustomerLastName,
@@ -236,6 +243,11 @@ export default function UpdatePendingForm({
   trades: initialTrades,
 }: Props) {
   const router = useRouter();
+  const [dealStatus, setDealStatus] = useState(initialDealStatus);
+
+  useEffect(() => {
+    setDealStatus(initialDealStatus);
+  }, [initialDealStatus]);
 
   // ── Step 1 editable state ─────────────────────────────────────────────────────
   const [stockNumber, setStockNumber] = useState(initialStockNumber);
@@ -420,6 +432,9 @@ export default function UpdatePendingForm({
   const [showDeliveredConfirm, setShowDeliveredConfirm] = useState(false);
   const [markingDelivered, setMarkingDelivered] = useState(false);
   const [markedDelivered, setMarkedDelivered] = useState(false);
+  const [showReopenModal, setShowReopenModal] = useState(false);
+  const [reopening, setReopening] = useState(false);
+  const [reopenError, setReopenError] = useState<string | null>(null);
 
   // ── VIN Decoder ───────────────────────────────────────────────────────────────
   async function handleDecodeVin() {
@@ -911,6 +926,7 @@ export default function UpdatePendingForm({
       if (error) throw new Error(error.message);
       await saveSalespeople(supabase);
       await saveTrades(supabase);
+      setDealStatus("closed");
       setClosed(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
       setTimeout(() => router.push("/app/deals"), 2000);
@@ -942,6 +958,7 @@ export default function UpdatePendingForm({
       if (error) throw new Error(error.message);
       await saveSalespeople(supabase);
       await saveTrades(supabase);
+      setDealStatus("dead");
       setMarkedLost(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
       setTimeout(() => router.push("/app/deals"), 2000);
@@ -973,6 +990,7 @@ export default function UpdatePendingForm({
       if (error) throw new Error(error.message);
       await saveSalespeople(supabase);
       await saveTrades(supabase);
+      setDealStatus("delivered");
       setMarkedDelivered(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
       setTimeout(() => router.push("/app/deals"), 2000);
@@ -986,8 +1004,31 @@ export default function UpdatePendingForm({
     }
   }
 
-  // isLocked reflects the deal's actual persisted status, not just session state.
-  // closed/unwound/dead deals are read-only; Stage 5 adds a Reopen action.
+  async function handleReopen(targetStatus: "pending" | "delivered") {
+    setReopening(true);
+    setReopenError(null);
+    try {
+      const result = await reopenDeal(dealId, targetStatus);
+      if (!result.ok) {
+        setReopenError(result.error);
+        return;
+      }
+      setDealStatus(result.status);
+      setClosed(false);
+      setMarkedLost(false);
+      setMarkedDelivered(result.status === "delivered");
+      setShowReopenModal(false);
+      router.refresh();
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : "An unexpected error occurred.";
+      setReopenError(msg);
+    } finally {
+      setReopening(false);
+    }
+  }
+
+  // closed/unwound/dead deals are read-only until reopened.
   const isLocked =
     dealStatus === "closed" ||
     dealStatus === "unwound" ||
@@ -1003,6 +1044,7 @@ export default function UpdatePendingForm({
     markedLost ||
     markingDelivered ||
     markedDelivered ||
+    reopening ||
     !!stockBlockingMatch ||
     checkingStock;
 
@@ -1073,6 +1115,19 @@ export default function UpdatePendingForm({
             </p>
           </div>
           {!isLocked && renderActionButtons()}
+          {isLocked && canReopen && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setReopenError(null);
+                setShowReopenModal(true);
+              }}
+              className="shrink-0"
+            >
+              Re-Open Deal
+            </Button>
+          )}
         </div>
       </section>
 
@@ -2163,6 +2218,65 @@ export default function UpdatePendingForm({
           </div>
         </div>
       )}
+
+      {/* ── Re-Open Deal ─────────────────────────────────────────────────────── */}
+      {showReopenModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div
+            className="app-panel w-full max-w-md p-6"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reopen-deal-title"
+          >
+            <h2
+              id="reopen-deal-title"
+              className="text-lg font-semibold tracking-tight text-foreground"
+            >
+              Choose Deal Status
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Reopen this deal as Pending or Delivered so you can edit and close
+              it again.
+            </p>
+            {reopenError && (
+              <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {reopenError}
+              </p>
+            )}
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={reopening}
+                onClick={() => {
+                  setShowReopenModal(false);
+                  setReopenError(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={reopening}
+                onClick={() => handleReopen("pending")}
+              >
+                {reopening ? "Updating…" : "Pending"}
+              </Button>
+              <Button
+                type="button"
+                disabled={reopening}
+                onClick={() => handleReopen("delivered")}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {reopening ? "Updating…" : "Delivered"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <DealAuditLog events={events} />
     </div>
   );
 }
