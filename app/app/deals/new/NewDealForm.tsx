@@ -968,7 +968,6 @@ export default function NewDealForm({
               <Input
                 value={trim}
                 onChange={(e) => setTrim(e.target.value)}
-                className={emptyCls(trim)}
               />
             </div>
             <div className="space-y-1">
@@ -976,7 +975,7 @@ export default function NewDealForm({
               <select
                 value={bodyStyle}
                 onChange={(e) => setBodyStyle(e.target.value)}
-                className={cn(SEL, emptyCls(bodyStyle))}
+                className={SEL}
               >
                 <option value="">Select body style</option>
                 {BODY_STYLES.map((b) => (
@@ -991,7 +990,7 @@ export default function NewDealForm({
               <select
                 value={drivetrain}
                 onChange={(e) => setDrivetrain(e.target.value)}
-                className={cn(SEL, emptyCls(drivetrain))}
+                className={SEL}
               >
                 <option value="">Select drivetrain</option>
                 {DRIVETRAINS.map((d) => (
@@ -1367,10 +1366,7 @@ export default function NewDealForm({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={3}
-            className={cn(
-              "w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              emptyCls(notes)
-            )}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
         </CardContent>
       </Card>
