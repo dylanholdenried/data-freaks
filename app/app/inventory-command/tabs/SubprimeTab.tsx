@@ -1,126 +1,161 @@
+"use client";
+
 import { SUBPRIME } from "@/lib/inventory-command/config";
 import { fmtMoney } from "@/lib/inventory-command/format";
+import { ageTone, IC } from "@/lib/inventory-command/midmo";
 import {
   bookSpreadCandidates,
   reasonLabel,
   subprimeAuditFlags,
   subprimeInventory,
+  type SubprimeAuditRow,
 } from "@/lib/inventory-command/subprime";
 import type { InvUnitRow } from "@/lib/inventory-command/types";
+import { colAge, colCost, colPrice, colStock, colVeh } from "../ui/columns";
+import { IcPanel } from "../ui/primitives";
+import { IcTable, type IcCol } from "../ui/IcTable";
 
 export default function SubprimeTab({ units }: { units: InvUnitRow[] }) {
-  const audit = subprimeAuditFlags(units);
-  const inventory = subprimeInventory(units);
+  const audit = subprimeAuditFlags(units).sort((a, b) => (b.cost ?? 0) - (a.cost ?? 0));
+  const inventory = subprimeInventory(units).sort(
+    (a, b) => (b.spread ?? -1e9) - (a.spread ?? -1e9)
+  );
   const books = bookSpreadCandidates(units);
 
-  return (
-    <div className="space-y-6">
-      <p className="text-sm text-muted-foreground">
-        Subprime advertised price is ignored. Target retail ={" "}
-        {SUBPRIME.targetRetailJdMult * 100}% of JD trade-in. Ideal cost ≤{" "}
-        {fmtMoney(SUBPRIME.idealCostMax)}; acceptable ≤ {fmtMoney(SUBPRIME.acceptableCostMax)}.
-        Sell clock {SUBPRIME.sellClockDays} days.
-      </p>
+  const auditCols: IcCol<SubprimeAuditRow>[] = [
+    colStock(),
+    colVeh(),
+    {
+      key: "age",
+      label: "Age",
+      right: true,
+      color: (u) => ageTone(u.age),
+      render: (u) => u.age ?? "—",
+    },
+    colCost(),
+    {
+      key: "jd",
+      label: "JD Trade",
+      right: true,
+      render: (u) => fmtMoney(u.jd),
+    },
+    {
+      key: "spread",
+      label: "JD - Cost",
+      right: true,
+      color: (u) => ((u.spread ?? 0) >= 0 ? IC.green : IC.red),
+      render: (u) => fmtMoney(u.spread),
+    },
+    {
+      key: "why",
+      label: "Why flagged",
+      sortable: false,
+      render: (u) => u.reasons.map(reasonLabel).join(" · ") || "—",
+    },
+  ];
 
-      <Section title={`Daily audit (${audit.length})`}>
-        {audit.length === 0 ? (
-          <Empty>No flagged subprime units.</Empty>
-        ) : (
-          <table className="min-w-full text-left text-xs">
-            <thead className="bg-muted text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2 font-medium">Stock</th>
-                <th className="px-3 py-2 font-medium">Vehicle</th>
-                <th className="px-3 py-2 font-medium">Age</th>
-                <th className="px-3 py-2 font-medium">Cost</th>
-                <th className="px-3 py-2 font-medium">JD Trade</th>
-                <th className="px-3 py-2 font-medium">115% JD</th>
-                <th className="px-3 py-2 font-medium">115% − Cost</th>
-                <th className="px-3 py-2 font-medium">Reasons</th>
-              </tr>
-            </thead>
-            <tbody>
-              {audit.map((u) => (
-                <tr key={u.stk} className="border-t border-border">
-                  <td className="px-3 py-2 font-medium">{u.stk}</td>
-                  <td className="px-3 py-2">{u.veh}</td>
-                  <td className="px-3 py-2">{u.age}</td>
-                  <td className="px-3 py-2">{fmtMoney(u.cost)}</td>
-                  <td className="px-3 py-2">{fmtMoney(u.jd)}</td>
-                  <td className="px-3 py-2">{fmtMoney(u.jd115)}</td>
-                  <td className="px-3 py-2">{fmtMoney(u.jd115MinusCost)}</td>
-                  <td className="px-3 py-2">{u.reasons.map(reasonLabel).join("; ")}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </Section>
+  const invCols: IcCol<SubprimeAuditRow>[] = [
+    colStock(),
+    colVeh(),
+    {
+      key: "age",
+      label: "Age",
+      right: true,
+      color: (u) => ageTone(u.age),
+      render: (u) => u.age ?? "—",
+    },
+    colCost(),
+    {
+      key: "jd",
+      label: "JD Trade",
+      right: true,
+      render: (u) => fmtMoney(u.jd),
+    },
+    {
+      key: "jd115",
+      label: "115% JD",
+      right: true,
+      render: (u) => fmtMoney(u.jd115),
+    },
+    {
+      key: "jd115MinusCost",
+      label: "115% JD - Cost",
+      right: true,
+      color: (u) => ((u.jd115MinusCost ?? -1) >= 0 ? IC.green : IC.red),
+      render: (u) => (u.jd115MinusCost != null ? fmtMoney(u.jd115MinusCost) : "—"),
+    },
+    colPrice(),
+  ];
 
-      <Section title={`Full subprime inventory (${inventory.length}) — by JD−cost`}>
-        <SpreadTable rows={inventory} />
-      </Section>
+  const bookCols: IcCol<SubprimeAuditRow>[] = [
+    colStock(),
+    colVeh(),
+    {
+      key: "age",
+      label: "Age",
+      right: true,
+      color: (u) => ageTone(u.age),
+      render: (u) => u.age ?? "—",
+    },
+    colCost(),
+    {
+      key: "jd",
+      label: "JD Trade",
+      right: true,
+      render: (u) => fmtMoney(u.jd),
+    },
+    {
+      key: "spread",
+      label: "Spread",
+      right: true,
+      color: (u) => ((u.spread ?? 0) >= 0 ? IC.green : IC.red),
+      render: (u) => fmtMoney(u.spread),
+    },
+    {
+      key: "jd115",
+      label: "115% JD",
+      right: true,
+      render: (u) => fmtMoney(u.jd115),
+    },
+    {
+      key: "jd115MinusCost",
+      label: "115% JD - Cost",
+      right: true,
+      color: (u) => ((u.jd115MinusCost ?? -1) >= 0 ? IC.green : IC.red),
+      render: (u) => (u.jd115MinusCost != null ? fmtMoney(u.jd115MinusCost) : "—"),
+    },
+    colPrice(),
+    {
+      key: "pom",
+      label: "% Mkt",
+      right: true,
+      color: (u) => ((u.pom ?? 0) > 100 ? IC.yellow : IC.green),
+      render: (u) => (u.pom == null ? "—" : `${u.pom.toFixed(1)}%`),
+    },
+  ];
 
-      <Section
-        title={`Book-spreads finder (JD ≤ ${fmtMoney(SUBPRIME.bookFinderJdMax)}) — all inventory`}
-      >
-        <SpreadTable rows={books} showDisp />
-      </Section>
-    </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h3 className="mb-2 text-sm font-semibold text-foreground">{title}</h3>
-      <div className="overflow-x-auto rounded-lg border border-border">{children}</div>
+      <IcPanel
+        title="Subprime audit — flagged as poor fit for the bucket"
+        note={`rules: cost >$20K owned over book · cost >$25K without $3K+ spread · ${SUBPRIME.sellClockDays}+ days without cheap-cost/strong-spread exemption · no JD value`}
+      >
+        <IcTable cols={auditCols} rows={audit} defaultSort="cost" defaultDir="desc" maxH={420} />
+      </IcPanel>
+
+      <IcPanel
+        title={`Subprime inventory — target = ${SUBPRIME.targetRetailJdMult * 100}% of JD Power trade-in`}
+        note={`${SUBPRIME.sellClockDays}-day sell clock · under $20K cost ideal, $25K typical max · sorted by book spread`}
+      >
+        <IcTable cols={invCols} rows={inventory} defaultSort="spread" defaultDir="desc" maxH={420} />
+      </IcPanel>
+
+      <IcPanel
+        title={`Book spreads — JD trade-in minus cost (JD ≤ $${(SUBPRIME.bookFinderJdMax / 1000).toFixed(0)}K, all inventory)`}
+        note="subprime candidate finder · highest spread first"
+      >
+        <IcTable cols={bookCols} rows={books} defaultSort="spread" defaultDir="desc" maxH={520} />
+      </IcPanel>
     </div>
-  );
-}
-
-function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="px-4 py-6 text-center text-xs text-muted-foreground">{children}</p>;
-}
-
-function SpreadTable({
-  rows,
-  showDisp,
-}: {
-  rows: ReturnType<typeof subprimeInventory>;
-  showDisp?: boolean;
-}) {
-  if (rows.length === 0) return <Empty>None</Empty>;
-  return (
-    <table className="min-w-full text-left text-xs">
-      <thead className="bg-muted text-muted-foreground">
-        <tr>
-          <th className="px-3 py-2 font-medium">Stock</th>
-          <th className="px-3 py-2 font-medium">Vehicle</th>
-          <th className="px-3 py-2 font-medium">Age</th>
-          <th className="px-3 py-2 font-medium">Cost</th>
-          <th className="px-3 py-2 font-medium">JD Trade</th>
-          <th className="px-3 py-2 font-medium">JD−Cost</th>
-          <th className="px-3 py-2 font-medium">115% JD</th>
-          <th className="px-3 py-2 font-medium">115% − Cost</th>
-          {showDisp ? <th className="px-3 py-2 font-medium">Disp</th> : null}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((u) => (
-          <tr key={u.stk} className="border-t border-border">
-            <td className="px-3 py-2 font-medium">{u.stk}</td>
-            <td className="px-3 py-2">{u.veh}</td>
-            <td className="px-3 py-2">{u.age}</td>
-            <td className="px-3 py-2">{fmtMoney(u.cost)}</td>
-            <td className="px-3 py-2">{fmtMoney(u.jd)}</td>
-            <td className="px-3 py-2">{fmtMoney(u.spread)}</td>
-            <td className="px-3 py-2">{fmtMoney(u.jd115)}</td>
-            <td className="px-3 py-2">{fmtMoney(u.jd115MinusCost)}</td>
-            {showDisp ? <td className="px-3 py-2 capitalize">{u.disp}</td> : null}
-          </tr>
-        ))}
-      </tbody>
-    </table>
   );
 }

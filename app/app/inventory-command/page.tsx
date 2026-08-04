@@ -9,6 +9,7 @@ import type {
   InvPriceAction,
   InvUnitRow,
 } from "@/lib/inventory-command/types";
+import { countTtlFails } from "@/lib/inventory-command/compute";
 import PlanNoAccessState from "../PlanNoAccessState";
 import SelectAutoGroupEmptyState from "../SelectAutoGroupEmptyState";
 import InventoryCommandClient from "./InventoryCommandClient";
@@ -119,22 +120,35 @@ export default async function InventoryCommandPage({
     .order("snapshot_date", { ascending: true })
     .limit(60);
 
-  const metricsHistory = (historyRows ?? []) as InvDailyMetrics[];
+  const metricsHistory = ((historyRows ?? []) as InvDailyMetrics[]).map((m) => {
+    // Live-correct TTL for the latest snapshot (older rows stay as stored until re-ingest).
+    if (snapshotDate && m.snapshot_date === snapshotDate && units.length > 0) {
+      return { ...m, ttl_fail: countTtlFails(units) };
+    }
+    return m;
+  });
 
+  if (metrics && units.length > 0) {
+    metrics = { ...metrics, ttl_fail: countTtlFails(units) };
+  }
+
+  // Trends uses the full history window (not just the latest snapshot day).
   let movements: InvMovement[] = [];
   let priceActions: InvPriceAction[] = [];
-  if (snapshotDate) {
+  {
     const [{ data: mov }, { data: pa }] = await Promise.all([
       supabase
         .from("inv_movements")
         .select("store_id,movement_date,type,stk,veh,age,cost")
         .eq("store_id", initialStoreId)
-        .eq("movement_date", snapshotDate),
+        .order("movement_date", { ascending: true })
+        .limit(2000),
       supabase
         .from("inv_price_actions")
         .select("store_id,action_date,stk,veh,age,type,price,d_p")
         .eq("store_id", initialStoreId)
-        .eq("action_date", snapshotDate),
+        .order("action_date", { ascending: true })
+        .limit(2000),
     ]);
     movements = (mov ?? []) as InvMovement[];
     priceActions = (pa ?? []) as InvPriceAction[];

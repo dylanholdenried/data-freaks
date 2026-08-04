@@ -1,7 +1,18 @@
 "use client";
 
-import { useState } from "react";
-import { cn } from "@/lib/utils";
+import { useMemo, useState } from "react";
+import {
+  daysUntilFirstOfNextMonth,
+  hotAgeThreshold,
+  isHotUnit,
+} from "@/lib/inventory-command/compute";
+import { fmtMoneyCompact, fmtNum } from "@/lib/inventory-command/format";
+import {
+  formatExportDate,
+  IC,
+  storeAccent,
+  storeShortLabel,
+} from "@/lib/inventory-command/midmo";
 import type { InventoryCommandTab } from "@/lib/inventory-command/types";
 import type { InvDailyMetrics, InvUnitRow } from "@/lib/inventory-command/types";
 import type { InvMovement, InvPriceAction } from "@/lib/inventory-command/types";
@@ -13,6 +24,7 @@ import PricingTab from "./tabs/PricingTab";
 import DemandTab from "./tabs/DemandTab";
 import MixTab from "./tabs/MixTab";
 import SubprimeTab from "./tabs/SubprimeTab";
+import { IcEmpty, IcFooterNote, IcRoot } from "./ui/primitives";
 
 export type StoreOption = { id: string; name: string };
 
@@ -25,7 +37,6 @@ export type InventoryCommandClientProps = {
   metricsHistory: InvDailyMetrics[];
   movements: InvMovement[];
   priceActions: InvPriceAction[];
-  /** Per-store latest snapshot date for the switcher label */
   latestByStore: Record<string, string | null>;
 };
 
@@ -45,7 +56,6 @@ export default function InventoryCommandClient({
   initialStoreId,
   snapshotDate,
   units,
-  metrics,
   metricsHistory,
   movements,
   priceActions,
@@ -54,7 +64,6 @@ export default function InventoryCommandClient({
   const [storeId, setStoreId] = useState(initialStoreId);
   const [tab, setTab] = useState<InventoryCommandTab>("overview");
 
-  // When store changes via pills we navigate via query to reload RSC data
   function onStoreChange(nextId: string) {
     setStoreId(nextId);
     const url = new URL(window.location.href);
@@ -65,80 +74,145 @@ export default function InventoryCommandClient({
   const storeName = stores.find((s) => s.id === storeId)?.name ?? "Store";
   const asOf = snapshotDate ?? latestByStore[storeId] ?? null;
 
+  const hotCount = useMemo(() => {
+    if (!snapshotDate) return 0;
+    return units.filter((u) => isHotUnit(u.age, snapshotDate)).length;
+  }, [units, snapshotDate]);
+
+  const totalCost = useMemo(
+    () => units.reduce((s, u) => s + (u.cost || 0), 0),
+    [units]
+  );
+
+  const threshold = snapshotDate ? hotAgeThreshold(snapshotDate) : null;
+  const daysToFirst = snapshotDate ? daysUntilFirstOfNextMonth(snapshotDate) : null;
+
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <IcRoot>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-foreground">Inventory Command</h1>
-          <p className="text-sm text-muted-foreground">
+          <div
+            style={{
+              color: IC.yellow,
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: 1.4,
+              textTransform: "uppercase",
+            }}
+          >
+            MidMO Inventory Command
+          </div>
+          <h1
+            style={{
+              fontSize: 28,
+              fontWeight: 800,
+              letterSpacing: 0.3,
+              textTransform: "uppercase",
+              lineHeight: 1.15,
+              marginTop: 2,
+              color: IC.text,
+            }}
+          >
             {storeName}
-            {asOf ? ` · as of ${asOf}` : " · no snapshot yet"}
+          </h1>
+          <p className="mt-1 text-sm" style={{ color: IC.muted }}>
+            {asOf
+              ? `vAuto export ${formatExportDate(asOf)} · ${fmtNum(units.length)} units · ${fmtMoneyCompact(totalCost)} at cost`
+              : "No snapshot yet"}
           </p>
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          {stores.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => onStoreChange(s.id)}
-              className={cn(
-                "rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
-                storeId === s.id
-                  ? "border-blue-600 bg-blue-600 text-white"
-                  : "border-border bg-card text-foreground hover:bg-muted"
-              )}
-            >
-              {s.name}
-            </button>
-          ))}
+
+        <div className="flex flex-wrap gap-2">
+          {stores.map((s) => {
+            const active = storeId === s.id;
+            const pillAccent = storeAccent(s.name);
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => onStoreChange(s.id)}
+                style={{
+                  borderRadius: 999,
+                  padding: "8px 16px",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  letterSpacing: 0.8,
+                  textTransform: "uppercase",
+                  cursor: "pointer",
+                  border: active ? `1px solid ${pillAccent}` : `1px solid ${IC.border}`,
+                  background: active ? pillAccent : "transparent",
+                  color: active ? IC.darkText : IC.text,
+                }}
+              >
+                {storeShortLabel(s.name)}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-1 border-b border-border pb-px">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={cn(
-              "-mb-px rounded-t-lg border border-b-0 px-3 py-2 text-xs font-medium transition-colors",
-              tab === t.id
-                ? "border-border bg-card text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="mb-5 flex flex-wrap gap-1.5">
+        {TABS.map((t) => {
+          const active = tab === t.id;
+          const label =
+            t.id === "hot" ? `Hot List (${hotCount})` : t.label;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              style={{
+                borderRadius: 999,
+                padding: "8px 14px",
+                fontSize: 12,
+                fontWeight: 700,
+                letterSpacing: 0.6,
+                textTransform: "uppercase",
+                cursor: "pointer",
+                border: active ? "1px solid #fff" : `1px solid ${IC.border}`,
+                background: active ? "#fff" : IC.panel,
+                color: active ? IC.darkText : IC.text,
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
 
       <div className="min-w-0">
         {!snapshotDate && units.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-border bg-muted px-4 py-8 text-center text-sm text-muted-foreground">
+          <IcEmpty>
             No inventory snapshot for this store yet. A platform admin can upload the daily
             vAuto Merchandising export from Inventory upload.
-          </p>
-        ) : null}
-
-        {tab === "overview" ? (
-          <OverviewTab metrics={metrics} units={units} movements={movements} />
-        ) : null}
-        {tab === "trends" ? <TrendsTab history={metricsHistory} /> : null}
-        {tab === "hot" ? <HotListTab units={units} snapshotDate={snapshotDate} /> : null}
-        {tab === "merchandising" ? <MerchandisingTab units={units} /> : null}
-        {tab === "pricing" ? <PricingTab units={units} /> : null}
-        {tab === "demand" ? <DemandTab units={units} /> : null}
-        {tab === "mix" ? <MixTab units={units} /> : null}
-        {tab === "subprime" ? <SubprimeTab units={units} /> : null}
-
-        {/* Keep priceActions available for future Pricing history panel */}
-        {tab === "pricing" && priceActions.length > 0 ? (
-          <p className="mt-4 text-xs text-muted-foreground">
-            {priceActions.length} price action{priceActions.length === 1 ? "" : "s"} on{" "}
-            {snapshotDate}.
-          </p>
-        ) : null}
+          </IcEmpty>
+        ) : (
+          <>
+            {tab === "overview" ? (
+              <OverviewTab units={units} snapshotDate={snapshotDate} />
+            ) : null}
+            {tab === "trends" ? (
+              <TrendsTab
+                history={metricsHistory}
+                units={units}
+                movements={movements}
+                priceActions={priceActions}
+                snapshotDate={snapshotDate}
+              />
+            ) : null}
+            {tab === "hot" ? (
+              <HotListTab units={units} snapshotDate={snapshotDate} />
+            ) : null}
+            {tab === "merchandising" ? <MerchandisingTab units={units} /> : null}
+            {tab === "pricing" ? <PricingTab units={units} /> : null}
+            {tab === "demand" ? <DemandTab units={units} /> : null}
+            {tab === "mix" ? <MixTab units={units} /> : null}
+            {tab === "subprime" ? <SubprimeTab units={units} /> : null}
+          </>
+        )}
       </div>
-    </div>
+
+      <IcFooterNote threshold={threshold} daysToFirst={daysToFirst} />
+    </IcRoot>
   );
 }

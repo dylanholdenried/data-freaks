@@ -1,5 +1,14 @@
-import { FULL_PHOTO_COUNT, STALE_DAYS } from "./config";
+import { FULL_PHOTO_COUNT, INV_TARGETS, STALE_DAYS } from "./config";
 import type { InvDailyMetrics, InvDisposition, InvMovement, InvPriceAction, InvUnitRow } from "./types";
+
+/** MidMo TTL fail: unit age past day 5 with fewer than 16 photos. */
+export function isTtlFail(u: Pick<InvUnitRow, "age" | "ph">): boolean {
+  return (u.age ?? 0) > INV_TARGETS.ttlDays && (u.ph ?? 0) < FULL_PHOTO_COUNT;
+}
+
+export function countTtlFails(units: Pick<InvUnitRow, "age" | "ph">[]): number {
+  return units.filter(isTtlFail).length;
+}
 
 /** Days from snapshotDate to the 1st of next month (inclusive of next month start). */
 export function daysUntilFirstOfNextMonth(snapshotDate: string | Date): number {
@@ -128,12 +137,14 @@ export function computeDailyMetrics(
   let hotCost = 0;
   let retail = 0;
   let subprime = 0;
+  let ttlFail = 0;
 
   for (const u of units) {
     if ((u.age ?? 0) >= 60) over60 += 1;
     if ((u.age ?? 0) >= 90) over90 += 1;
     if ((u.ph ?? 0) >= FULL_PHOTO_COUNT) full += 1;
     if ((u.ph ?? 0) === 0) noPh += 1;
+    if (isTtlFail(u)) ttlFail += 1;
     if (u.disp === "retail") {
       retail += 1;
       const dsr = u.dsr ?? 0;
@@ -161,7 +172,7 @@ export function computeDailyMetrics(
     no_price: noPrice,
     hot,
     hot_cost: hotCost,
-    ttl_fail: null,
+    ttl_fail: ttlFail,
     retail_count: retail,
     subprime_count: subprime,
   };

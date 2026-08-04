@@ -1,54 +1,96 @@
-import { fmtMoney, fmtNum, fmtPct } from "@/lib/inventory-command/format";
-import type { InvUnitRow } from "@/lib/inventory-command/types";
+"use client";
 
-/** Seen but skipped: age≥7, srp≥300, vr < 1 (under 1% VDP conversion). */
+import { fmtNum } from "@/lib/inventory-command/format";
+import { hottestDemand, mostClicks, seenButSkipped } from "@/lib/inventory-command/midmo";
+import type { InvUnitRow } from "@/lib/inventory-command/types";
+import {
+  colAge,
+  colCost,
+  colDsr,
+  colPhotos,
+  colPom,
+  colPrice,
+  colSrp,
+  colStock,
+  colVdp,
+  colVeh,
+  colVr,
+} from "../ui/columns";
+import { IcPanel } from "../ui/primitives";
+import { IcTable, type IcCol } from "../ui/IcTable";
+
 export default function DemandTab({ units }: { units: InvUnitRow[] }) {
-  const skipped = units
-    .filter((u) => (u.age ?? 0) >= 7 && (u.srp ?? 0) >= 300 && u.vr != null && u.vr < 1)
-    .sort((a, b) => (a.vr ?? 0) - (b.vr ?? 0));
+  const skipped = seenButSkipped(units);
+  const hottest = hottestDemand(units, 50);
+  const clicks = mostClicks(units, 50);
+
+  const skippedCols: IcCol<InvUnitRow>[] = [
+    colStock(),
+    colVeh(),
+    colAge(),
+    colCost(),
+    colPrice(),
+    colPom(),
+    colDsr(),
+    colPhotos(),
+    colSrp(),
+    colVdp(),
+    colVr(),
+  ];
+
+  const hotCols: IcCol<InvUnitRow & { spd: number }>[] = [
+    colStock(),
+    colVeh(),
+    colAge(),
+    colPrice(),
+    {
+      key: "spd",
+      label: "SRP / Day",
+      right: true,
+      render: (u) => fmtNum(u.spd, 1),
+    },
+    colSrp(),
+    colVdp(),
+    colVr(),
+    colPhotos(),
+  ];
+
+  const clickCols: IcCol<InvUnitRow>[] = [
+    colStock(),
+    colVeh(),
+    colAge(),
+    colCost(),
+    colPrice(),
+    colPom(),
+    colDsr(),
+    colPhotos(),
+    colSrp(),
+    colVdp(),
+    colVr(),
+  ];
 
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">
-        Seen but skipped: age ≥ 7, SRP ≥ 300, VR &lt; 1% (VDP÷SRP).{" "}
-        <span className="font-semibold">{skipped.length}</span> units.
-      </p>
-      {skipped.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-border bg-muted px-4 py-8 text-center text-sm text-muted-foreground">
-          No skipped units match the filter.
-        </p>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="min-w-full text-left text-xs">
-            <thead className="bg-muted text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2 font-medium">Stock</th>
-                <th className="px-3 py-2 font-medium">Vehicle</th>
-                <th className="px-3 py-2 font-medium">Age</th>
-                <th className="px-3 py-2 font-medium">SRP</th>
-                <th className="px-3 py-2 font-medium">VDP</th>
-                <th className="px-3 py-2 font-medium">VR %</th>
-                <th className="px-3 py-2 font-medium">Price</th>
-                <th className="px-3 py-2 font-medium">Δ VDP</th>
-              </tr>
-            </thead>
-            <tbody>
-              {skipped.map((u) => (
-                <tr key={u.stk} className="border-t border-border">
-                  <td className="px-3 py-2 font-medium">{u.stk}</td>
-                  <td className="px-3 py-2">{u.veh}</td>
-                  <td className="px-3 py-2">{u.age}</td>
-                  <td className="px-3 py-2">{fmtNum(u.srp)}</td>
-                  <td className="px-3 py-2">{fmtNum(u.vdp)}</td>
-                  <td className="px-3 py-2">{fmtPct(u.vr, 2)}</td>
-                  <td className="px-3 py-2">{fmtMoney(u.price)}</td>
-                  <td className="px-3 py-2">{u.d_vdp ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+    <div>
+      <IcPanel
+        title="Seen but skipped — high SRP, under 1% VDP"
+        note="the market found these and scrolled past. Price or photos."
+      >
+        <IcTable cols={skippedCols} rows={skipped} defaultSort="srp" defaultDir="desc" maxH={420} />
+      </IcPanel>
+
+      <IcPanel
+        title="Hottest market demand — SRPs per day in stock"
+        note="what shoppers are searching for · feed the buy-box"
+      >
+        <IcTable cols={hotCols} rows={hottest} defaultSort="spd" defaultDir="desc" maxH={420} />
+      </IcPanel>
+
+      <IcPanel
+        title="Most clicks — total VDPs"
+        note="proven shopper interest · aged units here have a price gap, not a demand gap"
+      >
+        <IcTable cols={clickCols} rows={clicks} defaultSort="vdp" defaultDir="desc" maxH={420} />
+      </IcPanel>
     </div>
   );
 }

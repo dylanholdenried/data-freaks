@@ -59,11 +59,11 @@ export function auditSubprimeUnit(u: InvUnitRow): SubprimeAuditReason[] {
 export function reasonLabel(r: SubprimeAuditReason): string {
   switch (r) {
     case "owned_over_book":
-      return "Owned over book";
+      return "owned over book";
     case "thin_spread":
-      return "Thin spread";
+      return "cost >$25K, thin spread";
     case "no_jd":
-      return "No JD value";
+      return "no JD value";
     case "aged_30_plus":
       return "30+ days";
   }
