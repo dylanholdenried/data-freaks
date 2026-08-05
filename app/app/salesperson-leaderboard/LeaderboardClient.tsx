@@ -158,15 +158,16 @@ export default function LeaderboardClient({
         if (isClosed(mtdDeal.status)) {
           acc.front += (mtdDeal.front_profit ?? 0) * share;
           acc.back += (mtdDeal.back_profit ?? 0) * share;
+          const frontProfit = mtdDeal.front_profit;
+          const backProfit = mtdDeal.back_profit;
           const hasBoth =
-            mtdDeal.front_profit != null &&
-            Number.isFinite(mtdDeal.front_profit) &&
-            mtdDeal.back_profit != null &&
-            Number.isFinite(mtdDeal.back_profit);
+            frontProfit != null &&
+            Number.isFinite(frontProfit) &&
+            backProfit != null &&
+            Number.isFinite(backProfit);
           if (hasBoth) {
             acc.completeGrossUnits += share;
-            acc.completeGross +=
-              (mtdDeal.front_profit + mtdDeal.back_profit) * share;
+            acc.completeGross += (frontProfit + backProfit) * share;
           }
         }
       }
