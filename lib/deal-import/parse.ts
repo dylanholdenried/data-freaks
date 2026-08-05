@@ -28,7 +28,8 @@ export function parseDealImportCsv(csvText: string): {
   const parsed = Papa.parse<Record<string, unknown>>(csvText, {
     header: true,
     skipEmptyLines: "greedy",
-    transformHeader: (h) => h.trim(),
+    // Case-insensitive headers (Excel often exports MSRP vs msrp); strip BOM
+    transformHeader: (h) => h.replace(/^\uFEFF/, "").trim().toLowerCase(),
   });
 
   if (parsed.errors.length > 0) {

@@ -31,6 +31,14 @@ assert(parsed.rows[0].errors.length === 0, `template row errors: ${parsed.rows[0
 assert(parsed.rows[0].normalized?.status === "closed", "full template row should be closed");
 assert(parsed.rows[0].normalized?.msrp === 32000, "template example msrp normalized");
 
+const upperMsrpCsv = buildTemplateCsv().replace(/,msrp\n/, ",MSRP\n");
+const upperMsrpParsed = parseDealImportCsv(upperMsrpCsv);
+assert(
+  upperMsrpParsed.fileErrors.length === 0,
+  `MSRP header should be accepted case-insensitively: ${upperMsrpParsed.fileErrors.join("; ")}`
+);
+assert(upperMsrpParsed.rows[0]?.normalized?.msrp === 32000, "uppercase MSRP column maps to msrp");
+
 const incomplete = parseDealImportCsv(
   [
     DEAL_IMPORT_HEADERS.join(","),

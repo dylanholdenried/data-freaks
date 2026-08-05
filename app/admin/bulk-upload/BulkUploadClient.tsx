@@ -125,13 +125,17 @@ export default function BulkUploadClient({ groups, stores, history: initialHisto
       const csvText = String(reader.result ?? "");
       startTransition(async () => {
         try {
-          const next = await createBatchFromCsv({
+          const res = await createBatchFromCsv({
             dealerGroupId: groupId,
             storeId,
             fileName: file.name,
             csvText,
           });
-          setPreview(next);
+          if (!res.ok) {
+            setError(res.error);
+            return;
+          }
+          setPreview(res.preview);
           setStep("preview");
         } catch (err) {
           setError(err instanceof Error ? err.message : "Upload failed");

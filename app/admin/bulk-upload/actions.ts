@@ -178,137 +178,149 @@ export async function createBatchFromCsv(input: {
   storeId: string;
   fileName: string;
   csvText: string;
-}): Promise<BatchPreview> {
-  const { supabase, profileId } = await requireAdminContext();
+}): Promise<{ ok: true; preview: BatchPreview } | { ok: false; error: string }> {
+  try {
+    const { supabase, profileId } = await requireAdminContext();
 
-  const dealerGroupId = input.dealerGroupId.trim();
-  const storeId = input.storeId.trim();
-  if (!dealerGroupId || !storeId) {
-    throw new Error("Auto Group and Store are required");
-  }
+    const dealerGroupId = input.dealerGroupId.trim();
+    const storeId = input.storeId.trim();
+    if (!dealerGroupId || !storeId) {
+      return { ok: false, error: "Auto Group and Store are required" };
+    }
 
-  const store = await assertStoreInGroup(supabase, dealerGroupId, storeId);
+    const store = await assertStoreInGroup(supabase, dealerGroupId, storeId);
 
-  const { data: group } = await supabase
-    .from("dealer_groups")
-    .select("id,name")
-    .eq("id", dealerGroupId)
-    .maybeSingle();
-  if (!group) throw new Error("Auto Group not found");
+    const { data: group } = await supabase
+      .from("dealer_groups")
+      .select("id,name")
+      .eq("id", dealerGroupId)
+      .maybeSingle();
+    if (!group) return { ok: false, error: "Auto Group not found" };
 
-  const { fileErrors, rows: parsedRows } = parseDealImportCsv(input.csvText);
-  if (fileErrors.length > 0) {
-    throw new Error(fileErrors.join("; "));
-  }
+    const { fileErrors, rows: parsedRows } = parseDealImportCsv(input.csvText);
+    if (fileErrors.length > 0) {
+      return { ok: false, error: fileErrors.join("; ") };
+    }
 
-  const [
-    deptsResult,
-    spResult,
-    fmResult,
-    srcResult,
-    deptMakesResult,
-    dealsResult,
-  ] = await Promise.all([
-    supabase.from("departments").select("id,name").eq("store_id", storeId),
-    supabase.from("salespeople").select("id,name").eq("store_id", storeId),
-    supabase.from("finance_managers").select("id,name").eq("store_id", storeId),
-    supabase.from("acquisition_sources").select("id,name").eq("store_id", storeId),
-    supabase.from("department_makes").select("department_id,make"),
-    fetchAllRows<{ stock_number: string }>((from, to) =>
-      supabase
-        .from("deals")
-        .select("stock_number")
-        .eq("store_id", storeId)
-        .in("status", ["pending", "delivered", "closed"])
-        .order("id", { ascending: true })
-        .range(from, to)
-    ),
-  ]);
+    const [
+      deptsResult,
+      spResult,
+      fmResult,
+      srcResult,
+      deptMakesResult,
+      dealsResult,
+    ] = await Promise.all([
+      supabase.from("departments").select("id,name").eq("store_id", storeId),
+      supabase.from("salespeople").select("id,name").eq("store_id", storeId),
+      supabase.from("finance_managers").select("id,name").eq("store_id", storeId),
+      supabase.from("acquisition_sources").select("id,name").eq("store_id", storeId),
+      supabase.from("department_makes").select("department_id,make"),
+      fetchAllRows<{ stock_number: string }>((from, to) =>
+        supabase
+          .from("deals")
+          .select("stock_number")
+          .eq("store_id", storeId)
+          .in("status", ["pending", "delivered", "closed"])
+          .order("id", { ascending: true })
+          .range(from, to)
+      ),
+    ]);
 
-  const existingStockNumbers = new Set(
-    dealsResult.data.map((d) => d.stock_number.trim().toLowerCase())
-  );
-
-  const validated = validateImportRows(parsedRows, {
-    departments: (deptsResult.data ?? []) as { id: string; name: string }[],
-    salespeople: (spResult.data ?? []) as { id: string; name: string }[],
-    financeManagers: (fmResult.data ?? []) as { id: string; name: string }[],
-    acquisitionSources: (srcResult.data ?? []) as { id: string; name: string }[],
-    departmentMakes: (deptMakesResult.data ?? []) as {
-      department_id: string;
-      make: string;
-    }[],
-    existingStockNumbers,
-  });
-
-  const validCount = validated.filter((r) => r.is_valid).length;
-  const errorCount = validated.filter((r) => !r.is_valid).length;
-
-  const { data: batch, error: batchError } = await supabase
-    .from("deal_import_batches")
-    .insert({
-      dealer_group_id: dealerGroupId,
-      store_id: storeId,
-      uploaded_by: profileId,
-      file_name: input.fileName || "upload.csv",
-      status: "pending_review",
-      row_count: validated.length,
-      valid_count: validCount,
-      error_count: errorCount,
-    })
-    .select("id")
-    .single();
-
-  if (batchError || !batch) {
-    throw new Error(
-      `Failed to create import batch: ${batchError?.message ?? "unknown error"}. Ensure the deal_import migration has been applied.`
+    const existingStockNumbers = new Set(
+      dealsResult.data.map((d) => d.stock_number.trim().toLowerCase())
     );
-  }
 
-  const rowInserts = validated.map((r) => ({
-    batch_id: batch.id,
-    row_number: r.rowNumber,
-    raw: r.raw,
-    normalized: r.normalized,
-    resolved: r.resolved,
-    errors: r.errors,
-    warnings: r.warnings,
-    is_valid: r.is_valid,
-  }));
+    const validated = validateImportRows(parsedRows, {
+      departments: (deptsResult.data ?? []) as { id: string; name: string }[],
+      salespeople: (spResult.data ?? []) as { id: string; name: string }[],
+      financeManagers: (fmResult.data ?? []) as { id: string; name: string }[],
+      acquisitionSources: (srcResult.data ?? []) as { id: string; name: string }[],
+      departmentMakes: (deptMakesResult.data ?? []) as {
+        department_id: string;
+        make: string;
+      }[],
+      existingStockNumbers,
+    });
 
-  const { error: rowsError } = await supabase.from("deal_import_rows").insert(rowInserts);
-  if (rowsError) {
-    await supabase.from("deal_import_batches").delete().eq("id", batch.id);
-    throw new Error(`Failed to stage import rows: ${rowsError.message}`);
-  }
+    const validCount = validated.filter((r) => r.is_valid).length;
+    const errorCount = validated.filter((r) => !r.is_valid).length;
 
-  const willCreate = new Set<string>();
-  for (const r of validated) {
-    for (const w of r.warnings) willCreate.add(w);
-  }
+    const { data: batch, error: batchError } = await supabase
+      .from("deal_import_batches")
+      .insert({
+        dealer_group_id: dealerGroupId,
+        store_id: storeId,
+        uploaded_by: profileId,
+        file_name: input.fileName || "upload.csv",
+        status: "pending_review",
+        row_count: validated.length,
+        valid_count: validCount,
+        error_count: errorCount,
+      })
+      .select("id")
+      .single();
 
-  return {
-    batchId: batch.id,
-    dealerGroupId,
-    dealerGroupName: (group as { name: string }).name,
-    storeId,
-    storeName: store.name,
-    fileName: input.fileName || "upload.csv",
-    rowCount: validated.length,
-    validCount,
-    errorCount,
-    status: "pending_review",
-    rows: validated.map((r) => ({
-      rowNumber: r.rowNumber,
-      stockNumber: r.normalized?.stock_number ?? r.raw.stock_number ?? "",
-      customerLastName: r.normalized?.customer_last_name ?? r.raw.customer_last_name ?? "",
-      saleDate: r.normalized?.sale_date ?? r.raw.sale_date ?? "",
-      isValid: r.is_valid,
+    if (batchError || !batch) {
+      return {
+        ok: false,
+        error: `Failed to create import batch: ${batchError?.message ?? "unknown error"}. Ensure the deal_import migration has been applied.`,
+      };
+    }
+
+    const rowInserts = validated.map((r) => ({
+      batch_id: batch.id,
+      row_number: r.rowNumber,
+      raw: r.raw,
+      normalized: r.normalized,
+      resolved: r.resolved,
       errors: r.errors,
       warnings: r.warnings,
-    })),
-    willCreate: Array.from(willCreate).sort(),
-  };
+      is_valid: r.is_valid,
+    }));
+
+    const { error: rowsError } = await supabase.from("deal_import_rows").insert(rowInserts);
+    if (rowsError) {
+      await supabase.from("deal_import_batches").delete().eq("id", batch.id);
+      return { ok: false, error: `Failed to stage import rows: ${rowsError.message}` };
+    }
+
+    const willCreate = new Set<string>();
+    for (const r of validated) {
+      for (const w of r.warnings) willCreate.add(w);
+    }
+
+    return {
+      ok: true,
+      preview: {
+        batchId: batch.id,
+        dealerGroupId,
+        dealerGroupName: (group as { name: string }).name,
+        storeId,
+        storeName: store.name,
+        fileName: input.fileName || "upload.csv",
+        rowCount: validated.length,
+        validCount,
+        errorCount,
+        status: "pending_review",
+        rows: validated.map((r) => ({
+          rowNumber: r.rowNumber,
+          stockNumber: r.normalized?.stock_number ?? r.raw.stock_number ?? "",
+          customerLastName:
+            r.normalized?.customer_last_name ?? r.raw.customer_last_name ?? "",
+          saleDate: r.normalized?.sale_date ?? r.raw.sale_date ?? "",
+          isValid: r.is_valid,
+          errors: r.errors,
+          warnings: r.warnings,
+        })),
+        willCreate: Array.from(willCreate).sort(),
+      },
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Upload failed",
+    };
+  }
 }
 
 export async function getBatchPreview(batchId: string): Promise<BatchPreview | null> {
