@@ -35,6 +35,7 @@ export const DEAL_IMPORT_HEADERS = [
   "trade_allowance",
   "trade_exit_strategy",
   "notes",
+  "msrp",
 ] as const;
 
 export type DealImportHeader = (typeof DEAL_IMPORT_HEADERS)[number];
@@ -167,6 +168,7 @@ export const dealImportRowSchema = z
     trade_allowance: emptyToUndefined,
     trade_exit_strategy: emptyToUndefined,
     notes: emptyToUndefined,
+    msrp: optionalNumber("msrp"),
   })
   .superRefine((row, ctx) => {
     if (parseFlexibleSaleDate(row.sale_date) == null) {
@@ -300,13 +302,14 @@ export type NormalizedDealImportRow = {
   trade_allowance: number | null;
   trade_exit_strategy: (typeof TRADE_EXIT_STRATEGIES)[number] | null;
   notes: string | null;
+  msrp: number | null;
 };
 
 function isClosedComplete(
   parsed: z.infer<typeof dealImportRowSchema>,
   hasTrade: "yes" | "no"
 ): boolean {
-  // color, list_price, and trade_exit_strategy are optional for import-as-closed
+  // color, list_price, front_profit, and trade_exit_strategy are optional for import-as-closed
   const requiredStrings = [
     parsed.customer_last_name,
     parsed.vin,
@@ -321,7 +324,8 @@ function isClosedComplete(
   if (requiredStrings.some((v) => v == null || v === "")) return false;
 
   if (parsed.odometer == null || parsed.age == null) return false;
-  if (parsed.front_profit == null || parsed.back_profit == null || parsed.sale_price == null) {
+  // front_profit may be blank (unknown); still require back_profit + sale_price
+  if (parsed.back_profit == null || parsed.sale_price == null) {
     return false;
   }
 
@@ -465,6 +469,7 @@ export function toNormalizedDealImportRow(
         ? (parsed.trade_exit_strategy.toLowerCase() as (typeof TRADE_EXIT_STRATEGIES)[number])
         : null,
     notes: parsed.notes ?? null,
+    msrp: parsed.msrp ?? null,
   };
 }
 
@@ -503,6 +508,7 @@ export const DEAL_IMPORT_EXAMPLE_ROW: Record<DealImportHeader, string> = {
   trade_allowance: "",
   trade_exit_strategy: "",
   notes: "",
+  msrp: "32000.00",
 };
 
 export function buildTemplateCsv(): string {

@@ -372,6 +372,7 @@ create table public.deals (
   sale_price numeric(12,2),
   list_price numeric(12,2),
   list_price_na boolean not null default false,
+  msrp numeric(12,2),
   odometer integer,
   age integer,
   drivetrain text,
@@ -551,7 +552,8 @@ with check (is_platform_admin());
 create policy "dealer_groups_platform_admin_all"
 on public.dealer_groups
 for all
-using (is_platform_admin());
+using (is_platform_admin())
+with check (is_platform_admin());
 
 create policy "dealer_groups_group_members_select"
 on public.dealer_groups
@@ -560,7 +562,7 @@ using (
   exists (
     select 1 from public.profiles p
     where p.dealer_group_id = dealer_groups.id
-      and p.user_id = auth.uid()
+      and (p.user_id = auth.uid() or p.id = auth.uid())
       and p.status = 'active'
   )
 );

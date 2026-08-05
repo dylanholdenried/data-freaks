@@ -126,7 +126,8 @@ export default function LeaderboardClient({
       {
         mtdUnits: number;
         ytdUnits: number;
-        closedUnits: number;
+        completeGrossUnits: number;
+        completeGross: number;
         front: number;
         back: number;
       }
@@ -143,7 +144,8 @@ export default function LeaderboardClient({
       const acc = spAcc.get(ds.salesperson_id) ?? {
         mtdUnits: 0,
         ytdUnits: 0,
-        closedUnits: 0,
+        completeGrossUnits: 0,
+        completeGross: 0,
         front: 0,
         back: 0,
       };
@@ -154,9 +156,18 @@ export default function LeaderboardClient({
       if (mtdDeal && isBooked(mtdDeal.status)) {
         acc.mtdUnits += share;
         if (isClosed(mtdDeal.status)) {
-          acc.closedUnits += share;
           acc.front += (mtdDeal.front_profit ?? 0) * share;
           acc.back += (mtdDeal.back_profit ?? 0) * share;
+          const hasBoth =
+            mtdDeal.front_profit != null &&
+            Number.isFinite(mtdDeal.front_profit) &&
+            mtdDeal.back_profit != null &&
+            Number.isFinite(mtdDeal.back_profit);
+          if (hasBoth) {
+            acc.completeGrossUnits += share;
+            acc.completeGross +=
+              (mtdDeal.front_profit + mtdDeal.back_profit) * share;
+          }
         }
       }
       spAcc.set(ds.salesperson_id, acc);
@@ -176,7 +187,10 @@ export default function LeaderboardClient({
           front: acc.front,
           back: acc.back,
           total,
-          avgGross: acc.closedUnits > 0 ? total / acc.closedUnits : null,
+          avgGross:
+            acc.completeGrossUnits > 0
+              ? acc.completeGross / acc.completeGrossUnits
+              : null,
         };
       })
       .filter((r) => r.mtdUnits > 0)

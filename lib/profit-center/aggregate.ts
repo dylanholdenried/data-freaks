@@ -155,6 +155,24 @@ function buildRow(
   const back = sum(backs);
   const total = front + back;
 
+  const frontValues = deals
+    .map((d) => d.front_profit)
+    .filter((v): v is number => v != null && Number.isFinite(v));
+  const backValues = deals
+    .map((d) => d.back_profit)
+    .filter((v): v is number => v != null && Number.isFinite(v));
+  const totalValues: number[] = [];
+  for (const d of deals) {
+    if (
+      d.front_profit != null &&
+      Number.isFinite(d.front_profit) &&
+      d.back_profit != null &&
+      Number.isFinite(d.back_profit)
+    ) {
+      totalValues.push(d.front_profit + d.back_profit);
+    }
+  }
+
   const ages = deals.map((d) => d.age).filter((a): a is number => a != null && Number.isFinite(a));
   const salePrices = deals
     .map((d) => d.sale_price)
@@ -194,9 +212,9 @@ function buildRow(
     front,
     back,
     total,
-    avgFront: volume ? front / volume : null,
-    avgBack: volume ? back / volume : null,
-    avgTotal: volume ? total / volume : null,
+    avgFront: mean(frontValues),
+    avgBack: mean(backValues),
+    avgTotal: mean(totalValues),
     avgAge: mean(ages),
     avgSalePrice: mean(salePrices),
     trades: tradeCount,

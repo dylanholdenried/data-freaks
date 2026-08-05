@@ -29,6 +29,7 @@ assert(parsed.fileErrors.length === 0, `template file errors: ${parsed.fileError
 assert(parsed.rows.length === 1, "expected 1 example row");
 assert(parsed.rows[0].errors.length === 0, `template row errors: ${parsed.rows[0].errors.join("; ")}`);
 assert(parsed.rows[0].normalized?.status === "closed", "full template row should be closed");
+assert(parsed.rows[0].normalized?.msrp === 32000, "template example msrp normalized");
 
 const incomplete = parseDealImportCsv(
   [
@@ -56,6 +57,7 @@ assert(incomplete.rows[0].normalized?.status === "pending", "blank fields → pe
 assert(incomplete.rows[0].normalized?.sale_date === "2025-08-01", "flexible date normalized");
 assert(incomplete.rows[0].normalized?.customer_last_name == null, "blank last name → null");
 assert(incomplete.rows[0].normalized?.vin == null, "blank vin → null");
+assert(incomplete.rows[0].normalized?.msrp == null, "blank msrp on incomplete → null");
 
 /** Build a CSV from the example row with selected fields blanked. */
 function csvWithBlanks(blankHeaders: DealImportHeader[]): string {
@@ -69,7 +71,7 @@ function csvWithBlanks(blankHeaders: DealImportHeader[]): string {
 }
 
 const closedNoColorListExit = parseDealImportCsv(
-  csvWithBlanks(["color", "list_price", "trade_exit_strategy"])
+  csvWithBlanks(["color", "list_price", "trade_exit_strategy", "msrp"])
 );
 assert(
   closedNoColorListExit.rows[0].errors.length === 0,
@@ -77,13 +79,29 @@ assert(
 );
 assert(
   closedNoColorListExit.rows[0].normalized?.status === "closed",
-  "blank color + list_price + trade_exit_strategy (no trade) → still closed"
+  "blank color + list_price + trade_exit_strategy + msrp (no trade) → still closed"
 );
 assert(closedNoColorListExit.rows[0].normalized?.color == null, "blank color → null");
 assert(closedNoColorListExit.rows[0].normalized?.list_price == null, "blank list_price → null");
+assert(closedNoColorListExit.rows[0].normalized?.msrp == null, "blank msrp → null");
 assert(
   closedNoColorListExit.rows[0].normalized?.list_price_na === false,
   "blank list_price is not NA"
+);
+
+const closedNoFront = parseDealImportCsv(csvWithBlanks(["front_profit"]));
+assert(
+  closedNoFront.rows[0].errors.length === 0,
+  `blank front_profit should parse: ${closedNoFront.rows[0].errors.join("; ")}`
+);
+assert(
+  closedNoFront.rows[0].normalized?.status === "closed",
+  "blank front_profit with back + other closed fields → still closed"
+);
+assert(closedNoFront.rows[0].normalized?.front_profit == null, "blank front_profit → null");
+assert(
+  closedNoFront.rows[0].normalized?.back_profit === 800,
+  "back_profit still present when front blank"
 );
 
 const tradeRow = { ...DEAL_IMPORT_EXAMPLE_ROW };
@@ -208,5 +226,14 @@ const dupStock = validateImportRows(goodParsed.rows, {
   existingStockNumbers: new Set(["stk-1001"]),
 });
 assert(!dupStock[0].is_valid, "existing stock must fail");
+
+const badMsrp = parseDealImportCsv(
+  csvWithBlanks([]).replace(/32000\.00/, "not-a-number")
+);
+assert(badMsrp.rows[0].errors.length > 0, "non-numeric msrp must fail");
+assert(
+  badMsrp.rows[0].errors.some((e) => e.toLowerCase().includes("msrp")),
+  "msrp error expected"
+);
 
 console.log("deal-import offline verify: OK");

@@ -244,6 +244,20 @@ export default function DashboardClient({
       const totalGross = front + back;
       const closedCount = closed.length;
 
+      const completeGross = closed
+        .filter(
+          (d) =>
+            d.front_profit != null &&
+            Number.isFinite(d.front_profit) &&
+            d.back_profit != null &&
+            Number.isFinite(d.back_profit)
+        )
+        .map((d) => (d.front_profit as number) + (d.back_profit as number));
+      const avgTotal =
+        completeGross.length > 0
+          ? completeGross.reduce((s, v) => s + v, 0) / completeGross.length
+          : null;
+
       const sourceCounts = countBy(booked, (d) => {
         const s = d.acquisition_source?.trim();
         return s ? s : "Unspecified";
@@ -268,7 +282,7 @@ export default function DashboardClient({
         back,
         totalGross,
         closedCount,
-        avgTotal: closedCount > 0 ? totalGross / closedCount : null,
+        avgTotal,
         sourceMix: mixRows(sourceCounts, false, booked.length),
         financeMix: mixRows(financeCounts, true, closedCount),
       };

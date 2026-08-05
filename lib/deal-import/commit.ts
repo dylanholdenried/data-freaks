@@ -247,6 +247,7 @@ async function commitDealImportBatchJs(
         sale_price: n.sale_price,
         list_price: n.list_price_na ? null : n.list_price,
         list_price_na: n.list_price_na,
+        msrp: n.msrp,
         entered_by: b.uploaded_by,
       };
 
