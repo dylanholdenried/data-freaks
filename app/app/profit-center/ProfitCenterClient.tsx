@@ -792,6 +792,7 @@ export default function ProfitCenterClient({
             <option value="all">All finance types</option>
             <option value="prime">Prime</option>
             <option value="subprime">Subprime</option>
+            <option value="lease">Lease</option>
             <option value="cash">Cash</option>
           </select>
         </div>

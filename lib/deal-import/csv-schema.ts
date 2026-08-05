@@ -40,7 +40,7 @@ export const DEAL_IMPORT_HEADERS = [
 
 export type DealImportHeader = (typeof DEAL_IMPORT_HEADERS)[number];
 
-export const FINANCE_TYPES = ["prime", "subprime", "cash"] as const;
+export const FINANCE_TYPES = ["prime", "subprime", "cash", "lease"] as const;
 export const TRADE_EXIT_STRATEGIES = ["wholesale", "retail", "auction", "other"] as const;
 export const DEAL_IMPORT_STATUSES = ["pending", "closed"] as const;
 
@@ -195,7 +195,7 @@ export const dealImportRowSchema = z
       if (!(FINANCE_TYPES as readonly string[]).includes(ft)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "finance_type must be prime, subprime, or cash",
+          message: "finance_type must be prime, subprime, cash, or lease",
           path: ["finance_type"],
         });
       }

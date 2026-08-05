@@ -49,7 +49,7 @@ end$$;
 do $$
 begin
   if not exists (select 1 from pg_type where typname = 'finance_type') then
-    create type finance_type as enum ('prime', 'subprime', 'cash');
+    create type finance_type as enum ('prime', 'subprime', 'cash', 'lease');
   end if;
 end$$;
 
