@@ -30,7 +30,30 @@ type DeptRow = { id: string; name: string; store_id: string };
 type PersonRow = { id: string; name: string; store_id: string };
 type DealSalesperson = { deal_id: string; salesperson_id: string };
 
-export default async function DealsPage() {
+type StatusFilter = "all" | "pending" | "delivered" | "closed" | "dead" | "unwound";
+
+const VALID_STATUS: ReadonlySet<string> = new Set([
+  "all",
+  "pending",
+  "delivered",
+  "closed",
+  "dead",
+  "unwound",
+]);
+
+function paramString(
+  searchParams: Record<string, string | string[] | undefined>,
+  key: string
+): string | null {
+  const raw = searchParams[key];
+  return typeof raw === "string" && raw.length > 0 ? raw : null;
+}
+
+export default async function DealsPage({
+  searchParams,
+}: {
+  searchParams: Record<string, string | string[] | undefined>;
+}) {
   const supabase = createSupabaseServerClient();
   const {
     data: { session },
@@ -74,8 +97,37 @@ export default async function DealsPage() {
   }
 
   const now = new Date();
-  const initialYear = now.getUTCFullYear();
-  const initialMonth = now.getUTCMonth() + 1;
+  const defaultYear = now.getUTCFullYear();
+  const defaultMonth = now.getUTCMonth() + 1;
+
+  const statusParam = paramString(searchParams, "status");
+  const storeParam = paramString(searchParams, "store");
+  const departmentParam = paramString(searchParams, "department");
+  const yearParam = paramString(searchParams, "year");
+  const monthParam = paramString(searchParams, "month");
+
+  let initialYear = defaultYear;
+  let initialMonth = defaultMonth;
+  if (yearParam) {
+    const y = parseInt(yearParam, 10);
+    if (Number.isFinite(y) && y >= 2020 && y <= 2100) initialYear = y;
+  }
+  if (monthParam) {
+    const m = parseInt(monthParam, 10);
+    if (Number.isFinite(m) && m >= 1 && m <= 12) initialMonth = m;
+  }
+
+  const initialStatus: StatusFilter =
+    statusParam && VALID_STATUS.has(statusParam)
+      ? (statusParam as StatusFilter)
+      : "all";
+
+  const initialStore =
+    storeParam && storeIds.includes(storeParam)
+      ? storeParam
+      : stores.length === 1
+        ? stores[0].id
+        : "both";
 
   // Parallel: ALL deals (paged past PostgREST 1000-row cap) + roster tables
   // Salespeople: no active filter — inactive reps' historical deals must resolve their name
@@ -116,6 +168,16 @@ export default async function DealsPage() {
   const salespeople = (spRes.data ?? []) as unknown as PersonRow[];
   const financeManagers = (fmRes.data ?? []) as unknown as PersonRow[];
 
+  const initialDepartment =
+    departmentParam &&
+    departments.some(
+      (d) =>
+        d.id === departmentParam &&
+        (initialStore === "both" || d.store_id === initialStore)
+    )
+      ? departmentParam
+      : "";
+
   // deal_salespeople: chunk IDs + page each chunk past the 1000-row cap
   const dealIds = deals.map((d) => d.id);
   const { data: dealSalespeople } = await fetchAllByIds<DealSalesperson>(
@@ -138,6 +200,9 @@ export default async function DealsPage() {
       dealSalespeople={dealSalespeople}
       initialYear={initialYear}
       initialMonth={initialMonth}
+      initialStatus={initialStatus}
+      initialStore={initialStore}
+      initialDepartment={initialDepartment}
     />
   );
 }

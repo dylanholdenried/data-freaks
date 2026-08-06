@@ -47,8 +47,10 @@ type Props = {
 
 type DeptSectionData = {
   id: string;
+  storeId: string;
   title: string;
   sold: number;
+  pendingCount: number;
   goal: number | null;
   pace: ReturnType<typeof computePaceSnapshot>;
   front: number;
@@ -227,6 +229,9 @@ export default function DashboardClient({
       const closed = mtdDeals.filter(
         (d) => d.department_id === dept.id && isClosed(d.status)
       );
+      const pendingCount = mtdDeals.filter(
+        (d) => d.department_id === dept.id && d.status === "pending"
+      ).length;
       const sold = booked.length;
       const goal = goalMap.get(dept.id) ?? null;
       const pace = computePaceSnapshot(
@@ -274,8 +279,10 @@ export default function DashboardClient({
 
       return {
         id: dept.id,
+        storeId: dept.store_id,
         title,
         sold,
+        pendingCount,
         goal,
         pace,
         front,
@@ -526,6 +533,18 @@ function DepartmentCard({
       ? Math.min(100, (pace.paceLineToday / goal!) * 100)
       : null;
 
+  const awaitingHref =
+    dept.pendingCount > 0
+      ? `/app/deals?status=pending&store=${encodeURIComponent(dept.storeId)}&department=${encodeURIComponent(dept.id)}&year=${year}&month=${month}`
+      : null;
+
+  const awaitingChip =
+    awaitingHref != null ? (
+      <Link href={awaitingHref} className="dash-awaiting" prefetch>
+        {dept.pendingCount} Awaiting Delivery
+      </Link>
+    ) : null;
+
   return (
     <section className="dash-card">
       <div className="dash-card-head">
@@ -546,12 +565,15 @@ function DepartmentCard({
           <p>
             {sold} sold MTD · no volume goal set
           </p>
-          <Link
-            href={`/app/setup?year=${year}&month=${month}#goals`}
-            className="pc-pill is-active"
-          >
-            Set Goal
-          </Link>
+          <div className="dash-no-goal-actions">
+            {awaitingChip}
+            <Link
+              href={`/app/setup?year=${year}&month=${month}#goals`}
+              className="pc-pill is-active"
+            >
+              Set Goal
+            </Link>
+          </div>
         </div>
       ) : (
         <>
@@ -576,16 +598,19 @@ function DepartmentCard({
               <span className="dash-sold-proj-arrow-spacer" aria-hidden />
               <span className="dash-sold-proj-label">Pace</span>
             </div>
-            {pace.projectionVsGoal !== null && (
-              <span
-                className={cn(
-                  "dash-sold-proj-delta",
-                  pace.projectionVsGoal >= 0 ? "is-good" : "is-warn"
-                )}
-              >
-                {formatSigned(pace.projectionVsGoal)}
-              </span>
-            )}
+            <div className="dash-sold-proj-side">
+              {pace.projectionVsGoal !== null && (
+                <span
+                  className={cn(
+                    "dash-sold-proj-delta",
+                    pace.projectionVsGoal >= 0 ? "is-good" : "is-warn"
+                  )}
+                >
+                  {formatSigned(pace.projectionVsGoal)}
+                </span>
+              )}
+              {awaitingChip}
+            </div>
           </div>
 
           <div className="dash-vol-bar">

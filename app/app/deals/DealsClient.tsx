@@ -51,6 +51,9 @@ interface Props {
   dealSalespeople: DealSalesperson[];
   initialYear: number;
   initialMonth: number;
+  initialStatus?: StatusFilter;
+  initialStore?: "both" | string;
+  initialDepartment?: string;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -189,6 +192,9 @@ export default function DealsClient({
   dealSalespeople,
   initialYear,
   initialMonth,
+  initialStatus = "all",
+  initialStore,
+  initialDepartment = "",
 }: Props) {
   // ── Local deals (updated when marking delivered without a full refetch) ──────
   const [localDeals, setLocalDeals] = useState(deals);
@@ -202,14 +208,14 @@ export default function DealsClient({
   const [deliverError, setDeliverError] = useState<string | null>(null);
 
   // ── Filter state ─────────────────────────────────────────────────────────────
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialStatus);
   const [storeFilter, setStoreFilter] = useState<"both" | string>(
-    stores.length === 1 ? stores[0].id : "both"
+    initialStore ?? (stores.length === 1 ? stores[0].id : "both")
   );
   const [allTime, setAllTime] = useState(false);
   const [yearFilter, setYearFilter] = useState(initialYear);
   const [monthFilter, setMonthFilter] = useState(initialMonth);
-  const [departmentFilter, setDepartmentFilter] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState(initialDepartment);
   const [salespersonFilter, setSalespersonFilter] = useState("");
   const [financeManagerFilter, setFinanceManagerFilter] = useState("");
   const [financeTypeFilter, setFinanceTypeFilter] = useState("");
