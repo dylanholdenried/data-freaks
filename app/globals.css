@@ -2651,6 +2651,15 @@ main:has(.da-app) + footer {
   font-weight: 600;
 }
 
+.pc-pill:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.pc-pill-row.is-loading {
+  opacity: 0.85;
+}
+
 .pc-panel {
   background: var(--da-panel);
   border: 1px solid var(--da-line);

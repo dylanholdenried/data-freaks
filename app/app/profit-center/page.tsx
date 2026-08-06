@@ -1,6 +1,5 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
-import { fetchAllByIds, fetchAllRows } from "@/lib/supabase/fetch-all";
 import {
   getDealerGroupPlanInfo,
   getEffectiveDealerGroupId,
@@ -14,15 +13,11 @@ import {
   resolveDateRange,
   type DatePreset,
 } from "@/lib/profit-center/dateRange";
-import type {
-  ProfitDeal,
-  ProfitDealSalesperson,
-  ProfitTrade,
-} from "@/lib/profit-center/aggregate";
 import {
   DEFAULT_BUY_BOX_SETTINGS,
   settingsFromDbRow,
 } from "@/lib/profit-center/buyBox";
+import { loadProfitCenterDeals } from "@/lib/profit-center/loadDeals";
 import SelectAutoGroupEmptyState from "../SelectAutoGroupEmptyState";
 import PlanNoAccessState from "../PlanNoAccessState";
 import ProfitCenterClient from "./ProfitCenterClient";
@@ -105,22 +100,8 @@ export default async function ProfitCenterPage({
     return emptyClient;
   }
 
-  const [dealsRes, spRes, deptRes, settingsRes] = await Promise.all([
-    fetchAllRows<ProfitDeal>((from, to) =>
-      supabase
-        .from("deals")
-        .select(
-          "id,sale_date,store_id,department_id,vehicle_year,vehicle_make,vehicle_model,body_style," +
-            "acquisition_source,finance_type,front_profit,back_profit,sale_price," +
-            "list_price,list_price_na,age"
-        )
-        .in("store_id", storeIds)
-        .eq("status", "closed")
-        .gte("sale_date", range.from)
-        .lte("sale_date", range.to)
-        .order("sale_date", { ascending: true })
-        .range(from, to)
-    ),
+  const [bundle, spRes, deptRes, settingsRes] = await Promise.all([
+    loadProfitCenterDeals(supabase, storeIds, range),
     supabase
       .from("salespeople")
       .select("id,name,store_id")
@@ -139,67 +120,10 @@ export default async function ProfitCenterPage({
       .maybeSingle(),
   ]);
 
-  let deals = dealsRes.data;
   let buyBoxSettings = settingsFromDbRow(settingsRes.data ?? null);
-
-  // Settings table may not exist until migration is applied
   if (settingsRes.error) {
     buyBoxSettings = DEFAULT_BUY_BOX_SETTINGS;
   }
-
-  // Fallback if list_price columns missing
-  if (dealsRes.error?.message?.includes("list_price")) {
-    const fallback = await fetchAllRows<
-      Omit<ProfitDeal, "list_price" | "list_price_na">
-    >((from, to) =>
-      supabase
-        .from("deals")
-        .select(
-          "id,sale_date,store_id,department_id,vehicle_year,vehicle_make,vehicle_model,body_style," +
-            "acquisition_source,finance_type,front_profit,back_profit,sale_price,age"
-        )
-        .in("store_id", storeIds)
-        .eq("status", "closed")
-        .gte("sale_date", range.from)
-        .lte("sale_date", range.to)
-        .order("sale_date", { ascending: true })
-        .range(from, to)
-    );
-    deals = fallback.data.map((d) => ({
-      ...d,
-      list_price: null,
-      list_price_na: true,
-    }));
-  } else if (dealsRes.error) {
-    throw new Error(dealsRes.error.message);
-  }
-
-  for (const d of deals) {
-    if (typeof d.list_price_na !== "boolean") {
-      (d as { list_price_na: boolean }).list_price_na = false;
-    }
-    if (d.department_id === undefined) {
-      (d as { department_id: string | null }).department_id = null;
-    }
-  }
-
-  const dealIds = deals.map((d) => d.id);
-  const [tradesRes, dspRes] = await Promise.all([
-    fetchAllByIds<ProfitTrade>(dealIds, (idChunk, from, to) =>
-      supabase
-        .from("trades")
-        .select("deal_id,acv,allowance")
-        .in("deal_id", idChunk)
-        .range(from, to)
-    ),
-    fetchAllByIds<ProfitDealSalesperson>(dealIds, (idChunk, from, to) =>
-      supabase
-        .from("deal_salespeople")
-        .select("deal_id,salesperson_id,share_percent")
-        .in("deal_id", idChunk)
-        .range(from, to)
-    ),
-  ]);
 
   const salespeople = (spRes.data ?? []) as Salesperson[];
   const departments = (deptRes.data ?? []) as Department[];
@@ -208,10 +132,10 @@ export default async function ProfitCenterPage({
     <ProfitCenterClient
       stores={stores}
       departments={departments}
-      deals={deals}
-      trades={tradesRes.data}
+      deals={bundle.deals}
+      trades={bundle.trades}
       salespeople={salespeople}
-      dealSalespeople={dspRes.data}
+      dealSalespeople={bundle.dealSalespeople}
       buyBoxSettings={buyBoxSettings}
       groupName={groupInfo?.name ?? ""}
       preset={preset}

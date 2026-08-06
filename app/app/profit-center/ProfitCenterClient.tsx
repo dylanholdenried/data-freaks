@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
   aggregateByDimension,
@@ -15,9 +15,15 @@ import {
 } from "@/lib/profit-center/aggregate";
 import {
   DATE_PRESET_OPTIONS,
+  resolveDateRange,
   type DatePreset,
   type DateRange,
 } from "@/lib/profit-center/dateRange";
+import {
+  rangeContains,
+  sliceDealBundleToRange,
+  type ProfitCenterDealBundle,
+} from "@/lib/profit-center/dealBundle";
 import { PRICE_BANDS } from "@/lib/profit-center/priceBands";
 import {
   columnExtent,
@@ -31,6 +37,7 @@ import {
   type BuyBoxSettings,
 } from "@/lib/profit-center/buyBox";
 import { cn } from "@/lib/utils";
+import { loadProfitCenterRange } from "./actions";
 
 type Store = { id: string; name: string };
 type Salesperson = { id: string; name: string; store_id: string };
@@ -237,17 +244,27 @@ interface Props {
   range: DateRange;
 }
 
+type CachedRangeEntry = ProfitCenterDealBundle & {
+  range: DateRange;
+};
+
+type InflightRangeResult = {
+  preset: DatePreset;
+  range: DateRange;
+  bundle: ProfitCenterDealBundle;
+};
+
 export default function ProfitCenterClient({
   stores,
   departments,
-  deals,
-  trades,
+  deals: initialDeals,
+  trades: initialTrades,
   salespeople,
-  dealSalespeople,
+  dealSalespeople: initialDealSalespeople,
   buyBoxSettings,
   groupName,
-  preset,
-  range,
+  preset: initialPreset,
+  range: initialRange,
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -256,6 +273,89 @@ export default function ProfitCenterClient({
   const [sortKey, setSortKey] = useState<SortKey>("volume");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [filters, setFilters] = useState<ProfitFilters>(EMPTY_FILTERS);
+
+  const [preset, setPreset] = useState<DatePreset>(initialPreset);
+  const [range, setRange] = useState<DateRange>(initialRange);
+  const [deals, setDeals] = useState<ProfitDeal[]>(initialDeals);
+  const [trades, setTrades] = useState<ProfitTrade[]>(initialTrades);
+  const [dealSalespeople, setDealSalespeople] = useState<
+    ProfitDealSalesperson[]
+  >(initialDealSalespeople);
+  const [dateLoading, setDateLoading] = useState(false);
+  const [dateError, setDateError] = useState<string | null>(null);
+
+  const rangeCacheRef = useRef<Map<DatePreset, CachedRangeEntry>>(
+    new Map([
+      [
+        initialPreset,
+        {
+          deals: initialDeals,
+          trades: initialTrades,
+          dealSalespeople: initialDealSalespeople,
+          range: initialRange,
+        },
+      ],
+    ])
+  );
+  const inflightRef = useRef<Map<DatePreset, Promise<InflightRangeResult>>>(
+    new Map()
+  );
+
+  const applyBundle = useCallback(
+    (nextPreset: DatePreset, nextRange: DateRange, bundle: ProfitCenterDealBundle) => {
+      setPreset(nextPreset);
+      setRange(nextRange);
+      setDeals(bundle.deals);
+      setTrades(bundle.trades);
+      setDealSalespeople(bundle.dealSalespeople);
+      rangeCacheRef.current.set(nextPreset, {
+        ...bundle,
+        range: nextRange,
+      });
+      router.replace(`${pathname}?preset=${nextPreset}`);
+    },
+    [pathname, router]
+  );
+
+  const fetchPreset = useCallback(async (targetPreset: DatePreset) => {
+    const existing = inflightRef.current.get(targetPreset);
+    if (existing) return existing;
+
+    const promise = (async (): Promise<InflightRangeResult> => {
+      const result = await loadProfitCenterRange(targetPreset);
+      if (!result.ok) {
+        throw new Error(result.error);
+      }
+      const bundle: ProfitCenterDealBundle = {
+        deals: result.deals,
+        trades: result.trades,
+        dealSalespeople: result.dealSalespeople,
+      };
+      rangeCacheRef.current.set(result.preset, {
+        ...bundle,
+        range: result.range,
+      });
+      return {
+        preset: result.preset,
+        range: result.range,
+        bundle,
+      };
+    })().finally(() => {
+      inflightRef.current.delete(targetPreset);
+    });
+
+    inflightRef.current.set(targetPreset, promise);
+    return promise;
+  }, []);
+
+  // Warm All time in the background so narrower presets can slice from it.
+  useEffect(() => {
+    if (initialPreset === "all_time") return;
+    if (rangeCacheRef.current.has("all_time")) return;
+    void fetchPreset("all_time").catch(() => {
+      // Prefetch is best-effort; user-triggered loads surface errors.
+    });
+  }, [fetchPreset, initialPreset]);
 
   const tradesByDeal = useMemo(() => buildTradesByDeal(trades), [trades]);
   const salespersonNames = useMemo(() => {
@@ -380,12 +480,60 @@ export default function ProfitCenterClient({
   }, [deals, filters.make]);
 
   const navigateDate = useCallback(
-    (nextPreset: DatePreset) => {
-      const params = new URLSearchParams();
-      params.set("preset", nextPreset);
-      router.push(`${pathname}?${params.toString()}`);
+    async (nextPreset: DatePreset) => {
+      if (nextPreset === preset || dateLoading) return;
+
+      setDateError(null);
+      const nextRange = resolveDateRange(nextPreset);
+      const cache = rangeCacheRef.current;
+
+      const exact = cache.get(nextPreset);
+      if (exact) {
+        applyBundle(nextPreset, exact.range, exact);
+        return;
+      }
+
+      for (const entry of cache.values()) {
+        if (rangeContains(entry.range, nextRange)) {
+          const sliced = sliceDealBundleToRange(entry, nextRange);
+          applyBundle(nextPreset, nextRange, sliced);
+          return;
+        }
+      }
+
+      setDateLoading(true);
+      try {
+        // Prefer an in-flight / completed All time load, then slice — one accurate fetch.
+        const allTimeCached = cache.get("all_time");
+        const allTimeInflight = inflightRef.current.get("all_time");
+        if (
+          nextPreset !== "all_time" &&
+          (allTimeCached || allTimeInflight)
+        ) {
+          const allTime = allTimeCached
+            ? {
+                range: allTimeCached.range,
+                bundle: allTimeCached as ProfitCenterDealBundle,
+              }
+            : await fetchPreset("all_time");
+          if (rangeContains(allTime.range, nextRange)) {
+            const sliced = sliceDealBundleToRange(allTime.bundle, nextRange);
+            applyBundle(nextPreset, nextRange, sliced);
+            return;
+          }
+        }
+
+        const loaded = await fetchPreset(nextPreset);
+        applyBundle(loaded.preset, loaded.range, loaded.bundle);
+      } catch (e) {
+        setDateError(
+          e instanceof Error ? e.message : "Failed to load date range."
+        );
+      } finally {
+        setDateLoading(false);
+      }
     },
-    [router, pathname]
+    [applyBundle, dateLoading, fetchPreset, preset]
   );
 
   function toggleSort(key: SortKey) {
@@ -475,13 +623,20 @@ export default function ProfitCenterClient({
       </header>
 
       <section className="pc-panel">
-        <p className="pc-panel-label">Date range</p>
-        <div className="pc-pill-row">
+        <p className="pc-panel-label">
+          Date range
+          {dateLoading ? " · Loading…" : ""}
+        </p>
+        <div
+          className={cn("pc-pill-row", dateLoading && "is-loading")}
+          aria-busy={dateLoading}
+        >
           {DATE_PRESET_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               type="button"
-              onClick={() => navigateDate(opt.value)}
+              disabled={dateLoading}
+              onClick={() => void navigateDate(opt.value)}
               className={cn(
                 "pc-pill is-soft",
                 preset === opt.value && "is-active"
@@ -491,6 +646,11 @@ export default function ProfitCenterClient({
             </button>
           ))}
         </div>
+        {dateError ? (
+          <p className="pc-meta" role="alert" style={{ marginTop: "0.5rem" }}>
+            {dateError}
+          </p>
+        ) : null}
       </section>
 
       {deptOptions.length > 0 && (
