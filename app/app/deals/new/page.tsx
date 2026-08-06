@@ -2,6 +2,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import { getAccessibleStores } from "@/lib/store-access";
+import { isStoreViewer } from "@/lib/roles";
+import { redirect } from "next/navigation";
 import NewDealForm from "./NewDealForm";
 import SelectAutoGroupEmptyState from "../../SelectAutoGroupEmptyState";
 
@@ -22,6 +24,10 @@ export default async function NewDealPage() {
     .select("id, dealer_group_id, role")
     .or(profileMatchAuthUserId(session!.user.id))
     .maybeSingle();
+
+  if (isStoreViewer(profile?.role)) {
+    redirect("/app/dashboard");
+  }
 
   const dealerGroupId = await getEffectiveDealerGroupId(profile);
 

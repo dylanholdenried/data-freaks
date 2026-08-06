@@ -35,8 +35,16 @@ end$$;
 do $$
 begin
   if not exists (select 1 from pg_type where typname = 'app_role') then
-    create type app_role as enum ('owner_admin', 'platform_admin', 'group_admin', 'store_admin');
+    create type app_role as enum ('owner_admin', 'platform_admin', 'group_admin', 'store_admin', 'store_viewer');
   end if;
+end$$;
+
+-- Ensure store_viewer exists when schema is reapplied on an older enum.
+do $$
+begin
+  alter type public.app_role add value if not exists 'store_viewer';
+exception
+  when others then null;
 end$$;
 
 do $$
@@ -152,6 +160,25 @@ as $$
               and (usa.user_id = p.user_id or usa.user_id = p.id)
           )
         )
+    );
+$$;
+
+-- True when the caller may mutate data for a store (excludes store_viewer).
+create or replace function public.can_mutate_store(p_store_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select
+    public.has_store_access(p_store_id)
+    and not exists (
+      select 1
+      from public.profiles p
+      where (p.user_id = auth.uid() or p.id = auth.uid())
+        and p.status = 'active'
+        and p.role = 'store_viewer'
     );
 $$;
 
@@ -638,14 +665,14 @@ drop policy if exists "departments_members_insert" on public.departments;
 create policy "departments_members_insert"
 on public.departments
 for insert
-with check (public.has_store_access(store_id));
+with check (public.can_mutate_store(store_id));
 
 drop policy if exists "departments_members_update" on public.departments;
 create policy "departments_members_update"
 on public.departments
 for update
-using (public.has_store_access(store_id))
-with check (public.has_store_access(store_id));
+using (public.can_mutate_store(store_id))
+with check (public.can_mutate_store(store_id));
 
 create policy "departments_demo_public_select"
 on public.departments
@@ -666,14 +693,14 @@ drop policy if exists "salespeople_members_insert" on public.salespeople;
 create policy "salespeople_members_insert"
 on public.salespeople
 for insert
-with check (public.has_store_access(store_id));
+with check (public.can_mutate_store(store_id));
 
 drop policy if exists "salespeople_members_update" on public.salespeople;
 create policy "salespeople_members_update"
 on public.salespeople
 for update
-using (public.has_store_access(store_id))
-with check (public.has_store_access(store_id));
+using (public.can_mutate_store(store_id))
+with check (public.can_mutate_store(store_id));
 
 create policy "salespeople_demo_public_select"
 on public.salespeople
@@ -694,14 +721,14 @@ drop policy if exists "acquisition_sources_members_insert" on public.acquisition
 create policy "acquisition_sources_members_insert"
 on public.acquisition_sources
 for insert
-with check (public.has_store_access(store_id));
+with check (public.can_mutate_store(store_id));
 
 drop policy if exists "acquisition_sources_members_update" on public.acquisition_sources;
 create policy "acquisition_sources_members_update"
 on public.acquisition_sources
 for update
-using (public.has_store_access(store_id))
-with check (public.has_store_access(store_id));
+using (public.can_mutate_store(store_id))
+with check (public.can_mutate_store(store_id));
 
 create policy "acquisition_sources_demo_public_select"
 on public.acquisition_sources
@@ -756,14 +783,14 @@ drop policy if exists "store_calendar_members_insert" on public.store_calendar_d
 create policy "store_calendar_members_insert"
 on public.store_calendar_days
 for insert
-with check (public.has_store_access(store_id));
+with check (public.can_mutate_store(store_id));
 
 drop policy if exists "store_calendar_members_update" on public.store_calendar_days;
 create policy "store_calendar_members_update"
 on public.store_calendar_days
 for update
-using (public.has_store_access(store_id))
-with check (public.has_store_access(store_id));
+using (public.can_mutate_store(store_id))
+with check (public.can_mutate_store(store_id));
 
 create policy "store_calendar_demo_public_select"
 on public.store_calendar_days
@@ -789,13 +816,13 @@ drop policy if exists "deals_group_members_update" on public.deals;
 create policy "deals_group_members_insert"
 on public.deals
 for insert
-with check (public.has_store_access(store_id));
+with check (public.can_mutate_store(store_id));
 
 create policy "deals_group_members_update"
 on public.deals
 for update
-using (public.has_store_access(store_id))
-with check (public.has_store_access(store_id));
+using (public.can_mutate_store(store_id))
+with check (public.can_mutate_store(store_id));
 
 create policy "deals_demo_public_select"
 on public.deals
@@ -830,7 +857,7 @@ with check (
   exists (
     select 1 from public.deals d
     where deal_salespeople.deal_id = d.id
-      and public.has_store_access(d.store_id)
+      and public.can_mutate_store(d.store_id)
   )
 );
 
@@ -841,14 +868,14 @@ using (
   exists (
     select 1 from public.deals d
     where deal_salespeople.deal_id = d.id
-      and public.has_store_access(d.store_id)
+      and public.can_mutate_store(d.store_id)
   )
 )
 with check (
   exists (
     select 1 from public.deals d
     where deal_salespeople.deal_id = d.id
-      and public.has_store_access(d.store_id)
+      and public.can_mutate_store(d.store_id)
   )
 );
 
@@ -859,7 +886,7 @@ using (
   exists (
     select 1 from public.deals d
     where deal_salespeople.deal_id = d.id
-      and public.has_store_access(d.store_id)
+      and public.can_mutate_store(d.store_id)
   )
 );
 
@@ -903,7 +930,7 @@ with check (
   exists (
     select 1 from public.deals d
     where trades.deal_id = d.id
-      and public.has_store_access(d.store_id)
+      and public.can_mutate_store(d.store_id)
   )
 );
 
@@ -914,14 +941,14 @@ using (
   exists (
     select 1 from public.deals d
     where trades.deal_id = d.id
-      and public.has_store_access(d.store_id)
+      and public.can_mutate_store(d.store_id)
   )
 )
 with check (
   exists (
     select 1 from public.deals d
     where trades.deal_id = d.id
-      and public.has_store_access(d.store_id)
+      and public.can_mutate_store(d.store_id)
   )
 );
 
@@ -932,7 +959,7 @@ using (
   exists (
     select 1 from public.deals d
     where trades.deal_id = d.id
-      and public.has_store_access(d.store_id)
+      and public.can_mutate_store(d.store_id)
   )
 );
 
@@ -971,7 +998,7 @@ with check (
   exists (
     select 1 from public.deals d
     where deal_notes.deal_id = d.id
-      and public.has_store_access(d.store_id)
+      and public.can_mutate_store(d.store_id)
   )
 );
 

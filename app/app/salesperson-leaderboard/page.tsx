@@ -1,7 +1,10 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { fetchAllByIds, fetchAllRows } from "@/lib/supabase/fetch-all";
-import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
+import {
+  getDealerGroupPlan,
+  getEffectiveDealerGroupId,
+} from "@/lib/dealer-group-context";
 import { getAccessibleStores } from "@/lib/store-access";
 import { canAccessProfitCenter } from "@/lib/plan-access";
 import { getCentralTimeParts } from "@/lib/dashboard/pace";
@@ -60,13 +63,9 @@ export default async function SalespersonLeaderboardPage({
     return <SelectAutoGroupEmptyState />;
   }
 
-  const { data: group } = await supabase
-    .from("dealer_groups")
-    .select("plan")
-    .eq("id", dealerGroupId)
-    .maybeSingle();
+  const groupPlan = await getDealerGroupPlan(dealerGroupId);
 
-  if (!canAccessProfitCenter(group?.plan)) {
+  if (!canAccessProfitCenter(groupPlan)) {
     return (
       <PlanNoAccessState
         title="Salesperson Leaderboard"

@@ -15,6 +15,7 @@ import {
   Crosshair,
 } from "lucide-react";
 import { navAccessState, type PlanTier } from "@/lib/plan-access";
+import { isViewerNavHref } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 
 const navLink =
@@ -95,40 +96,48 @@ const SECTIONS: { title: string; links: NavItem[] }[] = [
 
 export default function AppSidebarNav({
   plan = "log",
+  viewOnly = false,
 }: {
   plan?: PlanTier | string | null;
+  viewOnly?: boolean;
 }) {
   const pathname = usePathname();
 
   return (
     <nav className="space-y-5 px-3 py-4 text-xs">
-      {SECTIONS.map(({ title, links }) => (
-        <div key={title} className="space-y-1.5">
-          <p className="px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--da-muted)]">
-            {title}
-          </p>
-          <div className="space-y-1">
-            {links.map(({ href, label, icon: Icon, match }) => {
-              const locked = navAccessState(plan, href) === "locked";
-              const active = !locked && match(pathname);
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  prefetch
-                  className={cn(locked ? navLinkLocked : active ? navLinkActive : navLink)}
-                  aria-current={active ? "page" : undefined}
-                  title={locked ? `Requires ${title} plan` : undefined}
-                >
-                  <Icon className="h-3.5 w-3.5 shrink-0" />
-                  <span className="min-w-0 flex-1 truncate">{label}</span>
-                  {locked ? <Lock className="h-3 w-3 shrink-0 opacity-80" /> : null}
-                </Link>
-              );
-            })}
+      {SECTIONS.map(({ title, links }) => {
+        const visibleLinks = viewOnly
+          ? links.filter((link) => isViewerNavHref(link.href))
+          : links;
+        if (visibleLinks.length === 0) return null;
+        return (
+          <div key={title} className="space-y-1.5">
+            <p className="px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--da-muted)]">
+              {title}
+            </p>
+            <div className="space-y-1">
+              {visibleLinks.map(({ href, label, icon: Icon, match }) => {
+                const locked = navAccessState(plan, href) === "locked";
+                const active = !locked && match(pathname);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    prefetch
+                    className={cn(locked ? navLinkLocked : active ? navLinkActive : navLink)}
+                    aria-current={active ? "page" : undefined}
+                    title={locked ? `Requires ${title} plan` : undefined}
+                  >
+                    <Icon className="h-3.5 w-3.5 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate">{label}</span>
+                    {locked ? <Lock className="h-3 w-3 shrink-0 opacity-80" /> : null}
+                  </Link>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </nav>
   );
 }

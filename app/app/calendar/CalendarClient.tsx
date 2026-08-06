@@ -33,6 +33,7 @@ type Props = {
   deals: BookedDeal[];
   year: number;
   month: number;
+  readOnly?: boolean;
 };
 
 function formatYm(year: number, month: number) {
@@ -55,6 +56,7 @@ export default function CalendarClient({
   deals,
   year,
   month,
+  readOnly = false,
 }: Props) {
   const router = useRouter();
   const [clockTick, setClockTick] = useState(0);
@@ -153,6 +155,7 @@ export default function CalendarClient({
   }
 
   function handleToggle(storeId: string, dateStr: string, currentlyOpen: boolean) {
+    if (readOnly) return;
     const key = overrideKey(storeId, dateStr);
     if (pendingKey === key) return;
 
@@ -187,8 +190,9 @@ export default function CalendarClient({
           Calendar
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Click a day to mark it open or closed. Days complete automatically at
-          6:00 PM Central for pace.
+          {readOnly
+            ? "View operating days for your assigned stores. Days complete automatically at 6:00 PM Central for pace."
+            : "Click a day to mark it open or closed. Days complete automatically at 6:00 PM Central for pace."}
         </p>
 
         <div className="mt-5 flex flex-wrap items-center gap-2">
@@ -280,16 +284,22 @@ export default function CalendarClient({
               key={`${store.id}-${dateStr}`}
               type="button"
               onClick={() => handleToggle(store.id, dateStr, open)}
-              disabled={busy}
+              disabled={busy || readOnly}
               aria-pressed={open}
-              aria-label={`${dateStr}, ${open ? "open" : "closed"}. Click to toggle.`}
+              aria-label={
+                readOnly
+                  ? `${dateStr}, ${open ? "open" : "closed"}`
+                  : `${dateStr}, ${open ? "open" : "closed"}. Click to toggle.`
+              }
               className={cn(
-                "relative min-h-[5.5rem] w-full overflow-hidden rounded-md border p-1.5 text-left transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--da-blue)] disabled:opacity-70",
+                "relative min-h-[5.5rem] w-full overflow-hidden rounded-md border p-1.5 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--da-blue)] disabled:opacity-70",
+                !readOnly && "hover:brightness-110",
                 open
                   ? "border-[color-mix(in_srgb,var(--da-green)_35%,var(--da-line))] bg-[color-mix(in_srgb,var(--da-green)_18%,transparent)]"
                   : "border-[color-mix(in_srgb,var(--da-red)_35%,var(--da-line))] bg-[color-mix(in_srgb,var(--da-red)_18%,transparent)]",
                 isToday &&
-                  "outline outline-2 outline-offset-1 outline-[var(--da-amber)]"
+                  "outline outline-2 outline-offset-1 outline-[var(--da-amber)]",
+                readOnly && "cursor-default"
               )}
             >
               <div className="relative z-[1] flex items-start justify-between gap-1">

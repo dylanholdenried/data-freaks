@@ -423,16 +423,16 @@ async function syncJoinStoreAccess(
   supabase: Awaited<ReturnType<typeof requireAdminServiceClient>>,
   userId: string,
   dealerGroupId: string,
-  role: "group_admin" | "store_admin",
+  role: "group_admin" | "store_admin" | "store_viewer",
   storeIds: string[]
 ) {
   await supabase.from("user_store_access").delete().eq("user_id", userId);
 
-  if (role !== "store_admin") return;
+  if (role !== "store_admin" && role !== "store_viewer") return;
 
   const uniqueIds = Array.from(new Set(storeIds));
   if (uniqueIds.length === 0) {
-    throw new Error("Select at least one store for a store admin");
+    throw new Error("Select at least one store for this role");
   }
 
   const { data: validStores, error: storesError } = await supabase
@@ -472,7 +472,10 @@ export async function approveJoinExistingRequest(formData: FormData): Promise<{
 
   const requestId = String(formData.get("request_id") || "").trim();
   const dealerGroupId = String(formData.get("dealer_group_id") || "").trim();
-  const role = String(formData.get("role") || "store_admin") as "group_admin" | "store_admin";
+  const role = String(formData.get("role") || "store_admin") as
+    | "group_admin"
+    | "store_admin"
+    | "store_viewer";
   const storeIds = formData
     .getAll("store_ids")
     .map((v) => String(v).trim())
@@ -480,11 +483,11 @@ export async function approveJoinExistingRequest(formData: FormData): Promise<{
 
   if (!requestId) return { saved: false, error: "Request id is required" };
   if (!dealerGroupId) return { saved: false, error: "Select an auto group" };
-  if (role !== "group_admin" && role !== "store_admin") {
+  if (role !== "group_admin" && role !== "store_admin" && role !== "store_viewer") {
     return { saved: false, error: "Invalid role" };
   }
-  if (role === "store_admin" && storeIds.length === 0) {
-    return { saved: false, error: "Select at least one store for a store admin" };
+  if ((role === "store_admin" || role === "store_viewer") && storeIds.length === 0) {
+    return { saved: false, error: "Select at least one store for this role" };
   }
 
   const { data: request, error: requestError } = await supabase

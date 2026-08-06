@@ -16,7 +16,7 @@ export type AccessibleStore = {
 /**
  * Resolve stores the current profile may view/edit.
  * - owner/platform_admin / group_admin → all stores in the effective dealer group
- * - store_admin → stores listed in user_store_access (within that group)
+ * - store_admin / store_viewer → stores listed in user_store_access (within that group)
  */
 export async function getAccessibleStores(
   supabase: SupabaseClient,
@@ -41,7 +41,7 @@ export async function getAccessibleStores(
     return (data ?? []) as AccessibleStore[];
   }
 
-  // store_admin (and any other non–group-wide role): only assigned stores
+  // store_admin / store_viewer (and any other non–group-wide role): only assigned stores
   // Live table keys rows by auth/profile user_id (not profile_id).
   const accessUserId = profile.id;
   const { data: accessRows, error: accessError } = await supabase

@@ -1,7 +1,12 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
-import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
+import {
+  getDealerGroupPlan,
+  getEffectiveDealerGroupId,
+} from "@/lib/dealer-group-context";
 import { canAccessBuyBox } from "@/lib/plan-access";
+import { isStoreViewer } from "@/lib/roles";
+import { redirect } from "next/navigation";
 import PlanNoAccessState from "../PlanNoAccessState";
 import SelectAutoGroupEmptyState from "../SelectAutoGroupEmptyState";
 
@@ -17,19 +22,19 @@ export default async function BuyBoxPage() {
     .or(profileMatchAuthUserId(session!.user.id))
     .maybeSingle();
 
+  if (isStoreViewer(profile?.role)) {
+    redirect("/app/dashboard");
+  }
+
   const dealerGroupId = await getEffectiveDealerGroupId(profile);
 
   if (!dealerGroupId || !profile) {
     return <SelectAutoGroupEmptyState />;
   }
 
-  const { data: group } = await supabase
-    .from("dealer_groups")
-    .select("plan")
-    .eq("id", dealerGroupId)
-    .maybeSingle();
+  const groupPlan = await getDealerGroupPlan(dealerGroupId);
 
-  if (!canAccessBuyBox(group?.plan)) {
+  if (!canAccessBuyBox(groupPlan)) {
     return (
       <PlanNoAccessState
         title="Buy-Box"

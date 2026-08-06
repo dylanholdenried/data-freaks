@@ -8,10 +8,12 @@ import {
   isAutoGroupUserRole,
   isOwnerAdmin,
   isPlatformStaff,
+  isStoreScopedRole,
+  type AutoGroupUserRole,
 } from "@/lib/roles";
 import { generatePasswordSetupLink } from "@/lib/auth/password-setup-link";
 
-type AppRole = "group_admin" | "store_admin";
+type AppRole = AutoGroupUserRole;
 type UserStatus = "invited" | "requested" | "active" | "disabled";
 type PlatformTargetRole = "platform_admin" | "owner_admin";
 
@@ -92,7 +94,7 @@ async function syncUserStoreAccess(
     throw new Error(`Clear store access failed: ${deleteError.message}`);
   }
 
-  if (role !== "store_admin") {
+  if (!isStoreScopedRole(role)) {
     return;
   }
 
@@ -199,11 +201,11 @@ export async function updateAdminUser(formData: FormData) {
   if (!dealer_group_id) {
     return { saved: false as const, error: "Auto group is required" };
   }
-  if (role !== "group_admin" && role !== "store_admin") {
+  if (role !== "group_admin" && role !== "store_admin" && role !== "store_viewer") {
     return { saved: false as const, error: "Invalid role" };
   }
-  if (role === "store_admin" && storeIds.length === 0) {
-    return { saved: false as const, error: "Select at least one store for a store admin" };
+  if (isStoreScopedRole(role) && storeIds.length === 0) {
+    return { saved: false as const, error: "Select at least one store for this role" };
   }
 
   const { data: targetGroup } = await service

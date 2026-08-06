@@ -1,9 +1,14 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { fetchAllByIds, fetchAllRows } from "@/lib/supabase/fetch-all";
-import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
+import {
+  getDealerGroupPlanInfo,
+  getEffectiveDealerGroupId,
+} from "@/lib/dealer-group-context";
 import { getAccessibleStores } from "@/lib/store-access";
 import { canAccessProfitCenter } from "@/lib/plan-access";
+import { isStoreViewer } from "@/lib/roles";
+import { redirect } from "next/navigation";
 import {
   ACTIVE_DATE_PRESETS,
   resolveDateRange,
@@ -49,19 +54,19 @@ export default async function ProfitCenterPage({
     .or(profileMatchAuthUserId(session!.user.id))
     .maybeSingle();
 
+  if (isStoreViewer(profile?.role)) {
+    redirect("/app/dashboard");
+  }
+
   const dealerGroupId = await getEffectiveDealerGroupId(profile);
 
   if (!dealerGroupId || !profile) {
     return <SelectAutoGroupEmptyState />;
   }
 
-  const { data: group } = await supabase
-    .from("dealer_groups")
-    .select("plan, name")
-    .eq("id", dealerGroupId)
-    .maybeSingle();
+  const groupInfo = await getDealerGroupPlanInfo(dealerGroupId);
 
-  if (!canAccessProfitCenter(group?.plan)) {
+  if (!canAccessProfitCenter(groupInfo?.plan)) {
     return (
       <PlanNoAccessState
         title="Profit Center"
@@ -90,7 +95,7 @@ export default async function ProfitCenterPage({
       salespeople={[]}
       dealSalespeople={[]}
       buyBoxSettings={DEFAULT_BUY_BOX_SETTINGS}
-      groupName={group?.name ?? ""}
+      groupName={groupInfo?.name ?? ""}
       preset={preset}
       range={range}
     />
@@ -208,7 +213,7 @@ export default async function ProfitCenterPage({
       salespeople={salespeople}
       dealSalespeople={dspRes.data}
       buyBoxSettings={buyBoxSettings}
-      groupName={group?.name ?? ""}
+      groupName={groupInfo?.name ?? ""}
       preset={preset}
       range={range}
     />

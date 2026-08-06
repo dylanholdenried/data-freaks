@@ -46,3 +46,38 @@ export async function listDealerGroupsForAdmin(): Promise<DealerGroupOption[]> {
 
   return (data ?? []) as DealerGroupOption[];
 }
+
+/** Plan (and name) for a dealer group — service client bypasses home-group-only RLS. */
+export type DealerGroupPlanInfo = {
+  plan: string | null;
+  name: string | null;
+};
+
+export async function getDealerGroupPlanInfo(
+  groupId: string | null | undefined
+): Promise<DealerGroupPlanInfo | null> {
+  if (!groupId) return null;
+
+  const service = createSupabaseServiceClient();
+  const { data, error } = await service
+    .from("dealer_groups")
+    .select("plan, name")
+    .eq("id", groupId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error loading dealer_groups plan info", error);
+    return null;
+  }
+
+  if (!data) return null;
+
+  return { plan: data.plan ?? null, name: data.name ?? null };
+}
+
+export async function getDealerGroupPlan(
+  groupId: string | null | undefined
+): Promise<string | null> {
+  const info = await getDealerGroupPlanInfo(groupId);
+  return info?.plan ?? null;
+}

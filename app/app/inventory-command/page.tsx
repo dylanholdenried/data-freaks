@@ -1,8 +1,13 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
-import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
+import {
+  getDealerGroupPlan,
+  getEffectiveDealerGroupId,
+} from "@/lib/dealer-group-context";
 import { getAccessibleStores } from "@/lib/store-access";
 import { canAccessInventoryCommand } from "@/lib/plan-access";
+import { isStoreViewer } from "@/lib/roles";
+import { redirect } from "next/navigation";
 import type {
   InvDailyMetrics,
   InvMovement,
@@ -30,19 +35,19 @@ export default async function InventoryCommandPage({
     .or(profileMatchAuthUserId(session!.user.id))
     .maybeSingle();
 
+  if (isStoreViewer(profile?.role)) {
+    redirect("/app/dashboard");
+  }
+
   const dealerGroupId = await getEffectiveDealerGroupId(profile);
 
   if (!dealerGroupId || !profile) {
     return <SelectAutoGroupEmptyState />;
   }
 
-  const { data: group } = await supabase
-    .from("dealer_groups")
-    .select("plan")
-    .eq("id", dealerGroupId)
-    .maybeSingle();
+  const groupPlan = await getDealerGroupPlan(dealerGroupId);
 
-  if (!canAccessInventoryCommand(group?.plan)) {
+  if (!canAccessInventoryCommand(groupPlan)) {
     return (
       <PlanNoAccessState
         title="Inventory Command"

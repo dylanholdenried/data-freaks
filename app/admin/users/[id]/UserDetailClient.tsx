@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatProfileName, formatRoleLabel, formatStatusLabel } from "@/lib/profile-display";
+import { isAutoGroupUserRole } from "@/lib/roles";
 import {
   disableAdminUser,
   resendAdminUserInvite,
@@ -58,7 +59,7 @@ export default function UserDetailClient({
 }: Props) {
   const displayName = formatProfileName(user.first_name, user.last_name);
   const isPlatformTarget = user.role === "platform_admin" || user.role === "owner_admin";
-  const isAutoGroup = user.role === "group_admin" || user.role === "store_admin";
+  const isAutoGroup = isAutoGroupUserRole(user.role);
   const [selectedGroupId, setSelectedGroupId] = useState(user.dealer_group_id ?? groups[0]?.id ?? "");
 
   const groupStores = useMemo(
@@ -164,7 +165,13 @@ export default function UserDetailClient({
               <StoreAccessFields
                 key={selectedGroupId}
                 stores={groupStores}
-                defaultRole={user.role === "group_admin" ? "group_admin" : "store_admin"}
+                defaultRole={
+                  user.role === "group_admin"
+                    ? "group_admin"
+                    : user.role === "store_viewer"
+                      ? "store_viewer"
+                      : "store_admin"
+                }
                 defaultStoreIds={
                   selectedGroupId === user.dealer_group_id ? assignedStoreIds : []
                 }

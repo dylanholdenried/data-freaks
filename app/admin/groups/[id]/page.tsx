@@ -16,7 +16,7 @@ import { DEFAULT_BUY_BOX_SETTINGS } from "@/lib/profit-center/buyBox";
 import { openStoreViewForGroupAction } from "@/app/app/group-actions";
 import { requireAdminServiceClient } from "@/app/admin/admin-data";
 import { formatProfileName, formatRoleLabel, formatStatusLabel } from "@/lib/profile-display";
-import { isPlatformStaff } from "@/lib/roles";
+import { isPlatformStaff, isStoreScopedRole } from "@/lib/roles";
 import FormWithSaveToast from "./FormWithSaveToast";
 import AddUserModal from "./AddUserModal";
 
@@ -423,7 +423,7 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
                           <div className="mt-0.5 text-[11px] text-muted-foreground">
                             Managed as platform staff
                           </div>
-                        ) : user.role === "store_admin" && assignedNames.length > 0 ? (
+                        ) : isStoreScopedRole(user.role) && assignedNames.length > 0 ? (
                           <div className="mt-0.5 text-[11px] text-muted-foreground">
                             Stores: {assignedNames.join(", ")}
                           </div>

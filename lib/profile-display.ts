@@ -18,6 +18,8 @@ export function formatRoleLabel(role: string | null | undefined): string {
       return "Group Admin";
     case "store_admin":
       return "Store Admin";
+    case "store_viewer":
+      return "View Only";
     case "salesperson":
       return "Salesperson";
     case "finance_manager":

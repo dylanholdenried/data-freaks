@@ -4,11 +4,12 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import {
+  getDealerGroupPlan,
   getEffectiveDealerGroupId,
   listDealerGroupsForAdmin,
 } from "@/lib/dealer-group-context";
 import { formatProfileName, formatRoleLabel } from "@/lib/profile-display";
-import { isPlatformStaff } from "@/lib/roles";
+import { isPlatformStaff, isStoreViewer } from "@/lib/roles";
 import { Button } from "@/components/ui/button";
 import { BarChart3, Shield } from "lucide-react";
 import { DaAppThemeProvider } from "@/components/theme/theme-context";
@@ -41,6 +42,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   }
 
   const isPlatformAdmin = isPlatformStaff(profile.role);
+  const viewOnly = isStoreViewer(profile.role);
   const groups = isPlatformAdmin ? await listDealerGroupsForAdmin() : [];
   const selectedGroupId = isPlatformAdmin
     ? await getEffectiveDealerGroupId(profile)
@@ -50,15 +52,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const displayName = formatProfileName(profile.first_name, profile.last_name);
   const roleLabel = formatRoleLabel(profile.role);
 
-  let groupPlan: string | null = null;
-  if (selectedGroupId) {
-    const { data: groupRow } = await supabase
-      .from("dealer_groups")
-      .select("plan")
-      .eq("id", selectedGroupId)
-      .maybeSingle();
-    groupPlan = groupRow?.plan ?? null;
-  }
+  const groupPlan = await getDealerGroupPlan(selectedGroupId);
 
   return (
     <DaAppThemeProvider>
@@ -77,7 +71,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               <AutoGroupSwitcher groups={groups} selectedGroupId={selectedGroupId} />
             </div>
           ) : null}
-          <AppSidebarNav plan={groupPlan} />
+          <AppSidebarNav plan={groupPlan} viewOnly={viewOnly} />
           <div className="mt-auto space-y-3 p-3">
             {isPlatformAdmin ? (
               <Link
@@ -90,13 +84,19 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               </Link>
             ) : null}
             <ThemeToggle variant="sidebar" />
-            <Link
-              href="/app/deals/new"
-              prefetch
-              className="flex items-center justify-center rounded-xl bg-[var(--da-blue)] px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-black/25"
-            >
-              + New Deal
-            </Link>
+            {!viewOnly ? (
+              <Link
+                href="/app/deals/new"
+                prefetch
+                className="flex items-center justify-center rounded-xl bg-[var(--da-blue)] px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-black/25"
+              >
+                + New Deal
+              </Link>
+            ) : (
+              <div className="rounded-xl border border-[var(--da-line)] bg-[var(--da-panel-2)] px-3 py-2 text-[11px] text-[var(--da-muted)]">
+                View only — you can browse assigned stores but cannot make changes.
+              </div>
+            )}
             <div className="rounded-xl bg-[var(--da-panel-2)] px-3 py-2 text-[11px] text-[var(--da-muted)]">
               <div className="font-medium text-[var(--da-text)]">{displayName}</div>
               <div>{roleLabel}</div>
@@ -118,6 +118,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
                   groups={groups}
                   selectedGroupId={selectedGroupId}
                   plan={groupPlan}
+                  viewOnly={viewOnly}
                 />
               </div>
               <div className="flex items-center gap-3 text-xs text-[var(--da-muted)]">

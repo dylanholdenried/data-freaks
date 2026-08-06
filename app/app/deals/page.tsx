@@ -4,6 +4,7 @@ import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { fetchAllByIds, fetchAllRows } from "@/lib/supabase/fetch-all";
 import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import { getAccessibleStores } from "@/lib/store-access";
+import { isStoreViewer } from "@/lib/roles";
 import DealsClient from "./DealsClient";
 import SelectAutoGroupEmptyState from "../SelectAutoGroupEmptyState";
 
@@ -85,11 +86,17 @@ export default async function DealsPage({
         </section>
         <div className="app-panel p-8 text-center">
           <p className="text-sm text-muted-foreground">
-            No stores configured. Go to{" "}
-            <Link href="/app/setup" className="text-blue-600 underline">
-              Setup &amp; Config
-            </Link>{" "}
-            to add your first store.
+            {isStoreViewer(profile.role)
+              ? "No stores are assigned to your account. Contact a platform admin if you need access."
+              : (
+                <>
+                  No stores configured. Go to{" "}
+                  <Link href="/app/setup" className="text-blue-600 underline">
+                    Setup &amp; Config
+                  </Link>{" "}
+                  to add your first store.
+                </>
+              )}
           </p>
         </div>
       </div>
@@ -203,6 +210,7 @@ export default async function DealsPage({
       initialStatus={initialStatus}
       initialStore={initialStore}
       initialDepartment={initialDepartment}
+      viewOnly={isStoreViewer(profile.role)}
     />
   );
 }

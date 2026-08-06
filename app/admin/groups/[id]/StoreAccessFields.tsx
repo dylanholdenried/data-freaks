@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
+import { isStoreScopedRole, type AutoGroupUserRole } from "@/lib/roles";
 
 type StoreOption = { id: string; name: string };
 
 type Props = {
   stores: StoreOption[];
-  defaultRole?: "store_admin" | "group_admin";
+  defaultRole?: AutoGroupUserRole;
   defaultStoreIds?: string[];
   /** When true, include a name="role" select; otherwise parent provides role. */
   includeRoleSelect?: boolean;
@@ -23,7 +24,8 @@ export default function StoreAccessFields({
   roleSelectName = "role",
   idPrefix = "user",
 }: Props) {
-  const [role, setRole] = useState<"store_admin" | "group_admin">(defaultRole);
+  const [role, setRole] = useState<AutoGroupUserRole>(defaultRole);
+  const needsStores = isStoreScopedRole(role);
 
   return (
     <div className="space-y-3 sm:col-span-2 lg:col-span-full">
@@ -39,21 +41,22 @@ export default function StoreAccessFields({
             id={`${idPrefix}_role`}
             name={roleSelectName}
             value={role}
-            onChange={(e) => setRole(e.target.value as "store_admin" | "group_admin")}
+            onChange={(e) => setRole(e.target.value as AutoGroupUserRole)}
             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           >
             <option value="store_admin">Store admin</option>
+            <option value="store_viewer">View Only</option>
             <option value="group_admin">Group admin</option>
           </select>
         </div>
       ) : null}
 
-      {role === "store_admin" ? (
+      {needsStores ? (
         <fieldset className="rounded-md border border-border p-3">
           <legend className="px-1 text-xs font-medium text-muted-foreground">Assigned stores</legend>
           {stores.length === 0 ? (
             <p className="text-xs text-muted-foreground">
-              Add stores to this auto group before assigning a store admin.
+              Add stores to this auto group before assigning store access.
             </p>
           ) : (
             <div className="grid gap-2 sm:grid-cols-2">
@@ -72,7 +75,9 @@ export default function StoreAccessFields({
             </div>
           )}
           <p className="mt-2 text-[11px] text-muted-foreground">
-            Store admins can only view and edit the stores checked above.
+            {role === "store_viewer"
+              ? "View Only users can see assigned stores but cannot add, edit, or remove anything."
+              : "Store admins can only view and edit the stores checked above."}
           </p>
         </fieldset>
       ) : (
@@ -102,8 +107,8 @@ export function PhoneField({
         name="phone"
         type="tel"
         defaultValue={defaultValue}
-        placeholder="(555) 555-5555"
-        autoComplete="tel"
+        placeholder="Optional"
+        className="h-10"
       />
     </div>
   );

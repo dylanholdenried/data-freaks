@@ -43,6 +43,7 @@ type Props = {
   isFutureMonth: boolean;
   currentYear: number;
   currentMonth: number;
+  viewOnly?: boolean;
 };
 
 type DeptSectionData = {
@@ -139,6 +140,7 @@ export default function DashboardClient({
   isFutureMonth,
   currentYear,
   currentMonth,
+  viewOnly = false,
 }: Props) {
   const router = useRouter();
   const [selectedStore, setSelectedStore] = useState<"all" | string>(
@@ -487,6 +489,7 @@ export default function DashboardClient({
                 dept={dept}
                 year={year}
                 month={month}
+                viewOnly={viewOnly}
               />
             ))}
           </div>
@@ -506,10 +509,12 @@ function DepartmentCard({
   dept,
   year,
   month,
+  viewOnly = false,
 }: {
   dept: DeptSectionData;
   year: number;
   month: number;
+  viewOnly?: boolean;
 }) {
   const { pace, goal, sold } = dept;
   const hasGoal = goal !== null && goal > 0;
@@ -567,12 +572,14 @@ function DepartmentCard({
           </p>
           <div className="dash-no-goal-actions">
             {awaitingChip}
-            <Link
-              href={`/app/setup?year=${year}&month=${month}#goals`}
-              className="pc-pill is-active"
-            >
-              Set Goal
-            </Link>
+            {!viewOnly ? (
+              <Link
+                href={`/app/setup?year=${year}&month=${month}#goals`}
+                className="pc-pill is-active"
+              >
+                Set Goal
+              </Link>
+            ) : null}
           </div>
         </div>
       ) : (

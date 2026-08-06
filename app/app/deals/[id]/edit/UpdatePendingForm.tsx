@@ -59,6 +59,8 @@ interface Props {
   dealId: string;
   dealStatus: string;
   canReopen: boolean;
+  /** Force full read-only mode (e.g. store_viewer). */
+  readOnly?: boolean;
   events: DealEventRow[];
   // Step 1 fields — editable until closed
   stockNumber: string;
@@ -206,6 +208,7 @@ export default function UpdatePendingForm({
   dealId,
   dealStatus: initialDealStatus,
   canReopen,
+  readOnly = false,
   events,
   // Destructure with "initial" aliases so state can own the canonical names
   stockNumber: initialStockNumber,
@@ -1029,7 +1032,9 @@ export default function UpdatePendingForm({
   }
 
   // closed/unwound/dead deals are read-only until reopened.
+  // store_viewer (and similar) always view-only.
   const isLocked =
+    readOnly ||
     dealStatus === "closed" ||
     dealStatus === "unwound" ||
     dealStatus === "dead" ||
@@ -1115,7 +1120,7 @@ export default function UpdatePendingForm({
             </p>
           </div>
           {!isLocked && renderActionButtons()}
-          {isLocked && canReopen && (
+          {isLocked && canReopen && !readOnly && (
             <Button
               type="button"
               variant="outline"

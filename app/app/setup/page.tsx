@@ -3,6 +3,8 @@ import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import { getAccessibleStores } from "@/lib/store-access";
 import { getCentralTimeParts } from "@/lib/dashboard/pace";
+import { isStoreViewer } from "@/lib/roles";
+import { redirect } from "next/navigation";
 import SetupClient from "./SetupClient";
 import SelectAutoGroupEmptyState from "../SelectAutoGroupEmptyState";
 
@@ -40,6 +42,10 @@ export default async function SetupPage({
     .select("id, dealer_group_id, role, onboarding_checklist")
     .or(profileMatchAuthUserId(session!.user.id))
     .maybeSingle();
+
+  if (isStoreViewer(profile?.role)) {
+    redirect("/app/dashboard");
+  }
 
   const dealerGroupId = await getEffectiveDealerGroupId(profile);
 

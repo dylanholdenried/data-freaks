@@ -4,6 +4,7 @@ import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import { getAccessibleStores } from "@/lib/store-access";
 import { getCentralTimeParts } from "@/lib/dashboard/pace";
+import { isStoreViewer } from "@/lib/roles";
 import DashboardClient from "./DashboardClient";
 import SelectAutoGroupEmptyState from "../SelectAutoGroupEmptyState";
 
@@ -84,6 +85,7 @@ export default async function DashboardPage({
     isFutureMonth,
     currentYear: ct.year,
     currentMonth: ct.month,
+    viewOnly: isStoreViewer(profile.role),
   };
 
   if (storeIds.length === 0) {
@@ -146,6 +148,7 @@ export default async function DashboardPage({
       isFutureMonth={isFutureMonth}
       currentYear={ct.year}
       currentMonth={ct.month}
+      viewOnly={isStoreViewer(profile.role)}
     />
   );
 }

@@ -54,6 +54,7 @@ interface Props {
   initialStatus?: StatusFilter;
   initialStore?: "both" | string;
   initialDepartment?: string;
+  viewOnly?: boolean;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -195,6 +196,7 @@ export default function DealsClient({
   initialStatus = "all",
   initialStore,
   initialDepartment = "",
+  viewOnly = false,
 }: Props) {
   // ── Local deals (updated when marking delivered without a full refetch) ──────
   const [localDeals, setLocalDeals] = useState(deals);
@@ -411,14 +413,17 @@ export default function DealsClient({
               Sales Registry
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              {deals.length} total deals · click any row to open and update
+              {deals.length} total deals · click any row to{" "}
+              {viewOnly ? "view details" : "open and update"}
             </p>
           </div>
-          <Button asChild>
-            <Link href="/app/deals/new" prefetch>
-              + New Deal
-            </Link>
-          </Button>
+          {!viewOnly ? (
+            <Button asChild>
+              <Link href="/app/deals/new" prefetch>
+                + New Deal
+              </Link>
+            </Button>
+          ) : null}
         </div>
       </section>
 
@@ -624,7 +629,7 @@ export default function DealsClient({
               const totalGross = hasGross
                 ? (deal.front_profit ?? 0) + (deal.back_profit ?? 0)
                 : null;
-              const showDeliver = canMarkDelivered(deal.status);
+              const showDeliver = !viewOnly && canMarkDelivered(deal.status);
 
               return (
                 <div

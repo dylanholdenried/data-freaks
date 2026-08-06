@@ -6,11 +6,11 @@ import { redirect } from "next/navigation";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { requireAdminServiceClient } from "@/app/admin/admin-data";
 import { sendInviteEmail, sendPasswordResetEmail } from "@/lib/email/resend";
-import { isPlatformStaff } from "@/lib/roles";
+import { isPlatformStaff, isStoreScopedRole, type AutoGroupUserRole } from "@/lib/roles";
 import { generatePasswordSetupLink } from "@/lib/auth/password-setup-link";
 
 type PlanTier = "log" | "analyze" | "advise";
-type AppRole = "group_admin" | "store_admin";
+type AppRole = AutoGroupUserRole;
 type UserStatus = "invited" | "requested" | "active" | "disabled";
 
 function revalidateGroup(groupId?: string) {
@@ -208,11 +208,11 @@ export async function createUserInGroup(formData: FormData) {
   if (!dealer_group_id || !email) {
     throw new Error("Email and group are required");
   }
-  if (role !== "group_admin" && role !== "store_admin") {
+  if (role !== "group_admin" && role !== "store_admin" && role !== "store_viewer") {
     throw new Error("Invalid role");
   }
-  if (role === "store_admin" && storeIds.length === 0) {
-    throw new Error("Select at least one store for a store admin");
+  if (isStoreScopedRole(role) && storeIds.length === 0) {
+    throw new Error("Select at least one store for this role");
   }
 
   // One email → one account. If they already exist, move/update into this group.
@@ -384,16 +384,16 @@ export async function updateUserInGroup(formData: FormData) {
   if (!id || !user_id || !current_dealer_group_id || !dealer_group_id || !email) {
     throw new Error("User id, auth id, email, and group are required");
   }
-  if (role !== "group_admin" && role !== "store_admin") {
+  if (role !== "group_admin" && role !== "store_admin" && role !== "store_viewer") {
     throw new Error("Invalid role");
   }
 
   const movingGroups = current_dealer_group_id !== dealer_group_id;
 
   // Store checkboxes on this page only list the current group's stores.
-  // When moving groups as store_admin, assign stores on the destination group page.
-  if (role === "store_admin" && storeIds.length === 0 && !movingGroups) {
-    throw new Error("Select at least one store for a store admin");
+  // When moving groups as store-scoped, assign stores on the destination group page.
+  if (isStoreScopedRole(role) && storeIds.length === 0 && !movingGroups) {
+    throw new Error("Select at least one store for this role");
   }
 
   const { data: existing } = await service
@@ -480,7 +480,7 @@ async function syncUserStoreAccess(
     throw new Error(`Clear store access failed: ${deleteError.message}`);
   }
 
-  if (role !== "store_admin") {
+  if (!isStoreScopedRole(role)) {
     return;
   }
 

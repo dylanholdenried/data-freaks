@@ -6,7 +6,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import { assertStoreAccess } from "@/lib/store-access";
-import { isPlatformStaff } from "@/lib/roles";
+import { canMutateAppData, isPlatformStaff } from "@/lib/roles";
 
 export async function signOut() {
   const supabase = createSupabaseServerClient();
@@ -56,6 +56,10 @@ export async function createDepartment(formData: FormData) {
     .or(profileMatchAuthUserId(session.user.id))
     .maybeSingle();
 
+  if (!canMutateAppData(profile?.role)) {
+    throw new Error("View only access — changes are not allowed");
+  }
+
   const storeId = String(formData.get("store_id") || "").trim();
   if (!(await assertStoreAccess(supabase, profile, storeId))) {
     throw new Error("Store not allowed");
@@ -80,6 +84,10 @@ export async function createSalesperson(formData: FormData) {
     .select("id, dealer_group_id, role")
     .or(profileMatchAuthUserId(session.user.id))
     .maybeSingle();
+
+  if (!canMutateAppData(profile?.role)) {
+    throw new Error("View only access — changes are not allowed");
+  }
 
   const storeId = String(formData.get("store_id") || "").trim();
   if (!(await assertStoreAccess(supabase, profile, storeId))) {
@@ -107,6 +115,10 @@ export async function createSource(formData: FormData) {
     .or(profileMatchAuthUserId(session.user.id))
     .maybeSingle();
 
+  if (!canMutateAppData(profile?.role)) {
+    throw new Error("View only access — changes are not allowed");
+  }
+
   const storeId = String(formData.get("store_id") || "").trim();
   if (!(await assertStoreAccess(supabase, profile, storeId))) {
     throw new Error("Store not allowed");
@@ -131,6 +143,10 @@ export async function toggleCalendarDay(storeId: string, date: string, isWorking
     .select("id, dealer_group_id, role")
     .or(profileMatchAuthUserId(session.user.id))
     .maybeSingle();
+
+  if (!canMutateAppData(profile?.role)) {
+    throw new Error("View only access — changes are not allowed");
+  }
 
   const sid = String(storeId || "").trim();
   const dateStr = String(date || "").trim().slice(0, 10);
@@ -180,6 +196,10 @@ export async function createDeal(formData: FormData) {
     .select("id,dealer_group_id,role")
     .or(profileMatchAuthUserId(session.user.id))
     .maybeSingle();
+
+  if (!canMutateAppData(profile?.role)) {
+    throw new Error("View only access — changes are not allowed");
+  }
 
   const dealerGroupId = await getEffectiveDealerGroupId(profile);
   if (!profile || !dealerGroupId) redirect("/app/dashboard");

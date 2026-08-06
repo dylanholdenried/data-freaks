@@ -4,6 +4,7 @@ import { useEffect, useId, useState } from "react";
 import Link from "next/link";
 import { Lock, Menu, X } from "lucide-react";
 import { navAccessState, type PlanTier } from "@/lib/plan-access";
+import { isViewerNavHref } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import AutoGroupSwitcher, { type AutoGroupOption } from "./AutoGroupSwitcher";
 
@@ -46,11 +47,13 @@ export default function AppMobileMenu({
   groups = [],
   selectedGroupId = null,
   plan = "log",
+  viewOnly = false,
 }: {
   isPlatformAdmin?: boolean;
   groups?: AutoGroupOption[];
   selectedGroupId?: string | null;
   plan?: PlanTier | string | null;
+  viewOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const titleId = useId();
@@ -126,29 +129,35 @@ export default function AppMobileMenu({
               </div>
             ) : null}
             <nav className="flex-1 space-y-5 overflow-y-auto p-3">
-              {SECTIONS.map(({ title, links }) => (
-                <div key={title} className="space-y-1">
-                  <p className="px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                    {title}
-                  </p>
-                  {links.map(({ href, label }) => {
-                    const locked = navAccessState(plan, href) === "locked";
-                    return (
-                      <Link
-                        key={href}
-                        href={href}
-                        className={cn(locked ? linkLocked : linkClass)}
-                        prefetch
-                        onClick={close}
-                        title={locked ? `Requires ${title} plan` : undefined}
-                      >
-                        <span className="min-w-0 flex-1 truncate">{label}</span>
-                        {locked ? <Lock className="h-3.5 w-3.5 shrink-0 opacity-80" /> : null}
-                      </Link>
-                    );
-                  })}
-                </div>
-              ))}
+              {SECTIONS.map(({ title, links }) => {
+                const visibleLinks = viewOnly
+                  ? links.filter((link) => isViewerNavHref(link.href))
+                  : links;
+                if (visibleLinks.length === 0) return null;
+                return (
+                  <div key={title} className="space-y-1">
+                    <p className="px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                      {title}
+                    </p>
+                    {visibleLinks.map(({ href, label }) => {
+                      const locked = navAccessState(plan, href) === "locked";
+                      return (
+                        <Link
+                          key={href}
+                          href={href}
+                          className={cn(locked ? linkLocked : linkClass)}
+                          prefetch
+                          onClick={close}
+                          title={locked ? `Requires ${title} plan` : undefined}
+                        >
+                          <span className="min-w-0 flex-1 truncate">{label}</span>
+                          {locked ? <Lock className="h-3.5 w-3.5 shrink-0 opacity-80" /> : null}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                );
+              })}
             </nav>
             {isPlatformAdmin ? (
               <div className="border-t border-border p-3">
