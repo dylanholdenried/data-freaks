@@ -1,4 +1,8 @@
 import { PRICE_BANDS, priceBandForSalePrice } from "./priceBands";
+import {
+  ODOMETER_BANDS,
+  odometerBandForMiles,
+} from "./odometerBands";
 import { dealTradeHold, lostGross, mean, sum } from "./metrics";
 import { inferTruckClass, TRUCK_CLASS_LABELS } from "./truckClass";
 
@@ -19,6 +23,7 @@ export type ProfitDeal = {
   list_price: number | null;
   list_price_na: boolean;
   age: number | null;
+  odometer: number | null;
 };
 
 export type ProfitTrade = {
@@ -38,6 +43,7 @@ export type Dimension =
   | "model"
   | "year"
   | "price"
+  | "odometer"
   | "acquisition"
   | "body_style"
   | "truck_class"
@@ -101,6 +107,11 @@ function dimensionKey(
     case "price": {
       const band = priceBandForSalePrice(deal.sale_price);
       if (!band) return [{ key: "(no price)", label: "(No sale price)" }];
+      return [{ key: band.id, label: band.label }];
+    }
+    case "odometer": {
+      const band = odometerBandForMiles(deal.odometer);
+      if (!band) return [{ key: "(no odometer)", label: "(No odometer)" }];
       return [{ key: band.id, label: band.label }];
     }
     case "acquisition": {
@@ -269,6 +280,19 @@ export function aggregateByDimension(
       return byKey.get(band.id) ?? buildRow(band.id, band.label, [], ctx);
     });
     const orphans = rows.filter((r) => !PRICE_BANDS.some((b) => b.id === r.key));
+    rows.length = 0;
+    rows.push(...ordered, ...orphans);
+  }
+
+  // For odometer bands, keep band order and include empty bands
+  if (dim === "odometer") {
+    const byKey = new Map(rows.map((r) => [r.key, r]));
+    const ordered: RollupRow[] = ODOMETER_BANDS.map((band) => {
+      return byKey.get(band.id) ?? buildRow(band.id, band.label, [], ctx);
+    });
+    const orphans = rows.filter(
+      (r) => !ODOMETER_BANDS.some((b) => b.id === r.key)
+    );
     rows.length = 0;
     rows.push(...ordered, ...orphans);
   }

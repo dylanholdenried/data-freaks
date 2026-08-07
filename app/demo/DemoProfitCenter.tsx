@@ -79,6 +79,7 @@ export function DemoProfitCenter({ fixture, storeId, month }: Props) {
         list_price: d.list_price,
         list_price_na: d.list_price_na,
         age: d.age,
+        odometer: null,
       })),
     [closedDeals]
   );

@@ -22,6 +22,10 @@ function normalizeDeal(d: ProfitDeal): ProfitDeal {
     list_price_na:
       typeof d.list_price_na === "boolean" ? d.list_price_na : false,
     department_id: d.department_id === undefined ? null : d.department_id,
+    odometer:
+      d.odometer == null || !Number.isFinite(Number(d.odometer))
+        ? null
+        : Number(d.odometer),
   };
 }
 
@@ -50,7 +54,7 @@ async function loadProfitCenterDealsPaged(
       .select(
         "id,sale_date,store_id,department_id,vehicle_year,vehicle_make,vehicle_model,body_style," +
           "acquisition_source,finance_type,front_profit,back_profit,sale_price," +
-          "list_price,list_price_na,age"
+          "list_price,list_price_na,age,odometer"
       )
       .in("store_id", storeIds)
       .eq("status", "closed")
@@ -70,7 +74,7 @@ async function loadProfitCenterDealsPaged(
         .from("deals")
         .select(
           "id,sale_date,store_id,department_id,vehicle_year,vehicle_make,vehicle_model,body_style," +
-            "acquisition_source,finance_type,front_profit,back_profit,sale_price,age"
+            "acquisition_source,finance_type,front_profit,back_profit,sale_price,age,odometer"
         )
         .in("store_id", storeIds)
         .eq("status", "closed")

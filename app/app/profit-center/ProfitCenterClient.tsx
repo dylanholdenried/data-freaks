@@ -50,6 +50,7 @@ const DIMENSIONS: { id: Dimension; label: string }[] = [
   { id: "model", label: "Model" },
   { id: "year", label: "Year" },
   { id: "price", label: "Sale Price" },
+  { id: "odometer", label: "Odometer" },
   { id: "acquisition", label: "Acquisition" },
   { id: "body_style", label: "Body Style" },
   { id: "truck_class", label: "Truck Class" },
@@ -411,6 +412,13 @@ export default function ProfitCenterClient({
   }, [dimension, rows, ctx]);
 
   const sortedRows = useMemo(() => {
+    // Band dimensions ship in fixed bucket order; preserve that when sorting by Group.
+    if (
+      (dimension === "price" || dimension === "odometer") &&
+      sortKey === "label"
+    ) {
+      return sortDir === "asc" ? [...rows] : [...rows].reverse();
+    }
     const copy = [...rows];
     copy.sort((a, b) => {
       const av = a[sortKey];
@@ -425,7 +433,7 @@ export default function ProfitCenterClient({
       return sortDir === "asc" ? an - bn : bn - an;
     });
     return copy;
-  }, [rows, sortKey, sortDir]);
+  }, [rows, sortKey, sortDir, dimension]);
 
   const visibleCols = useMemo(
     () =>
@@ -972,8 +980,13 @@ export default function ProfitCenterClient({
             type="button"
             onClick={() => {
               setDimension(d.id);
-              setSortKey("volume");
-              setSortDir("desc");
+              if (d.id === "odometer" || d.id === "price") {
+                setSortKey("label");
+                setSortDir("asc");
+              } else {
+                setSortKey("volume");
+                setSortDir("desc");
+              }
             }}
             className={cn("pc-tab", dimension === d.id && "is-active")}
           >
