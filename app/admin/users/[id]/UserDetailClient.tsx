@@ -15,6 +15,7 @@ import {
   resetAdminUserPassword,
   updateAdminUser,
 } from "../actions";
+import { startImpersonationFormAction } from "@/app/admin/impersonation-actions";
 
 type StoreOption = { id: string; name: string; dealer_group_id: string };
 type GroupOption = { id: string; name: string };
@@ -74,6 +75,13 @@ export default function UserDetailClient({
     user.role !== "owner_admin" &&
     (canEdit || (isOwnerViewer && user.role === "platform_admin"));
 
+  // Owner can view-as active auto-group users (server re-checks actor !== target).
+  const showViewAs =
+    isOwnerViewer &&
+    isAutoGroupUserRole(user.role) &&
+    user.status === "active" &&
+    Boolean(user.email?.trim());
+
   return (
     <div className="space-y-6">
       <div>
@@ -85,9 +93,17 @@ export default function UserDetailClient({
             <h1 className="text-xl font-semibold tracking-tight">{displayName}</h1>
             <p className="mt-1 text-sm text-muted-foreground">{user.email}</p>
           </div>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <Badge variant="outline">{formatRoleLabel(user.role)}</Badge>
             <Badge variant={statusVariant(user.status)}>{formatStatusLabel(user.status)}</Badge>
+            {showViewAs ? (
+              <form action={startImpersonationFormAction} className="inline">
+                <input type="hidden" name="id" value={user.id} />
+                <Button type="submit" size="sm" variant="outline" title="Open the app as this user (read-only)">
+                  View as user
+                </Button>
+              </form>
+            ) : null}
           </div>
         </div>
       </div>

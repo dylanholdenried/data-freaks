@@ -6,10 +6,12 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import { assertStoreAccess } from "@/lib/store-access";
-import { canMutateAppData, isPlatformStaff } from "@/lib/roles";
+import { assertCanMutateAppData, clearImpersonationCookie } from "@/lib/impersonation";
+import { isPlatformStaff } from "@/lib/roles";
 
 export async function signOut() {
   const supabase = createSupabaseServerClient();
+  await clearImpersonationCookie();
   await supabase.auth.signOut();
   redirect("/");
 }
@@ -26,6 +28,8 @@ export async function createStore(formData: FormData) {
     .select("id, dealer_group_id, role")
     .or(profileMatchAuthUserId(session.user.id))
     .maybeSingle();
+
+  await assertCanMutateAppData(profile?.role);
 
   // Only platform / group admins create stores via this legacy path
   if (!profile || (!isPlatformStaff(profile.role) && profile.role !== "group_admin")) {
@@ -56,9 +60,7 @@ export async function createDepartment(formData: FormData) {
     .or(profileMatchAuthUserId(session.user.id))
     .maybeSingle();
 
-  if (!canMutateAppData(profile?.role)) {
-    throw new Error("View only access — changes are not allowed");
-  }
+  await assertCanMutateAppData(profile?.role);
 
   const storeId = String(formData.get("store_id") || "").trim();
   if (!(await assertStoreAccess(supabase, profile, storeId))) {
@@ -85,9 +87,7 @@ export async function createSalesperson(formData: FormData) {
     .or(profileMatchAuthUserId(session.user.id))
     .maybeSingle();
 
-  if (!canMutateAppData(profile?.role)) {
-    throw new Error("View only access — changes are not allowed");
-  }
+  await assertCanMutateAppData(profile?.role);
 
   const storeId = String(formData.get("store_id") || "").trim();
   if (!(await assertStoreAccess(supabase, profile, storeId))) {
@@ -115,9 +115,7 @@ export async function createSource(formData: FormData) {
     .or(profileMatchAuthUserId(session.user.id))
     .maybeSingle();
 
-  if (!canMutateAppData(profile?.role)) {
-    throw new Error("View only access — changes are not allowed");
-  }
+  await assertCanMutateAppData(profile?.role);
 
   const storeId = String(formData.get("store_id") || "").trim();
   if (!(await assertStoreAccess(supabase, profile, storeId))) {
@@ -144,9 +142,7 @@ export async function toggleCalendarDay(storeId: string, date: string, isWorking
     .or(profileMatchAuthUserId(session.user.id))
     .maybeSingle();
 
-  if (!canMutateAppData(profile?.role)) {
-    throw new Error("View only access — changes are not allowed");
-  }
+  await assertCanMutateAppData(profile?.role);
 
   const sid = String(storeId || "").trim();
   const dateStr = String(date || "").trim().slice(0, 10);
@@ -197,9 +193,7 @@ export async function createDeal(formData: FormData) {
     .or(profileMatchAuthUserId(session.user.id))
     .maybeSingle();
 
-  if (!canMutateAppData(profile?.role)) {
-    throw new Error("View only access — changes are not allowed");
-  }
+  await assertCanMutateAppData(profile?.role);
 
   const dealerGroupId = await getEffectiveDealerGroupId(profile);
   if (!profile || !dealerGroupId) redirect("/app/dashboard");

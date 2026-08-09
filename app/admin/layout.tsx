@@ -6,6 +6,7 @@ import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { formatProfileName, formatRoleLabel } from "@/lib/profile-display";
 import { isPlatformStaff } from "@/lib/roles";
+import { isImpersonating } from "@/lib/impersonation";
 import { Button } from "@/components/ui/button";
 import { DaAppThemeProvider } from "@/components/theme/theme-context";
 import ThemeToggle from "@/components/theme/ThemeToggle";
@@ -15,6 +16,10 @@ import AdminMobileMenu from "./AdminMobileMenu";
 import AdminSidebarNav from "./AdminSidebarNav";
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
+  if (await isImpersonating()) {
+    redirect("/app");
+  }
+
   const supabase = createSupabaseServerClient();
   const {
     data: { user },

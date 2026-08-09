@@ -2,7 +2,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import { getAccessibleStores } from "@/lib/store-access";
-import { isStoreViewer } from "@/lib/roles";
+import { isAppViewOnly } from "@/lib/impersonation";
 import { redirect } from "next/navigation";
 import NewDealForm from "./NewDealForm";
 import SelectAutoGroupEmptyState from "../../SelectAutoGroupEmptyState";
@@ -25,7 +25,7 @@ export default async function NewDealPage() {
     .or(profileMatchAuthUserId(session!.user.id))
     .maybeSingle();
 
-  if (isStoreViewer(profile?.role)) {
+  if (await isAppViewOnly(profile?.role)) {
     redirect("/app/dashboard");
   }
 

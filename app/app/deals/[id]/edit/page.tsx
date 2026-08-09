@@ -3,7 +3,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import { getAccessibleStores } from "@/lib/store-access";
-import { canReopenDeal, isStoreViewer } from "@/lib/roles";
+import { isAppViewOnly } from "@/lib/impersonation";
+import { canReopenDeal } from "@/lib/roles";
 import type { DealEventRow } from "@/lib/deals/deal-events";
 import UpdatePendingForm from "./UpdatePendingForm";
 import SelectAutoGroupEmptyState from "../../../SelectAutoGroupEmptyState";
@@ -294,12 +295,14 @@ export default async function EditDealPage({ params }: { params: { id: string } 
     ];
   }
 
+  const viewOnly = await isAppViewOnly(profile.role);
+
   return (
     <UpdatePendingForm
       dealId={deal.id}
       dealStatus={deal.status}
-      canReopen={canReopenDeal(profile.role)}
-      readOnly={isStoreViewer(profile.role)}
+      canReopen={canReopenDeal(profile.role) && !viewOnly}
+      readOnly={viewOnly}
       events={dealEvents}
       stockNumber={deal.stock_number}
       customerLastName={deal.customer_last_name ?? ""}

@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { isOwnerAdmin, isPlatformStaff } from "@/lib/roles";
+import { isImpersonating } from "@/lib/impersonation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type AdminContext = {
@@ -24,6 +25,10 @@ export async function requireAdminServiceClient(): Promise<SupabaseClient> {
  * platform admins out of /admin after a mutation.
  */
 export async function requireAdminContext(): Promise<AdminContext> {
+  if (await isImpersonating()) {
+    redirect("/app");
+  }
+
   const supabase = createSupabaseServerClient();
   const {
     data: { user },

@@ -32,6 +32,8 @@ interface Props {
     goals?: boolean;
   };
   showOnboardingChecklist?: boolean;
+  /** Impersonation / store_viewer — browse only, no writes. */
+  readOnly?: boolean;
 }
 
 // ── Style constants (matches NewDealForm) ─────────────────────────────────────
@@ -58,6 +60,7 @@ interface GoalsSectionProps {
   initialGoals: GoalRow[];
   initialYear: number;
   initialMonth: number;
+  readOnly?: boolean;
 }
 
 function GoalsSection({
@@ -66,6 +69,7 @@ function GoalsSection({
   initialGoals,
   initialYear,
   initialMonth,
+  readOnly = false,
 }: GoalsSectionProps) {
   const [year, setYear] = useState(initialYear);
   const [month, setMonth] = useState(initialMonth);
@@ -125,6 +129,10 @@ function GoalsSection({
   }
 
   async function handleSave() {
+    if (readOnly) {
+      setBanner({ kind: "err", msg: "View only — changes are not allowed." });
+      return;
+    }
     setSaving(true);
     setBanner(null);
 
@@ -255,6 +263,8 @@ function GoalsSection({
                           onChange={(e) =>
                             setDrafts((prev) => ({ ...prev, [dept.id]: e.target.value }))
                           }
+                          disabled={readOnly}
+                          readOnly={readOnly}
                           className="w-28 shrink-0"
                         />
                         <span className="text-xs text-muted-foreground">units</span>
@@ -267,13 +277,16 @@ function GoalsSection({
           </div>
         )}
 
-        {departments.length > 0 && (
+        {departments.length > 0 && !readOnly ? (
           <div className="flex justify-end pt-2">
             <Button onClick={handleSave} disabled={saving || loadingMonth} className="min-w-[120px]">
               {saving ? "Saving…" : "Save Goals"}
             </Button>
           </div>
-        )}
+        ) : null}
+        {departments.length > 0 && readOnly ? (
+          <p className="pt-2 text-xs text-muted-foreground">View only — goals cannot be changed.</p>
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -288,6 +301,7 @@ interface RosterSectionProps {
   initialItems: PersonRow[];
   emptyMessage?: string;
   hasActive?: boolean; // false for acquisition_sources (no active column)
+  readOnly?: boolean;
 }
 
 function RosterSection({
@@ -297,6 +311,7 @@ function RosterSection({
   initialItems,
   emptyMessage,
   hasActive = true,
+  readOnly = false,
 }: RosterSectionProps) {
   const [items, setItems] = useState<PersonRow[]>(initialItems);
   const [addName, setAddName] = useState("");
@@ -308,6 +323,10 @@ function RosterSection({
   const storeById = new Map(stores.map((s) => [s.id, s.name]));
 
   async function handleAdd() {
+    if (readOnly) {
+      setBanner({ kind: "err", msg: "View only — changes are not allowed." });
+      return;
+    }
     const name = addName.trim();
     if (!name || !addStoreId) return;
     setSaving(true);
@@ -336,7 +355,7 @@ function RosterSection({
   }
 
   async function handleToggleActive(item: PersonRow) {
-    if (!hasActive) return;
+    if (readOnly || !hasActive) return;
     const next = !item.active;
     setTogglingId(item.id);
     setBanner(null);
@@ -409,6 +428,7 @@ function RosterSection({
         )}
 
         {/* Add form */}
+        {!readOnly ? (
         <div className="flex flex-wrap items-end gap-2">
           {stores.length > 1 && (
             <div className="space-y-1">
@@ -445,6 +465,9 @@ function RosterSection({
             {adding ? "Adding…" : "Add"}
           </Button>
         </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">View only — roster cannot be changed.</p>
+        )}
 
         {/* List */}
         {items.length === 0 ? (
@@ -478,7 +501,7 @@ function RosterSection({
                           >
                             {item.name}
                           </span>
-                          {hasActive && (
+                          {hasActive && !readOnly && (
                             <button
                               type="button"
                               disabled={togglingId === item.id}
@@ -502,6 +525,9 @@ function RosterSection({
                               )}
                             </button>
                           )}
+                          {hasActive && readOnly && !isActive ? (
+                            <span className="text-xs text-muted-foreground">Inactive</span>
+                          ) : null}
                         </div>
                       );
                     })}
@@ -529,6 +555,7 @@ export default function SetupClient({
   initialMonth,
   onboardingChecklist = {},
   showOnboardingChecklist = false,
+  readOnly = false,
 }: Props) {
   const [pending, startTransition] = useTransition();
   const inferred = useMemo(
@@ -553,6 +580,7 @@ export default function SetupClient({
   const allDone = checklistItems.every((item) => inferred[item.key]);
 
   function markDone(key: (typeof checklistItems)[number]["key"]) {
+    if (readOnly) return;
     startTransition(async () => {
       await updateOnboardingChecklist({ [key]: true });
     });
@@ -565,11 +593,13 @@ export default function SetupClient({
         <p className="app-kicker">Administration</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">Setup & Config</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Manage stores, monthly goals, salespeople, acquisition sources, and finance managers.
+          {readOnly
+            ? "Browse stores, goals, and roster settings. Changes are disabled in this session."
+            : "Manage stores, monthly goals, salespeople, acquisition sources, and finance managers."}
         </p>
       </section>
 
-      {showOnboardingChecklist && !allDone ? (
+      {showOnboardingChecklist && !allDone && !readOnly ? (
         <Card className="border-[color-mix(in_srgb,var(--da-blue)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-blue)_10%,transparent)] shadow-none">
           <CardHeader className="pb-2">
             <CardTitle className="text-base text-foreground">Finish group setup</CardTitle>
@@ -636,6 +666,7 @@ export default function SetupClient({
         initialGoals={initialGoals}
         initialYear={initialYear}
         initialMonth={initialMonth}
+        readOnly={readOnly}
       />
 
       {/* Section 3: Salespeople */}
@@ -645,6 +676,7 @@ export default function SetupClient({
         stores={stores}
         initialItems={salespeople}
         hasActive
+        readOnly={readOnly}
       />
 
       {/* Section 4: Acquisition Sources */}
@@ -653,6 +685,7 @@ export default function SetupClient({
         table="acquisition_sources"
         stores={stores}
         initialItems={acquisitionSources}
+        readOnly={readOnly}
       />
 
       {/* Section 5: Finance Managers */}
@@ -663,6 +696,7 @@ export default function SetupClient({
         initialItems={financeManagers}
         emptyMessage="No finance managers yet. Add one above to enable F&I tracking on deals."
         hasActive
+        readOnly={readOnly}
       />
     </div>
   );

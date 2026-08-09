@@ -10,11 +10,13 @@ import {
 } from "@/lib/dealer-group-context";
 import { formatProfileName, formatRoleLabel } from "@/lib/profile-display";
 import { isPlatformStaff, isStoreViewer } from "@/lib/roles";
+import { getImpersonationState, isAppViewOnly } from "@/lib/impersonation";
 import { Button } from "@/components/ui/button";
 import { BarChart3, Shield } from "lucide-react";
 import { DaAppThemeProvider } from "@/components/theme/theme-context";
 import ThemeToggle from "@/components/theme/ThemeToggle";
 import DealerAcqLogo from "@/components/brand/DealerAcqLogo";
+import ImpersonationBanner from "@/components/impersonation/ImpersonationBanner";
 import { signOut } from "./actions";
 import AppMobileMenu from "./AppMobileMenu";
 import AppSidebarNav from "./AppSidebarNav";
@@ -41,14 +43,20 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     redirect("/awaiting-approval");
   }
 
-  const isPlatformAdmin = isPlatformStaff(profile.role);
-  const viewOnly = isStoreViewer(profile.role);
+  const impersonation = await getImpersonationState();
+  const isImpersonatingSession = Boolean(impersonation);
+  const isPlatformAdmin = isPlatformStaff(profile.role) && !isImpersonatingSession;
+  // Nav follows the real role (so store_admin sees full menus while impersonating).
+  // Mutate/read-only overlay still applies during impersonation.
+  const navViewOnly = isStoreViewer(profile.role);
+  const mutateViewOnly = await isAppViewOnly(profile.role);
   const groups = isPlatformAdmin ? await listDealerGroupsForAdmin() : [];
   const selectedGroupId = isPlatformAdmin
     ? await getEffectiveDealerGroupId(profile)
     : profile.dealer_group_id;
   const selectedGroupName = groups.find((g) => g.id === selectedGroupId)?.name;
-  const showWelcome = profile.role === "group_admin" && !profile.onboarding_welcome_seen_at;
+  const showWelcome =
+    !isImpersonatingSession && profile.role === "group_admin" && !profile.onboarding_welcome_seen_at;
   const displayName = formatProfileName(profile.first_name, profile.last_name);
   const roleLabel = formatRoleLabel(profile.role);
 
@@ -71,7 +79,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               <AutoGroupSwitcher groups={groups} selectedGroupId={selectedGroupId} />
             </div>
           ) : null}
-          <AppSidebarNav plan={groupPlan} viewOnly={viewOnly} />
+          <AppSidebarNav plan={groupPlan} viewOnly={navViewOnly} />
           <div className="mt-auto space-y-3 p-3">
             {isPlatformAdmin ? (
               <Link
@@ -84,7 +92,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               </Link>
             ) : null}
             <ThemeToggle variant="sidebar" />
-            {!viewOnly ? (
+            {!mutateViewOnly ? (
               <Link
                 href="/app/deals/new"
                 prefetch
@@ -94,7 +102,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               </Link>
             ) : (
               <div className="rounded-xl border border-[var(--da-line)] bg-[var(--da-panel-2)] px-3 py-2 text-[11px] text-[var(--da-muted)]">
-                View only — you can browse assigned stores but cannot make changes.
+                {isImpersonatingSession
+                  ? "Read-only impersonation — browse only; Exit from the banner to restore your admin session."
+                  : "View only — you can browse assigned stores but cannot make changes."}
               </div>
             )}
             <div className="rounded-xl bg-[var(--da-panel-2)] px-3 py-2 text-[11px] text-[var(--da-muted)]">
@@ -104,6 +114,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           </div>
         </aside>
         <div className="flex min-h-screen min-w-0 flex-1 flex-col lg:pl-[248px]">
+          {isImpersonatingSession ? (
+            <ImpersonationBanner displayName={displayName} role={profile.role} />
+          ) : null}
           <header className="border-b border-[var(--da-line)] bg-[var(--da-panel)]">
             <div className="flex min-h-14 flex-wrap items-center justify-between gap-2 px-5 py-2 lg:h-14 lg:px-8 lg:py-0">
               <div className="flex min-w-0 flex-wrap items-center gap-3">
@@ -118,7 +131,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
                   groups={groups}
                   selectedGroupId={selectedGroupId}
                   plan={groupPlan}
-                  viewOnly={viewOnly}
+                  viewOnly={navViewOnly}
                 />
               </div>
               <div className="flex items-center gap-3 text-xs text-[var(--da-muted)]">

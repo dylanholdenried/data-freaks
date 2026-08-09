@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
+import { assertNotImpersonating } from "@/lib/impersonation";
 
 export type OnboardingChecklist = {
   salespeople?: boolean;
@@ -13,6 +14,7 @@ export type OnboardingChecklist = {
 };
 
 async function requireActiveProfileId() {
+  await assertNotImpersonating();
   const supabase = createSupabaseServerClient();
   const {
     data: { session },

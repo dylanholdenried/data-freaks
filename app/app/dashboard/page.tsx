@@ -4,7 +4,7 @@ import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import { getAccessibleStores } from "@/lib/store-access";
 import { getCentralTimeParts } from "@/lib/dashboard/pace";
-import { isStoreViewer } from "@/lib/roles";
+import { isAppViewOnly } from "@/lib/impersonation";
 import DashboardClient from "./DashboardClient";
 import SelectAutoGroupEmptyState from "../SelectAutoGroupEmptyState";
 
@@ -73,6 +73,8 @@ export default async function DashboardPage({
   const stores = (await getAccessibleStores(supabase, profile)) as Store[];
   const storeIds = stores.map((s) => s.id);
 
+  const viewOnly = await isAppViewOnly(profile.role);
+
   const emptyProps = {
     stores: [] as Store[],
     deals: [] as Deal[],
@@ -85,7 +87,7 @@ export default async function DashboardPage({
     isFutureMonth,
     currentYear: ct.year,
     currentMonth: ct.month,
-    viewOnly: isStoreViewer(profile.role),
+    viewOnly,
   };
 
   if (storeIds.length === 0) {
@@ -148,7 +150,7 @@ export default async function DashboardPage({
       isFutureMonth={isFutureMonth}
       currentYear={ct.year}
       currentMonth={ct.month}
-      viewOnly={isStoreViewer(profile.role)}
+      viewOnly={viewOnly}
     />
   );
 }

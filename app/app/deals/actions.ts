@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { assertStoreAccess } from "@/lib/store-access";
+import { assertNotImpersonating } from "@/lib/impersonation";
 import { canReopenDeal } from "@/lib/roles";
 import {
   classifyStockMatches,
@@ -33,6 +34,12 @@ export async function reopenDeal(
 
   if (!session) {
     return { ok: false, error: "You must be signed in to reopen a deal." };
+  }
+
+  try {
+    await assertNotImpersonating();
+  } catch {
+    return { ok: false, error: "View only access — changes are not allowed while viewing as another user" };
   }
 
   const { data: profile } = await supabase

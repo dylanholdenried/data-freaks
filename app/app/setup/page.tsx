@@ -4,6 +4,7 @@ import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import { getAccessibleStores } from "@/lib/store-access";
 import { getCentralTimeParts } from "@/lib/dashboard/pace";
 import { isStoreViewer } from "@/lib/roles";
+import { isAppViewOnly } from "@/lib/impersonation";
 import { redirect } from "next/navigation";
 import SetupClient from "./SetupClient";
 import SelectAutoGroupEmptyState from "../SelectAutoGroupEmptyState";
@@ -47,6 +48,7 @@ export default async function SetupPage({
     redirect("/app/dashboard");
   }
 
+  const readOnly = await isAppViewOnly(profile?.role);
   const dealerGroupId = await getEffectiveDealerGroupId(profile);
 
   if (!dealerGroupId || !profile) {
@@ -79,6 +81,7 @@ export default async function SetupPage({
         initialMonth={initialMonth}
         onboardingChecklist={onboardingChecklist}
         showOnboardingChecklist={showOnboardingChecklist}
+        readOnly={readOnly}
       />
     );
   }
@@ -137,6 +140,7 @@ export default async function SetupPage({
       initialMonth={initialMonth}
       onboardingChecklist={onboardingChecklist}
       showOnboardingChecklist={showOnboardingChecklist}
+      readOnly={readOnly}
     />
   );
 }

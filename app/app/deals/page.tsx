@@ -4,6 +4,7 @@ import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { fetchAllByIds, fetchAllRows } from "@/lib/supabase/fetch-all";
 import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import { getAccessibleStores } from "@/lib/store-access";
+import { isAppViewOnly } from "@/lib/impersonation";
 import { isStoreViewer } from "@/lib/roles";
 import DealsClient from "./DealsClient";
 import SelectAutoGroupEmptyState from "../SelectAutoGroupEmptyState";
@@ -210,7 +211,7 @@ export default async function DealsPage({
       initialStatus={initialStatus}
       initialStore={initialStore}
       initialDepartment={initialDepartment}
-      viewOnly={isStoreViewer(profile.role)}
+      viewOnly={await isAppViewOnly(profile.role)}
     />
   );
 }

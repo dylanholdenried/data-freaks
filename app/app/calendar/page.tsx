@@ -7,7 +7,7 @@ import {
   isFiDepartment,
   type CalendarDay,
 } from "@/lib/dashboard/pace";
-import { isStoreViewer } from "@/lib/roles";
+import { isAppViewOnly } from "@/lib/impersonation";
 import SelectAutoGroupEmptyState from "../SelectAutoGroupEmptyState";
 import CalendarClient from "./CalendarClient";
 
@@ -129,7 +129,7 @@ export default async function CalendarPage({
       deals={deals}
       year={year}
       month={month}
-      readOnly={isStoreViewer(profile.role)}
+      readOnly={await isAppViewOnly(profile.role)}
     />
   );
 }
