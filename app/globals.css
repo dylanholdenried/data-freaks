@@ -3052,11 +3052,11 @@ main:has(.da-app) + footer {
 }
 
 /* ---------------------------------------------------------------------------
-   Dashboard Sales Command (compact dept cards)
+   Dashboard Sales Command (dense command-center layout)
 --------------------------------------------------------------------------- */
 .dash-tv-head {
   flex-wrap: wrap;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .dash-tv-head .pc-title {
@@ -3209,58 +3209,118 @@ main:has(.da-app) + footer {
   font-weight: 700;
 }
 
-.dash-card-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 16px;
+.dash-section-label {
+  margin: 0 0 8px;
+  font-family: var(--da-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--da-muted);
 }
 
-@media (min-width: 700px) {
-  .dash-card-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (min-width: 1280px) {
-  .dash-card-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-.dash-card {
+.dash-store-totals {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 0;
+}
+
+.dash-store-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dash-store-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.1fr) minmax(120px, 0.7fr) minmax(180px, 1.4fr) minmax(220px, 1.1fr);
+  gap: 14px 20px;
+  align-items: center;
   background: var(--da-panel);
   border: 1px solid var(--da-line);
-  border-radius: 12px;
-  padding: 18px 18px 16px;
+  border-radius: 10px;
+  padding: 14px 16px;
   min-width: 0;
-  container-type: inline-size;
-  container-name: dash-card;
 }
 
-.dash-card-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+.dash-store-row-identity {
+  min-width: 0;
 }
 
-.dash-card-title {
+.dash-store-row-name {
+  margin: 0;
   font-family: var(--da-display);
   font-weight: 800;
-  font-size: clamp(15px, 1.35vw, 20px);
-  font-size: clamp(15px, 4.5cqi, 20px);
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  margin: 0;
+  font-size: clamp(16px, 1.6vw, 22px);
+  letter-spacing: 0.02em;
+  line-height: 1.15;
   color: var(--da-text);
-  line-height: 1.2;
-  min-width: 0;
-  overflow-wrap: anywhere;
 }
 
+.dash-store-row-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 6px;
+}
+
+.dash-store-awaiting {
+  font-family: var(--da-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--da-amber);
+}
+
+.dash-store-row-sold {
+  min-width: 0;
+}
+
+.dash-store-row-pace {
+  min-width: 0;
+}
+
+.dash-store-no-goal {
+  margin: 0;
+  font-family: var(--da-mono);
+  font-size: 12px;
+  color: var(--da-muted);
+}
+
+.dash-store-row-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px 12px;
+  min-width: 0;
+}
+
+.dash-status-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--da-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.dash-status-text.is-behind {
+  color: var(--da-red);
+}
+
+.dash-status-text.is-on-track {
+  color: var(--da-green);
+}
+
+.dash-status-text.is-muted {
+  color: var(--da-muted);
+}
+
+/* legacy pill status (unused by new layout, keep for safety) */
 .dash-status {
   flex-shrink: 0;
   font-family: var(--da-mono);
@@ -3289,6 +3349,57 @@ main:has(.da-app) + footer {
   color: var(--da-muted);
 }
 
+.dash-card-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+@media (min-width: 700px) {
+  .dash-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .dash-card-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.dash-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--da-panel);
+  border: 1px solid var(--da-line);
+  border-radius: 10px;
+  padding: 14px 14px 12px;
+  min-width: 0;
+  container-type: inline-size;
+  container-name: dash-card;
+}
+
+.dash-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dash-card-title {
+  font-family: var(--da-display);
+  font-weight: 800;
+  font-size: clamp(14px, 4.2cqi, 18px);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  margin: 0;
+  color: var(--da-text);
+  line-height: 1.2;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .dash-no-goal {
   display: flex;
   flex-wrap: wrap;
@@ -3301,8 +3412,8 @@ main:has(.da-app) + footer {
 }
 
 .dash-no-goal-compact {
-  padding: 14px 16px;
-  gap: 12px;
+  padding: 12px 14px;
+  gap: 10px;
 }
 
 .dash-no-goal p {
@@ -3328,6 +3439,27 @@ main:has(.da-app) + footer {
   align-items: flex-end;
   gap: 8px;
   flex-shrink: 0;
+}
+
+.dash-view-deals {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--da-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--da-blue);
+  text-decoration: none;
+  white-space: nowrap;
+  border-bottom: 1px solid color-mix(in srgb, var(--da-blue) 35%, transparent);
+  padding-bottom: 1px;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.dash-view-deals:hover {
+  color: var(--da-amber);
+  border-bottom-color: color-mix(in srgb, var(--da-amber) 55%, transparent);
 }
 
 .dash-awaiting {
@@ -3363,41 +3495,40 @@ main:has(.da-app) + footer {
 .dash-sold-proj-main {
   display: grid;
   grid-template-columns: auto auto auto;
-  column-gap: 14px;
-  row-gap: 4px;
-  align-items: center;
+  column-gap: 12px;
+  row-gap: 2px;
+  align-items: end;
   justify-items: start;
   min-width: 0;
+}
+
+.dash-sold-proj-main-inline {
+  column-gap: 10px;
 }
 
 .dash-sold-proj-num {
   font-family: var(--da-display);
   font-weight: 800;
-  font-size: clamp(32px, 4.2vw, 52px);
-  font-size: clamp(32px, 12cqi, 52px);
+  font-size: clamp(28px, 11cqi, 46px);
   line-height: 0.95;
   color: var(--da-text);
   font-variant-numeric: tabular-nums;
 }
 
+.dash-store-row .dash-sold-proj-num {
+  font-size: clamp(26px, 2.2vw, 36px);
+}
+
 .dash-sold-proj-label {
   font-family: var(--da-mono);
-  font-size: 11px;
+  font-size: 10px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--da-muted);
 }
 
-.dash-sold-proj-arrow {
-  color: var(--da-muted);
-  font-size: 26px;
-  line-height: 1;
-  font-weight: 700;
-  justify-self: center;
-  align-self: center;
-}
-
-.dash-sold-proj-arrow-spacer {
+.dash-sold-proj-label-spacer,
+.dash-sold-proj-delta-spacer {
   width: 1px;
   height: 1px;
 }
@@ -3405,16 +3536,17 @@ main:has(.da-app) + footer {
 .dash-sold-proj-delta {
   font-family: var(--da-display);
   font-weight: 800;
-  font-size: clamp(16px, 1.8vw, 24px);
-  font-size: clamp(16px, 5cqi, 24px);
+  font-size: clamp(14px, 4.5cqi, 20px);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
+  align-self: end;
+  padding-bottom: 2px;
 }
 
 .dash-vol-bar {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 
 .dash-pace-track {
@@ -3430,14 +3562,20 @@ main:has(.da-app) + footer {
 }
 
 .dash-pace-track-compact {
-  height: 16px;
-  border-radius: 8px;
+  height: 14px;
+  border-radius: 7px;
+  overflow: visible;
+}
+
+.dash-pace-track-store {
+  height: 14px;
+  border-radius: 7px;
   overflow: visible;
 }
 
 .dash-pace-fill {
   height: 100%;
-  border-radius: 8px;
+  border-radius: 7px;
   background: linear-gradient(90deg, #2f7fe0, var(--da-blue));
   min-width: 0;
   transition: width 0.35s ease;
@@ -3465,60 +3603,16 @@ main:has(.da-app) + footer {
   z-index: 1;
 }
 
-.dash-vol-stats {
-  display: grid;
-  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
-  gap: 14px 20px;
-  align-items: start;
-  min-width: 0;
-}
-
-.dash-vol-key {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.dash-vol-key-row {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.dash-vol-key-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--da-mono);
-  font-size: 13.5px;
-  letter-spacing: 0.04em;
-  color: var(--da-muted);
-  min-width: 0;
-}
-
-.dash-vol-key-value {
-  font-family: var(--da-display);
-  font-weight: 800;
-  font-size: 18px;
-  line-height: 1.1;
-  color: var(--da-text);
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-}
-
-.dash-gross-legend {
+.dash-pace-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 18px;
+  gap: 6px 14px;
   font-family: var(--da-mono);
-  font-size: 15px;
+  font-size: 11px;
   color: var(--da-muted);
 }
 
-.dash-vol-key-label i,
-.dash-gross-legend i {
+.dash-pace-legend i {
   display: inline-block;
   width: 9px;
   height: 9px;
@@ -3526,6 +3620,7 @@ main:has(.da-app) + footer {
   vertical-align: middle;
   font-style: normal;
   flex-shrink: 0;
+  margin-right: 5px;
 }
 
 .dash-leg-sold {
@@ -3546,14 +3641,6 @@ main:has(.da-app) + footer {
   border-radius: 0 !important;
 }
 
-.dash-leg-front {
-  background: var(--da-purple);
-}
-
-.dash-leg-back {
-  background: var(--da-amber);
-}
-
 .dash-mini-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3564,7 +3651,7 @@ main:has(.da-app) + footer {
 .dash-mini {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
   overflow: hidden;
 }
@@ -3572,13 +3659,16 @@ main:has(.da-app) + footer {
 .dash-mini-value {
   font-family: var(--da-display);
   font-weight: 800;
-  font-size: clamp(20px, 2.8vw, 36px);
-  font-size: clamp(20px, 8cqi, 36px);
+  font-size: clamp(18px, 7cqi, 30px);
   line-height: 1.05;
   color: var(--da-text);
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.dash-store-row .dash-mini-value {
+  font-size: clamp(18px, 1.6vw, 26px);
 }
 
 .dash-mini-value.is-blue {
@@ -3587,8 +3677,7 @@ main:has(.da-app) + footer {
 
 .dash-mini-label {
   font-family: var(--da-mono);
-  font-size: 10px;
-  font-size: clamp(9px, 2.8cqi, 11px);
+  font-size: clamp(9px, 2.6cqi, 10px);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--da-muted);
@@ -3599,76 +3688,174 @@ main:has(.da-app) + footer {
 .dash-card-gross {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-top: auto;
-  padding-top: 12px;
+  gap: 6px;
+  padding-top: 10px;
   border-top: 1px solid var(--da-line);
 }
 
-.dash-card-gross-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
+.dash-gross-table-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(72px, 0.7fr) minmax(72px, 0.7fr);
+  gap: 8px;
+  align-items: end;
 }
 
-.dash-card-gross-total {
+.dash-gross-table-head .dash-mini-label:not(:first-child) {
+  text-align: right;
+}
+
+.dash-gross-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(72px, 0.7fr) minmax(72px, 0.7fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.dash-gross-row-label {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  font-family: var(--da-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--da-muted);
+}
+
+.dash-gross-row-track {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(35, 42, 56, 0.9);
+  overflow: hidden;
+}
+
+.da-app.light .dash-gross-row-track {
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.dash-gross-row-fill {
+  height: 100%;
+  border-radius: 3px;
+  min-width: 0;
+}
+
+.dash-gross-row-fill.is-good {
+  background: var(--da-green);
+  color: inherit;
+}
+
+.dash-gross-row-fill.is-warn {
+  background: var(--da-red);
+  color: inherit;
+}
+
+.dash-gross-row-value {
   font-family: var(--da-display);
   font-weight: 800;
-  font-size: clamp(22px, 2.6vw, 34px);
-  font-size: clamp(22px, 8cqi, 34px);
-  line-height: 1.05;
+  font-size: 14px;
+  line-height: 1.1;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-gross-row-value .is-good {
+  color: var(--da-green);
+}
+
+.dash-gross-row-value .is-warn {
+  color: var(--da-red);
+}
+
+.dash-card-mix {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--da-line);
+}
+
+.dash-finance-line {
+  margin: 0;
+  font-family: var(--da-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--da-muted);
+}
+
+.dash-finance-line.is-empty {
+  opacity: 0.7;
+}
+
+.dash-acq-label {
+  margin: 2px 0 0;
+}
+
+.dash-mix-empty {
+  margin: 0;
+  font-size: 12px;
+}
+
+.dash-acq-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.dash-acq-row {
+  display: grid;
+  grid-template-columns: minmax(72px, 0.9fr) minmax(0, 1.4fr) 28px;
+  gap: 8px;
+  align-items: center;
+}
+
+.dash-acq-name {
+  font-family: var(--da-mono);
+  font-size: 11px;
+  color: var(--da-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-acq-track {
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(35, 42, 56, 0.9);
+  overflow: hidden;
+}
+
+.da-app.light .dash-acq-track {
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.dash-acq-track > div {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--da-amber);
+}
+
+.dash-acq-value {
+  font-family: var(--da-display);
+  font-weight: 800;
+  font-size: 13px;
+  text-align: right;
   color: var(--da-text);
   font-variant-numeric: tabular-nums;
 }
 
-.dash-gross-bar {
-  display: flex;
-  height: 14px;
-  border-radius: 7px;
-  overflow: hidden;
-  background: rgba(35, 42, 56, 0.9);
-}
-
-.da-app.light .dash-gross-bar {
-  background: rgba(15, 23, 42, 0.08);
-}
-
-.dash-gross-bar-front {
-  height: 100%;
-  background: var(--da-purple);
-}
-
-.dash-gross-bar-back {
-  height: 100%;
-  background: var(--da-amber);
-}
-
-.dash-gross-bar-empty {
-  width: 100%;
-  height: 100%;
-}
-
-.dash-card-avg {
-  margin: 0;
-  font-family: var(--da-mono);
-  font-size: 15px;
-  color: var(--da-muted);
-}
-
-/* Stack legend + KPI row when the card itself is too narrow */
 @container dash-card (max-width: 380px) {
-  .dash-vol-stats {
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
-
   .dash-sold-proj-num {
-    font-size: clamp(28px, 14cqi, 40px);
+    font-size: clamp(26px, 13cqi, 38px);
   }
 
   .dash-mini-value {
-    font-size: clamp(22px, 10cqi, 32px);
+    font-size: clamp(18px, 9cqi, 28px);
+  }
+
+  .dash-gross-row-label {
+    grid-template-columns: 40px minmax(0, 1fr);
   }
 }
 
@@ -3684,30 +3871,44 @@ main:has(.da-app) + footer {
   .dash-card-head {
     flex-wrap: wrap;
   }
+
+  .dash-sold-proj {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dash-sold-proj-side {
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 1100px) {
+  .dash-store-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .dash-store-row-pace,
+  .dash-store-row-metrics {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 640px) {
-  .dash-vol-stats {
+  .dash-store-row {
     grid-template-columns: 1fr;
   }
 
+  .dash-store-row-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .dash-sold-proj-num {
-    font-size: clamp(28px, 10vw, 40px);
+    font-size: clamp(26px, 10vw, 38px);
   }
 
   .dash-mini-value {
-    font-size: clamp(22px, 7vw, 30px);
+    font-size: clamp(20px, 7vw, 28px);
   }
-}
-
-.dash-mix-stack {
-  display: grid;
-  gap: 12px;
-}
-
-.dash-mix-panel {
-  margin: 0;
-  background: var(--da-bg);
 }
 
 @media (max-width: 900px) {

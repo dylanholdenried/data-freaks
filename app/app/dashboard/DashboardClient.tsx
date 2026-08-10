@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import {
   type CalendarDay,
   type NeededDisplay,
+  type PaceSnapshot,
   MONTH_NAMES,
   computePaceSnapshot,
   computeWorkingDays,
@@ -53,14 +54,26 @@ type DeptSectionData = {
   sold: number;
   pendingCount: number;
   goal: number | null;
-  pace: ReturnType<typeof computePaceSnapshot>;
+  pace: PaceSnapshot;
   front: number;
   back: number;
   totalGross: number;
   closedCount: number;
   avgTotal: number | null;
+  avgFront: number | null;
+  avgBack: number | null;
   sourceMix: { name: string; value: string; width: number }[];
   financeMix: { name: string; value: string; width: number }[];
+};
+
+type StoreSectionData = {
+  id: string;
+  name: string;
+  sold: number;
+  pendingCount: number;
+  goal: number | null;
+  pace: PaceSnapshot;
+  totalGross: number;
 };
 
 function isBooked(status: string) {
@@ -128,6 +141,107 @@ function shortStoreLabel(name: string): string {
   return n.toUpperCase();
 }
 
+function toGoDisplay(toGo: number | null): string {
+  if (toGo === null) return "—";
+  if (toGo <= 0) return `+${Math.abs(toGo)}`;
+  return String(toGo);
+}
+
+function SignedMoney({ value }: { value: number | null }) {
+  if (value === null) return <>—</>;
+  return (
+    <span className={cn(value >= 0 ? "is-good" : "is-warn")}>
+      {fmtCurrency(value)}
+    </span>
+  );
+}
+
+function PaceBar({
+  sold,
+  goal,
+  paceLineToday,
+  compact = false,
+  showLegend = false,
+}: {
+  sold: number;
+  goal: number;
+  paceLineToday: number | null;
+  compact?: boolean;
+  showLegend?: boolean;
+}) {
+  const soldPct = Math.min(100, (sold / goal) * 100);
+  const pacePct =
+    paceLineToday !== null
+      ? Math.min(100, (paceLineToday / goal) * 100)
+      : null;
+
+  return (
+    <div className="dash-vol-bar">
+      <div
+        className={cn(
+          "dash-pace-track",
+          compact ? "dash-pace-track-compact" : "dash-pace-track-store"
+        )}
+      >
+        <div className="dash-pace-fill" style={{ width: `${soldPct}%` }} />
+        {pacePct !== null && (
+          <div
+            className="dash-pace-marker"
+            style={{ left: `${pacePct}%` }}
+            title={`Pace line today: ${paceLineToday}`}
+          />
+        )}
+        <div className="dash-goal-tick" title={`Goal ${goal}`} />
+      </div>
+      {showLegend ? (
+        <div className="dash-pace-legend">
+          <span>
+            <i className="dash-leg-sold" />
+            Sold {sold}
+          </span>
+          <span>
+            <i className="dash-leg-pace" />
+            Target Pace {paceLineToday ?? "—"}
+          </span>
+          <span>
+            <i className="dash-leg-goal" />
+            Goal {goal}
+          </span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function StatusMark({
+  hasGoal,
+  behind,
+  onTrack,
+}: {
+  hasGoal: boolean;
+  behind: boolean;
+  onTrack: boolean;
+}) {
+  if (!hasGoal) {
+    return <span className="dash-status-text is-muted">No goal</span>;
+  }
+  if (behind) {
+    return (
+      <span className="dash-status-text is-behind">
+        <span aria-hidden>▼</span> Behind pace
+      </span>
+    );
+  }
+  if (onTrack) {
+    return (
+      <span className="dash-status-text is-on-track">
+        <span aria-hidden>▲</span> On track
+      </span>
+    );
+  }
+  return <span className="dash-status-text is-muted">—</span>;
+}
+
 export default function DashboardClient({
   stores,
   deals,
@@ -180,169 +294,227 @@ export default function DashboardClient({
     return years.sort((a, b) => b - a);
   }, [currentYear, year]);
 
-  const { monthLabel, workingMeta, deptSections, aggregates } = useMemo(() => {
-    const selectedStoreIds =
-      selectedStore === "all" ? stores.map((s) => s.id) : [selectedStore];
-    const storeById = new Map(stores.map((s) => [s.id, s.name]));
+  const { monthLabel, workingMeta, deptSections, storeSections, aggregates } =
+    useMemo(() => {
+      const selectedStoreIds =
+        selectedStore === "all" ? stores.map((s) => s.id) : [selectedStore];
+      const storeById = new Map(stores.map((s) => [s.id, s.name]));
 
-    const mtdDeals = deals.filter((d) => {
-      if (!selectedStoreIds.includes(d.store_id)) return false;
-      const sm = saleMonth(d.sale_date);
-      return sm.year === year && sm.month === month;
-    });
-
-    const scopedDepts = departments
-      .filter(
-        (d) =>
-          selectedStoreIds.includes(d.store_id) && !isFiDepartment(d.name)
-      )
-      .sort((a, b) => {
-        const sa = storeById.get(a.store_id) ?? "";
-        const sb = storeById.get(b.store_id) ?? "";
-        return sa.localeCompare(sb) || a.name.localeCompare(b.name);
+      const mtdDeals = deals.filter((d) => {
+        if (!selectedStoreIds.includes(d.store_id)) return false;
+        const sm = saleMonth(d.sale_date);
+        return sm.year === year && sm.month === month;
       });
 
-    const goalMap = new Map(goals.map((g) => [g.department_id, g.volume_goal]));
+      const scopedDepts = departments
+        .filter(
+          (d) =>
+            selectedStoreIds.includes(d.store_id) && !isFiDepartment(d.name)
+        )
+        .sort((a, b) => {
+          const sa = storeById.get(a.store_id) ?? "";
+          const sb = storeById.get(b.store_id) ?? "";
+          return sa.localeCompare(sb) || a.name.localeCompare(b.name);
+        });
 
-    const workingDays = computeWorkingDays(
-      year,
-      month,
-      calendarDays,
-      selectedStoreIds
-    );
-
-    const samplePace = computePaceSnapshot(
-      0,
-      null,
-      year,
-      month,
-      workingDays,
-      isCurrentMonth,
-      isFutureMonth
-    );
-
-    const deptSections: DeptSectionData[] = scopedDepts.map((dept) => {
-      const deptWorkingDays = computeWorkingDays(year, month, calendarDays, [
-        dept.store_id,
-      ]);
-      const booked = mtdDeals.filter(
-        (d) => d.department_id === dept.id && isBooked(d.status)
+      const goalMap = new Map(
+        goals.map((g) => [g.department_id, g.volume_goal])
       );
-      const closed = mtdDeals.filter(
-        (d) => d.department_id === dept.id && isClosed(d.status)
-      );
-      const pendingCount = mtdDeals.filter(
-        (d) => d.department_id === dept.id && d.status === "pending"
-      ).length;
-      const sold = booked.length;
-      const goal = goalMap.get(dept.id) ?? null;
-      const pace = computePaceSnapshot(
-        sold,
-        goal,
+
+      const workingDays = computeWorkingDays(
         year,
         month,
-        deptWorkingDays,
+        calendarDays,
+        selectedStoreIds
+      );
+
+      const samplePace = computePaceSnapshot(
+        0,
+        null,
+        year,
+        month,
+        workingDays,
         isCurrentMonth,
         isFutureMonth
       );
 
-      const front = closed.reduce((s, d) => s + (d.front_profit ?? 0), 0);
-      const back = closed.reduce((s, d) => s + (d.back_profit ?? 0), 0);
-      const totalGross = front + back;
-      const closedCount = closed.length;
+      const deptSections: DeptSectionData[] = scopedDepts.map((dept) => {
+        const deptWorkingDays = computeWorkingDays(year, month, calendarDays, [
+          dept.store_id,
+        ]);
+        const booked = mtdDeals.filter(
+          (d) => d.department_id === dept.id && isBooked(d.status)
+        );
+        const closed = mtdDeals.filter(
+          (d) => d.department_id === dept.id && isClosed(d.status)
+        );
+        const pendingCount = mtdDeals.filter(
+          (d) => d.department_id === dept.id && d.status === "pending"
+        ).length;
+        const sold = booked.length;
+        const goal = goalMap.get(dept.id) ?? null;
+        const pace = computePaceSnapshot(
+          sold,
+          goal,
+          year,
+          month,
+          deptWorkingDays,
+          isCurrentMonth,
+          isFutureMonth
+        );
 
-      const completeGross = closed
-        .filter(
-          (d) =>
-            d.front_profit != null &&
-            Number.isFinite(d.front_profit) &&
-            d.back_profit != null &&
-            Number.isFinite(d.back_profit)
-        )
-        .map((d) => (d.front_profit as number) + (d.back_profit as number));
-      const avgTotal =
-        completeGross.length > 0
-          ? completeGross.reduce((s, v) => s + v, 0) / completeGross.length
-          : null;
+        const front = closed.reduce((s, d) => s + (d.front_profit ?? 0), 0);
+        const back = closed.reduce((s, d) => s + (d.back_profit ?? 0), 0);
+        const totalGross = front + back;
+        const closedCount = closed.length;
 
-      const sourceCounts = countBy(booked, (d) => {
-        const s = d.acquisition_source?.trim();
-        return s ? s : "Unspecified";
+        const completeGross = closed
+          .filter(
+            (d) =>
+              d.front_profit != null &&
+              Number.isFinite(d.front_profit) &&
+              d.back_profit != null &&
+              Number.isFinite(d.back_profit)
+          )
+          .map((d) => (d.front_profit as number) + (d.back_profit as number));
+        const avgTotal =
+          completeGross.length > 0
+            ? completeGross.reduce((s, v) => s + v, 0) / completeGross.length
+            : null;
+        const avgFront = closedCount > 0 ? front / closedCount : null;
+        const avgBack = closedCount > 0 ? back / closedCount : null;
+
+        const sourceCounts = countBy(booked, (d) => {
+          const s = d.acquisition_source?.trim();
+          return s ? s : "Unspecified";
+        });
+        const financeCounts = countBy(closed, (d) =>
+          financeLabel(d.finance_type)
+        );
+
+        const storeName = storeById.get(dept.store_id) ?? "";
+        const title =
+          selectedStore === "all" && stores.length > 1
+            ? `${shortStoreLabel(storeName)} · ${dept.name}`
+            : dept.name;
+
+        return {
+          id: dept.id,
+          storeId: dept.store_id,
+          title,
+          sold,
+          pendingCount,
+          goal,
+          pace,
+          front,
+          back,
+          totalGross,
+          closedCount,
+          avgTotal,
+          avgFront,
+          avgBack,
+          sourceMix: mixRows(sourceCounts, false, booked.length),
+          financeMix: mixRows(financeCounts, true, closedCount),
+        };
       });
-      const financeCounts = countBy(closed, (d) =>
-        financeLabel(d.finance_type)
-      );
 
-      const storeName = storeById.get(dept.store_id) ?? "";
-      const title =
-        selectedStore === "all" && stores.length > 1
-          ? `${storeName} · ${dept.name}`
-          : dept.name;
+      const storeSections: StoreSectionData[] = selectedStoreIds
+        .map((storeId) => {
+          const storeName = storeById.get(storeId);
+          if (!storeName) return null;
+          const depts = deptSections.filter((d) => d.storeId === storeId);
+          if (depts.length === 0) return null;
+
+          let sold = 0;
+          let pendingCount = 0;
+          let goalSum = 0;
+          let hasGoal = false;
+          let totalGross = 0;
+          for (const d of depts) {
+            sold += d.sold;
+            pendingCount += d.pendingCount;
+            totalGross += d.totalGross;
+            if (d.goal !== null && d.goal > 0) {
+              goalSum += d.goal;
+              hasGoal = true;
+            }
+          }
+          const goal = hasGoal ? goalSum : null;
+          const storeWorkingDays = computeWorkingDays(
+            year,
+            month,
+            calendarDays,
+            [storeId]
+          );
+          const pace = computePaceSnapshot(
+            sold,
+            goal,
+            year,
+            month,
+            storeWorkingDays,
+            isCurrentMonth,
+            isFutureMonth
+          );
+
+          return {
+            id: storeId,
+            name: storeName,
+            sold,
+            pendingCount,
+            goal,
+            pace,
+            totalGross,
+          };
+        })
+        .filter((s): s is StoreSectionData => s !== null);
+
+      let soldSum = 0;
+      let goalSum = 0;
+      let hasAnyGoal = false;
+      let projSum = 0;
+      let hasAnyProj = false;
+      let grossSum = 0;
+      for (const d of deptSections) {
+        soldSum += d.sold;
+        grossSum += d.totalGross;
+        if (d.goal !== null && d.goal > 0) {
+          goalSum += d.goal;
+          hasAnyGoal = true;
+        }
+        if (d.pace.monthEndProjection !== null) {
+          projSum += d.pace.monthEndProjection;
+          hasAnyProj = true;
+        }
+      }
+
+      const projVsGoal =
+        hasAnyProj && hasAnyGoal ? projSum - goalSum : null;
 
       return {
-        id: dept.id,
-        storeId: dept.store_id,
-        title,
-        sold,
-        pendingCount,
-        goal,
-        pace,
-        front,
-        back,
-        totalGross,
-        closedCount,
-        avgTotal,
-        sourceMix: mixRows(sourceCounts, false, booked.length),
-        financeMix: mixRows(financeCounts, true, closedCount),
+        monthLabel: `${MONTH_NAMES[month - 1]} ${year}`,
+        workingMeta: samplePace,
+        deptSections,
+        storeSections,
+        aggregates: {
+          soldSum,
+          goalSum: hasAnyGoal ? goalSum : null,
+          projSum: hasAnyProj ? projSum : null,
+          projVsGoal,
+          grossSum,
+        },
       };
-    });
-
-    let soldSum = 0;
-    let goalSum = 0;
-    let hasAnyGoal = false;
-    let projSum = 0;
-    let hasAnyProj = false;
-    let grossSum = 0;
-    for (const d of deptSections) {
-      soldSum += d.sold;
-      grossSum += d.totalGross;
-      if (d.goal !== null && d.goal > 0) {
-        goalSum += d.goal;
-        hasAnyGoal = true;
-      }
-      if (d.pace.monthEndProjection !== null) {
-        projSum += d.pace.monthEndProjection;
-        hasAnyProj = true;
-      }
-    }
-
-    const projVsGoal =
-      hasAnyProj && hasAnyGoal ? projSum - goalSum : null;
-
-    return {
-      monthLabel: `${MONTH_NAMES[month - 1]} ${year}`,
-      workingMeta: samplePace,
-      deptSections,
-      aggregates: {
-        soldSum,
-        goalSum: hasAnyGoal ? goalSum : null,
-        projSum: hasAnyProj ? projSum : null,
-        projVsGoal,
-        grossSum,
-      },
-    };
-  }, [
-    selectedStore,
-    stores,
-    deals,
-    departments,
-    calendarDays,
-    goals,
-    year,
-    month,
-    isCurrentMonth,
-    isFutureMonth,
-  ]);
+    }, [
+      selectedStore,
+      stores,
+      deals,
+      departments,
+      calendarDays,
+      goals,
+      year,
+      month,
+      isCurrentMonth,
+      isFutureMonth,
+    ]);
 
   const updatedLabel = updatedAt.toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -447,7 +619,7 @@ export default function DashboardClient({
               </span>
             </div>
             <div className="dash-agg-item">
-              <span className="dash-agg-label">Proj</span>
+              <span className="dash-agg-label">Projected</span>
               <span
                 className={cn(
                   "dash-agg-value",
@@ -482,6 +654,17 @@ export default function DashboardClient({
         </div>
       ) : (
         <>
+          {storeSections.length > 0 ? (
+            <section className="dash-store-totals" aria-label="Store totals">
+              <p className="dash-section-label">Store totals</p>
+              <div className="dash-store-stack">
+                {storeSections.map((store) => (
+                  <StoreRow key={store.id} store={store} />
+                ))}
+              </div>
+            </section>
+          ) : null}
+
           <div className="dash-card-grid">
             {deptSections.map((dept) => (
               <DepartmentCard
@@ -493,15 +676,118 @@ export default function DashboardClient({
               />
             ))}
           </div>
-
-          <div className="dash-mix-stack">
-            {deptSections.map((dept) => (
-              <MixPanel key={`mix-${dept.id}`} dept={dept} />
-            ))}
-          </div>
         </>
       )}
     </div>
+  );
+}
+
+function StoreRow({ store }: { store: StoreSectionData }) {
+  const { pace, goal, sold } = store;
+  const hasGoal = goal !== null && goal > 0;
+  const onTrack = pace.vsPace !== null && pace.vsPace >= 0;
+  const behind = pace.vsPace !== null && pace.vsPace < 0;
+  const projTone =
+    pace.projectionVsGoal === null
+      ? undefined
+      : pace.projectionVsGoal >= 0
+        ? "good"
+        : "warn";
+
+  return (
+    <article className="dash-store-row">
+      <div className="dash-store-row-identity">
+        <h2 className="dash-store-row-name">{store.name.toUpperCase()}</h2>
+        <div className="dash-store-row-status">
+          <StatusMark hasGoal={hasGoal} behind={behind} onTrack={onTrack} />
+          {store.pendingCount > 0 ? (
+            <span className="dash-store-awaiting">
+              {store.pendingCount} Awaiting delivery
+            </span>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="dash-store-row-sold">
+        <div className="dash-sold-proj-main dash-sold-proj-main-inline">
+          <span className="dash-sold-proj-num">{sold}</span>
+          <span
+            className={cn(
+              "dash-sold-proj-num",
+              projTone === "good" && "is-good",
+              projTone === "warn" && "is-warn"
+            )}
+          >
+            {pace.monthEndProjection !== null ? pace.monthEndProjection : "—"}
+          </span>
+          {pace.projectionVsGoal !== null ? (
+            <span
+              className={cn(
+                "dash-sold-proj-delta",
+                pace.projectionVsGoal >= 0 ? "is-good" : "is-warn"
+              )}
+            >
+              {formatSigned(pace.projectionVsGoal)}
+            </span>
+          ) : null}
+          <span className="dash-sold-proj-label">Sold MTD</span>
+          <span className="dash-sold-proj-label">Pace</span>
+          <span className="dash-sold-proj-label dash-sold-proj-label-spacer" />
+        </div>
+      </div>
+
+      <div className="dash-store-row-pace">
+        {hasGoal ? (
+          <PaceBar
+            sold={sold}
+            goal={goal!}
+            paceLineToday={pace.paceLineToday}
+            showLegend
+          />
+        ) : (
+          <p className="dash-store-no-goal">{sold} sold MTD · no volume goal</p>
+        )}
+      </div>
+
+      <div className="dash-store-row-metrics">
+        <div className="dash-mini">
+          <span className="dash-mini-value is-blue">
+            <NeededValue n={pace.needed} />
+          </span>
+          <span className="dash-mini-label">Need / day</span>
+        </div>
+        <div className="dash-mini">
+          <span className="dash-mini-value">{toGoDisplay(pace.toGo)}</span>
+          <span className="dash-mini-label">To go</span>
+        </div>
+        <div className="dash-mini">
+          <span
+            className={cn(
+              "dash-mini-value",
+              pace.vsPace === null
+                ? undefined
+                : pace.vsPace >= 0
+                  ? "is-good"
+                  : "is-warn"
+            )}
+          >
+            {pace.vsPace !== null ? formatSigned(pace.vsPace) : "—"}
+          </span>
+          <span className="dash-mini-label">Vs pace</span>
+        </div>
+        <div className="dash-mini">
+          <span
+            className={cn(
+              "dash-mini-value",
+              store.totalGross >= 0 ? "is-good" : "is-warn"
+            )}
+          >
+            {fmtCurrency(store.totalGross)}
+          </span>
+          <span className="dash-mini-label">Gross MTD</span>
+        </div>
+      </div>
+    </article>
   );
 }
 
@@ -527,16 +813,14 @@ function DepartmentCard({
         ? "good"
         : "warn";
 
-  const frontPct =
-    dept.totalGross > 0 ? (dept.front / dept.totalGross) * 100 : 0;
-  const backPct =
-    dept.totalGross > 0 ? (dept.back / dept.totalGross) * 100 : 0;
+  const grossMax = Math.max(
+    Math.abs(dept.totalGross),
+    Math.abs(dept.front),
+    Math.abs(dept.back),
+    1
+  );
 
-  const soldPct = hasGoal ? Math.min(100, (sold / goal!) * 100) : 0;
-  const pacePct =
-    hasGoal && pace.paceLineToday !== null
-      ? Math.min(100, (pace.paceLineToday / goal!) * 100)
-      : null;
+  const viewAllHref = `/app/deals?status=all&store=${encodeURIComponent(dept.storeId)}&department=${encodeURIComponent(dept.id)}&year=${year}&month=${month}`;
 
   const awaitingHref =
     dept.pendingCount > 0
@@ -550,27 +834,25 @@ function DepartmentCard({
       </Link>
     ) : null;
 
+  const financeLine =
+    dept.financeMix.length > 0
+      ? `FIN ${dept.financeMix.map((f) => `${f.name} ${f.value}`).join(" · ")}`
+      : null;
+
   return (
     <section className="dash-card">
       <div className="dash-card-head">
         <h2 className="dash-card-title">{dept.title}</h2>
-        {!hasGoal ? (
-          <span className="dash-status is-muted">No goal</span>
-        ) : behind ? (
-          <span className="dash-status is-behind">Behind pace</span>
-        ) : onTrack ? (
-          <span className="dash-status is-on-track">On track</span>
-        ) : (
-          <span className="dash-status is-muted">—</span>
-        )}
+        <StatusMark hasGoal={hasGoal} behind={behind} onTrack={onTrack} />
       </div>
 
       {!hasGoal ? (
         <div className="dash-no-goal dash-no-goal-compact">
-          <p>
-            {sold} sold MTD · no volume goal set
-          </p>
+          <p>{sold} sold MTD · no volume goal set</p>
           <div className="dash-no-goal-actions">
+            <Link href={viewAllHref} className="dash-view-deals" prefetch>
+              View all deals
+            </Link>
             {awaitingChip}
             {!viewOnly ? (
               <Link
@@ -587,9 +869,6 @@ function DepartmentCard({
           <div className="dash-sold-proj">
             <div className="dash-sold-proj-main">
               <span className="dash-sold-proj-num">{sold}</span>
-              <span className="dash-sold-proj-arrow" aria-hidden>
-                →
-              </span>
               <span
                 className={cn(
                   "dash-sold-proj-num",
@@ -601,12 +880,7 @@ function DepartmentCard({
                   ? pace.monthEndProjection
                   : "—"}
               </span>
-              <span className="dash-sold-proj-label">Sold MTD</span>
-              <span className="dash-sold-proj-arrow-spacer" aria-hidden />
-              <span className="dash-sold-proj-label">Pace</span>
-            </div>
-            <div className="dash-sold-proj-side">
-              {pace.projectionVsGoal !== null && (
+              {pace.projectionVsGoal !== null ? (
                 <span
                   className={cn(
                     "dash-sold-proj-delta",
@@ -615,178 +889,135 @@ function DepartmentCard({
                 >
                   {formatSigned(pace.projectionVsGoal)}
                 </span>
+              ) : (
+                <span className="dash-sold-proj-delta-spacer" aria-hidden />
               )}
+              <span className="dash-sold-proj-label">Sold MTD</span>
+              <span className="dash-sold-proj-label">Pace</span>
+              <span className="dash-sold-proj-label dash-sold-proj-label-spacer" />
+            </div>
+            <div className="dash-sold-proj-side">
+              <Link href={viewAllHref} className="dash-view-deals" prefetch>
+                View all deals →
+              </Link>
               {awaitingChip}
             </div>
           </div>
 
-          <div className="dash-vol-bar">
-            <div className="dash-pace-track dash-pace-track-compact">
-              <div
-                className="dash-pace-fill"
-                style={{ width: `${soldPct}%` }}
-              />
-              {pacePct !== null && (
-                <div
-                  className="dash-pace-marker"
-                  style={{ left: `${pacePct}%` }}
-                  title={`Pace line today: ${pace.paceLineToday}`}
-                />
-              )}
-              <div className="dash-goal-tick" title={`Goal ${goal}`} />
-            </div>
-          </div>
+          <PaceBar
+            sold={sold}
+            goal={goal!}
+            paceLineToday={pace.paceLineToday}
+            compact
+            showLegend
+          />
 
-          <div className="dash-vol-stats">
-            <div className="dash-vol-key">
-              <div className="dash-vol-key-row">
-                <span className="dash-vol-key-label">
-                  <i className="dash-leg-sold" />
-                  Sold&nbsp;:
-                </span>
-                <span className="dash-vol-key-value">{sold}</span>
-              </div>
-              <div className="dash-vol-key-row">
-                <span className="dash-vol-key-label">
-                  <i className="dash-leg-pace" />
-                  Target Pace&nbsp;:
-                </span>
-                <span className="dash-vol-key-value">
-                  {pace.paceLineToday ?? "—"}
-                </span>
-              </div>
-              <div className="dash-vol-key-row">
-                <span className="dash-vol-key-label">
-                  <i className="dash-leg-goal" />
-                  Goal&nbsp;:
-                </span>
-                <span className="dash-vol-key-value">{goal}</span>
-              </div>
+          <div className="dash-mini-row">
+            <div className="dash-mini">
+              <span className="dash-mini-value is-blue">
+                <NeededValue n={pace.needed} />
+              </span>
+              <span className="dash-mini-label">Need / day</span>
             </div>
-
-            <div className="dash-mini-row">
-              <div className="dash-mini">
-                <span className="dash-mini-value is-blue">
-                  <NeededValue n={pace.needed} />
-                </span>
-                <span className="dash-mini-label">Need / day</span>
-              </div>
-              <div className="dash-mini">
-                <span className="dash-mini-value">
-                  {pace.toGo === null
-                    ? "—"
-                    : pace.toGo <= 0
-                      ? `+${Math.abs(pace.toGo)}`
-                      : String(pace.toGo)}
-                </span>
-                <span className="dash-mini-label">To go</span>
-              </div>
-              <div className="dash-mini">
-                <span
-                  className={cn(
-                    "dash-mini-value",
-                    pace.vsPace === null
-                      ? undefined
-                      : pace.vsPace >= 0
-                        ? "is-good"
-                        : "is-warn"
-                  )}
-                >
-                  {pace.vsPace !== null ? formatSigned(pace.vsPace) : "—"}
-                </span>
-                <span className="dash-mini-label">Vs pace</span>
-              </div>
+            <div className="dash-mini">
+              <span className="dash-mini-value">{toGoDisplay(pace.toGo)}</span>
+              <span className="dash-mini-label">To go</span>
+            </div>
+            <div className="dash-mini">
+              <span
+                className={cn(
+                  "dash-mini-value",
+                  pace.vsPace === null
+                    ? undefined
+                    : pace.vsPace >= 0
+                      ? "is-good"
+                      : "is-warn"
+                )}
+              >
+                {pace.vsPace !== null ? formatSigned(pace.vsPace) : "—"}
+              </span>
+              <span className="dash-mini-label">Vs pace</span>
             </div>
           </div>
         </>
       )}
 
       <div className="dash-card-gross">
-        <div className="dash-card-gross-head">
-          <span className="dash-mini-label">Total gross</span>
-          <span className="dash-card-gross-total">
-            {fmtCurrency(dept.totalGross)}
-          </span>
+        <div className="dash-gross-table-head">
+          <span className="dash-mini-label">Gross</span>
+          <span className="dash-mini-label">MTD</span>
+          <span className="dash-mini-label">Avg / deal</span>
         </div>
-        <div className="dash-gross-bar" role="img" aria-label="Front and back gross">
-          {dept.totalGross > 0 ? (
-            <>
-              <div
-                className="dash-gross-bar-front"
-                style={{ width: `${frontPct}%` }}
-              />
-              <div
-                className="dash-gross-bar-back"
-                style={{ width: `${backPct}%` }}
-              />
-            </>
-          ) : (
-            <div className="dash-gross-bar-empty" />
-          )}
-        </div>
-        <div className="dash-gross-legend">
-          <span>
-            <i className="dash-leg-front" /> front {fmtCurrency(dept.front)}
-          </span>
-          <span>
-            <i className="dash-leg-back" /> back {fmtCurrency(dept.back)}
-          </span>
-        </div>
-        <p className="dash-card-avg">
-          avg / deal{" "}
-          {dept.avgTotal !== null ? fmtCurrency(dept.avgTotal) : "—"}
-        </p>
+        {(
+          [
+            {
+              key: "total",
+              label: "Total",
+              mtd: dept.totalGross,
+              avg: dept.avgTotal,
+            },
+            {
+              key: "front",
+              label: "Front",
+              mtd: dept.front,
+              avg: dept.avgFront,
+            },
+            {
+              key: "back",
+              label: "Back",
+              mtd: dept.back,
+              avg: dept.avgBack,
+            },
+          ] as const
+        ).map((row) => {
+          const width = Math.min(100, (Math.abs(row.mtd) / grossMax) * 100);
+          const tone = row.mtd >= 0 ? "is-good" : "is-warn";
+          return (
+            <div key={row.key} className="dash-gross-row">
+              <div className="dash-gross-row-label">
+                <span>{row.label}</span>
+                <div className="dash-gross-row-track">
+                  <div
+                    className={cn("dash-gross-row-fill", tone)}
+                    style={{ width: `${width}%` }}
+                  />
+                </div>
+              </div>
+              <span className={cn("dash-gross-row-value", tone)}>
+                <SignedMoney value={row.mtd} />
+              </span>
+              <span className={cn("dash-gross-row-value", row.avg !== null && row.avg >= 0 ? "is-good" : row.avg !== null ? "is-warn" : undefined)}>
+                <SignedMoney value={row.avg} />
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="dash-card-mix">
+        {financeLine ? (
+          <p className="dash-finance-line">{financeLine}</p>
+        ) : (
+          <p className="dash-finance-line is-empty">FIN —</p>
+        )}
+        <p className="dash-mini-label dash-acq-label">Acquisition sources</p>
+        {dept.sourceMix.length === 0 ? (
+          <p className="dash-tv-empty dash-mix-empty">No booked deals.</p>
+        ) : (
+          <div className="dash-acq-list">
+            {dept.sourceMix.map((s) => (
+              <div key={s.name} className="dash-acq-row">
+                <span className="dash-acq-name">{s.name}</span>
+                <div className="dash-acq-track">
+                  <div style={{ width: `${s.width}%` }} />
+                </div>
+                <span className="dash-acq-value">{s.value}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </section>
-  );
-}
-
-function MixPanel({ dept }: { dept: DeptSectionData }) {
-  return (
-    <div className="da-demo-panel dash-mix-panel">
-      <div className="da-demo-panel-head">
-        <h3>{dept.title} — Acquisition &amp; finance mix</h3>
-        <span>Sources = booked · Finance = closed</span>
-      </div>
-      <div className="da-demo-mix">
-        <div>
-          <div className="da-demo-mix-label">Sources</div>
-          {dept.sourceMix.length === 0 ? (
-            <p className="dash-tv-empty">No booked deals.</p>
-          ) : (
-            dept.sourceMix.map((s) => (
-              <div key={s.name} className="da-demo-mix-row">
-                <div className="da-demo-mix-meta">
-                  <span>{s.name}</span>
-                  <b>{s.value}</b>
-                </div>
-                <div className="da-demo-mix-track">
-                  <div style={{ width: `${s.width}%` }} />
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-        <div>
-          <div className="da-demo-mix-label">Finance</div>
-          {dept.financeMix.length === 0 ? (
-            <p className="dash-tv-empty">No closed deals.</p>
-          ) : (
-            dept.financeMix.map((s) => (
-              <div key={s.name} className="da-demo-mix-row">
-                <div className="da-demo-mix-meta">
-                  <span>{s.name}</span>
-                  <b>{s.value}</b>
-                </div>
-                <div className="da-demo-mix-track blue">
-                  <div style={{ width: `${s.width}%` }} />
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    </div>
   );
 }
 
