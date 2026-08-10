@@ -7,7 +7,10 @@ import {
 } from "@/lib/dealer-group-context";
 import { getAccessibleStores } from "@/lib/store-access";
 import { canAccessProfitCenter } from "@/lib/plan-access";
-import { getCentralTimeParts } from "@/lib/dashboard/pace";
+import {
+  getCentralTimeParts,
+  type CalendarDay,
+} from "@/lib/dashboard/pace";
 import SelectAutoGroupEmptyState from "../SelectAutoGroupEmptyState";
 import PlanNoAccessState from "../PlanNoAccessState";
 import LeaderboardClient from "./LeaderboardClient";
@@ -16,8 +19,6 @@ type Store = { id: string; name: string };
 type Deal = {
   id: string;
   status: string;
-  front_profit: number | null;
-  back_profit: number | null;
   store_id: string;
   sale_date: string;
 };
@@ -69,7 +70,7 @@ export default async function SalespersonLeaderboardPage({
     return (
       <PlanNoAccessState
         title="Salesperson Leaderboard"
-        description="MTD and YTD salesperson rankings with units and gross are available on the Analyze plan and above."
+        description="MTD and YTD salesperson rankings by units are available on the Analyze plan and above."
         requiredPlan="Analyze"
       />
     );
@@ -78,9 +79,12 @@ export default async function SalespersonLeaderboardPage({
   const ct = getCentralTimeParts();
   const { year, month } = parseYearMonth(searchParams);
   const isCurrentMonth = year === ct.year && month === ct.month;
+  const isFutureMonth =
+    year > ct.year || (year === ct.year && month > ct.month);
 
   const mm = String(month).padStart(2, "0");
   const daysInMonth = new Date(year, month, 0).getDate();
+  const firstOfMonth = `${year}-${mm}-01`;
   const lastOfMonth = `${year}-${mm}-${String(daysInMonth).padStart(2, "0")}`;
   const firstOfYear = `${year}-01-01`;
 
@@ -92,9 +96,11 @@ export default async function SalespersonLeaderboardPage({
     deals: [] as Deal[],
     salespeople: [] as Salesperson[],
     dealSalespeople: [] as DealSalesperson[],
+    calendarDays: [] as CalendarDay[],
     year,
     month,
     isCurrentMonth,
+    isFutureMonth,
     currentYear: ct.year,
     currentMonth: ct.month,
   };
@@ -103,11 +109,11 @@ export default async function SalespersonLeaderboardPage({
     return <LeaderboardClient {...emptyProps} />;
   }
 
-  const [dealsRes, spRes] = await Promise.all([
+  const [dealsRes, spRes, calRes] = await Promise.all([
     fetchAllRows<Deal>((from, to) =>
       supabase
         .from("deals")
-        .select("id,status,front_profit,back_profit,store_id,sale_date")
+        .select("id,status,store_id,sale_date")
         .in("store_id", storeIds)
         .gte("sale_date", firstOfYear)
         .lte("sale_date", lastOfMonth)
@@ -119,10 +125,17 @@ export default async function SalespersonLeaderboardPage({
       .select("id,name,store_id")
       .in("store_id", storeIds)
       .order("name"),
+    supabase
+      .from("store_calendar_days")
+      .select("date,is_working_day,store_id")
+      .in("store_id", storeIds)
+      .gte("date", firstOfMonth)
+      .lte("date", lastOfMonth),
   ]);
 
   const deals = dealsRes.data;
   const salespeople = (spRes.data ?? []) as unknown as Salesperson[];
+  const calendarDays = (calRes.data ?? []) as unknown as CalendarDay[];
   const dealIds = deals.map((d) => d.id);
 
   let dealSalespeople: DealSalesperson[] = [];
@@ -143,9 +156,11 @@ export default async function SalespersonLeaderboardPage({
       deals={deals}
       salespeople={salespeople}
       dealSalespeople={dealSalespeople}
+      calendarDays={calendarDays}
       year={year}
       month={month}
       isCurrentMonth={isCurrentMonth}
+      isFutureMonth={isFutureMonth}
       currentYear={ct.year}
       currentMonth={ct.month}
     />

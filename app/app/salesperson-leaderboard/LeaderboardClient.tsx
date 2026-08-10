@@ -5,16 +5,16 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   MONTH_NAMES,
-  fmtCurrency,
+  computePaceSnapshot,
+  computeWorkingDays,
   fmtUnits,
+  type CalendarDay,
 } from "@/lib/dashboard/pace";
 
 type Store = { id: string; name: string };
 type Deal = {
   id: string;
   status: string;
-  front_profit: number | null;
-  back_profit: number | null;
   store_id: string;
   sale_date: string;
 };
@@ -30,19 +30,17 @@ type Props = {
   deals: Deal[];
   salespeople: Salesperson[];
   dealSalespeople: DealSalesperson[];
+  calendarDays: CalendarDay[];
   year: number;
   month: number;
   isCurrentMonth: boolean;
+  isFutureMonth: boolean;
   currentYear: number;
   currentMonth: number;
 };
 
 function isBooked(status: string) {
   return status === "pending" || status === "delivered" || status === "closed";
-}
-
-function isClosed(status: string) {
-  return status === "closed";
 }
 
 function saleMonth(saleDate: string): { year: number; month: number } {
@@ -53,14 +51,20 @@ function saleMonth(saleDate: string): { year: number; month: number } {
   };
 }
 
+function fmtPace(pace: number | null): string {
+  return pace !== null ? String(pace) : "—";
+}
+
 export default function LeaderboardClient({
   stores,
   deals,
   salespeople,
   dealSalespeople,
+  calendarDays,
   year,
   month,
   isCurrentMonth,
+  isFutureMonth,
   currentYear,
   currentMonth,
 }: Props) {
@@ -109,6 +113,16 @@ export default function LeaderboardClient({
       selectedStore === "all" ? stores.map((s) => s.id) : [selectedStore];
     const showStoreCol = selectedStore === "all" && stores.length > 1;
     const storeById = new Map(stores.map((s) => [s.id, s.name]));
+    const workingDaysByStore = new Map<string, string[]>();
+
+    function workingDaysForStore(storeId: string): string[] {
+      let days = workingDaysByStore.get(storeId);
+      if (!days) {
+        days = computeWorkingDays(year, month, calendarDays, [storeId]);
+        workingDaysByStore.set(storeId, days);
+      }
+      return days;
+    }
 
     const mtdDeals = deals.filter((d) => {
       if (!selectedStoreIds.includes(d.store_id)) return false;
@@ -126,10 +140,6 @@ export default function LeaderboardClient({
       {
         mtdUnits: number;
         ytdUnits: number;
-        completeGrossUnits: number;
-        completeGross: number;
-        front: number;
-        back: number;
       }
     >();
 
@@ -144,10 +154,6 @@ export default function LeaderboardClient({
       const acc = spAcc.get(ds.salesperson_id) ?? {
         mtdUnits: 0,
         ytdUnits: 0,
-        completeGrossUnits: 0,
-        completeGross: 0,
-        front: 0,
-        back: 0,
       };
 
       if (ytdDeal && isBooked(ytdDeal.status)) {
@@ -155,21 +161,6 @@ export default function LeaderboardClient({
       }
       if (mtdDeal && isBooked(mtdDeal.status)) {
         acc.mtdUnits += share;
-        if (isClosed(mtdDeal.status)) {
-          acc.front += (mtdDeal.front_profit ?? 0) * share;
-          acc.back += (mtdDeal.back_profit ?? 0) * share;
-          const frontProfit = mtdDeal.front_profit;
-          const backProfit = mtdDeal.back_profit;
-          const hasBoth =
-            frontProfit != null &&
-            Number.isFinite(frontProfit) &&
-            backProfit != null &&
-            Number.isFinite(backProfit);
-          if (hasBoth) {
-            acc.completeGrossUnits += share;
-            acc.completeGross += (frontProfit + backProfit) * share;
-          }
-        }
       }
       spAcc.set(ds.salesperson_id, acc);
     }
@@ -178,28 +169,31 @@ export default function LeaderboardClient({
     const leaderboard = Array.from(spAcc.entries())
       .map(([spId, acc]) => {
         const sp = spById.get(spId);
-        const total = acc.front + acc.back;
+        const storeId = sp?.store_id ?? "";
+        const pace = storeId
+          ? computePaceSnapshot(
+              acc.mtdUnits,
+              null,
+              year,
+              month,
+              workingDaysForStore(storeId),
+              isCurrentMonth,
+              isFutureMonth
+            ).monthEndProjection
+          : null;
         return {
           id: spId,
           name: sp?.name ?? "Unknown",
-          storeName: storeById.get(sp?.store_id ?? "") ?? "",
+          storeName: storeById.get(storeId) ?? "",
           mtdUnits: acc.mtdUnits,
+          pace,
           ytdUnits: acc.ytdUnits,
-          front: acc.front,
-          back: acc.back,
-          total,
-          avgGross:
-            acc.completeGrossUnits > 0
-              ? acc.completeGross / acc.completeGrossUnits
-              : null,
         };
       })
       .filter((r) => r.mtdUnits > 0)
       .sort(
         (a, b) =>
-          b.mtdUnits - a.mtdUnits ||
-          b.total - a.total ||
-          a.name.localeCompare(b.name)
+          b.mtdUnits - a.mtdUnits || a.name.localeCompare(b.name)
       );
 
     return {
@@ -213,8 +207,11 @@ export default function LeaderboardClient({
     deals,
     salespeople,
     dealSalespeople,
+    calendarDays,
     year,
     month,
+    isCurrentMonth,
+    isFutureMonth,
   ]);
 
   const top3 = leaderboard.slice(0, 3);
@@ -230,7 +227,7 @@ export default function LeaderboardClient({
           <p className="pc-kicker">Sales leaderboard</p>
           <h1 className="pc-title">{monthLabel}</h1>
           <p className="pc-meta">
-            Combined volume and gross across all departments · Live · refreshed{" "}
+            Combined volume across all departments · Live · refreshed{" "}
             {updatedLabel}
           </p>
         </div>
@@ -308,8 +305,8 @@ export default function LeaderboardClient({
           <span className="da-sec-eyebrow">Sales leaderboard</span>
           <h2>Who&apos;s leading the board this month</h2>
           <p>
-            Top names stay visible for the whole store — MTD units, gross, and
-            YTD pace.
+            Top names stay visible for the whole store — MTD units, pace, and
+            YTD units.
           </p>
         </div>
 
@@ -330,8 +327,8 @@ export default function LeaderboardClient({
                   <span>MTD units</span>
                 </div>
                 <div className="da-demo-podium-stat">
-                  <b>{fmtCurrency(p.total)}</b>
-                  <span>MTD gross</span>
+                  <b>{fmtPace(p.pace)}</b>
+                  <span>Pace</span>
                 </div>
                 <div className="da-demo-podium-stat">
                   <b>{fmtUnits(p.ytdUnits)}</b>
@@ -360,18 +357,15 @@ export default function LeaderboardClient({
                 <th>Salesperson</th>
                 {showStoreCol && <th>Store</th>}
                 <th className="r">MTD Units</th>
+                <th className="r">Pace</th>
                 <th className="r">YTD Units</th>
-                <th className="r">Front</th>
-                <th className="r">Back</th>
-                <th className="r">Total Gross</th>
-                <th className="r">Avg / Deal</th>
               </tr>
             </thead>
             <tbody>
               {leaderboard.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={showStoreCol ? 9 : 8}
+                    colSpan={showStoreCol ? 6 : 5}
                     className="dash-tv-empty-cell"
                   >
                     No deals logged for this view.
@@ -390,13 +384,8 @@ export default function LeaderboardClient({
                     <td className="strong">{row.name}</td>
                     {showStoreCol && <td>{row.storeName}</td>}
                     <td className="r">{fmtUnits(row.mtdUnits)}</td>
+                    <td className="r">{fmtPace(row.pace)}</td>
                     <td className="r">{fmtUnits(row.ytdUnits)}</td>
-                    <td className="r">{fmtCurrency(row.front)}</td>
-                    <td className="r">{fmtCurrency(row.back)}</td>
-                    <td className="r strong">{fmtCurrency(row.total)}</td>
-                    <td className="r">
-                      {row.avgGross !== null ? fmtCurrency(row.avgGross) : "—"}
-                    </td>
                   </tr>
                 ))
               )}
@@ -404,8 +393,8 @@ export default function LeaderboardClient({
           </table>
         </div>
         <p className="dash-tv-footnote">
-          Gross and average / deal use closed deals only. Units include pending,
-          delivered, and closed (booked).
+          Units include pending, delivered, and closed (booked). Pace is
+          month-end projection from calendar working days (same as dashboard).
         </p>
       </div>
     </div>
