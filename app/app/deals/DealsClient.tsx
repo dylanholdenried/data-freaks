@@ -24,6 +24,7 @@ type Deal = {
   back_profit: number | null;
   finance_type: string | null;
   finance_manager_id: string | null;
+  acquisition_source: string | null;
 };
 
 type Store = { id: string; name: string };
@@ -35,6 +36,7 @@ type SortCol =
   | "sale_date"
   | "stock_number"
   | "customer_last_name"
+  | "acquisition_source"
   | "status"
   | "front_profit"
   | "back_profit"
@@ -173,7 +175,9 @@ function SortHeader({
     <button
       type="button"
       onClick={() => onSort(col)}
-      className={`flex w-full items-center ${right ? "justify-end" : ""} text-xs font-semibold uppercase tracking-wide transition-colors ${
+      className={`w-full text-left text-xs font-semibold uppercase leading-tight tracking-wide transition-colors ${
+        right ? "text-right" : ""
+      } ${
         active ? "text-blue-600" : "text-muted-foreground hover:text-muted-foreground"
       }`}
     >
@@ -333,6 +337,11 @@ export default function DealsClient({
         case "customer_last_name":
           val = (a.customer_last_name ?? "").localeCompare(b.customer_last_name ?? "");
           break;
+        case "acquisition_source":
+          val = (a.acquisition_source ?? "").localeCompare(b.acquisition_source ?? "", undefined, {
+            sensitivity: "base",
+          });
+          break;
         case "status":
           val = a.status.localeCompare(b.status);
           break;
@@ -395,8 +404,8 @@ export default function DealsClient({
   // Grid template — Store column only when Both is selected
   const showStore = storeFilter === "both";
   const TGRID = showStore
-    ? "xl:grid-cols-[65px_80px_110px_1fr_90px_100px_115px_90px_68px_68px_76px_128px] xl:gap-2"
-    : "xl:grid-cols-[65px_80px_110px_1fr_100px_115px_90px_68px_68px_76px_128px] xl:gap-2";
+    ? "xl:grid-cols-[65px_80px_110px_1fr_90px_100px_115px_130px_90px_68px_68px_76px_128px] xl:gap-2"
+    : "xl:grid-cols-[65px_80px_110px_1fr_100px_115px_130px_90px_68px_68px_76px_128px] xl:gap-2";
 
   function canMarkDelivered(status: string) {
     return status === "pending";
@@ -604,6 +613,7 @@ export default function DealsClient({
           )}
           <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Dept</span>
           <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Salesperson</span>
+          <SortHeader col="acquisition_source" label="Acquisition Source" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
           <SortHeader col="status" label="Status" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
           <SortHeader col="front_profit" label="Front" right sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
           <SortHeader col="back_profit" label="Back" right sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
@@ -667,6 +677,9 @@ export default function DealsClient({
                       {showStore && <span>{storeName}</span>}
                       <span>{deptName}</span>
                       {spNames.length > 0 && <span>{spNames.join(", ")}</span>}
+                      {deal.acquisition_source?.trim() && (
+                        <span>{deal.acquisition_source.trim()}</span>
+                      )}
                       {totalGross !== null && (
                         <span className="font-medium text-muted-foreground">
                           {fmt$(totalGross)}
@@ -689,6 +702,11 @@ export default function DealsClient({
                     {/* Salesperson(s) */}
                     <span className="hidden text-sm text-muted-foreground xl:block">
                       {spNames.length > 0 ? spNames.join(", ") : "—"}
+                    </span>
+
+                    {/* Acquisition source */}
+                    <span className="hidden min-w-0 truncate text-sm text-muted-foreground xl:block">
+                      {deal.acquisition_source?.trim() || "—"}
                     </span>
 
                     {/* Status badge */}

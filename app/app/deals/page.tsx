@@ -25,6 +25,7 @@ type Deal = {
   back_profit: number | null;
   finance_type: string | null;
   finance_manager_id: string | null;
+  acquisition_source: string | null;
 };
 
 type Store = { id: string; name: string };
@@ -58,13 +59,13 @@ export default async function DealsPage({
 }) {
   const supabase = createSupabaseServerClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("id, dealer_group_id, role")
-    .or(profileMatchAuthUserId(session!.user.id))
+    .or(profileMatchAuthUserId(user!.id))
     .maybeSingle();
 
   const dealerGroupId = await getEffectiveDealerGroupId(profile);
@@ -147,7 +148,8 @@ export default async function DealsPage({
           "id,sale_date,status,customer_last_name,stock_number,vin," +
             "vehicle_year,vehicle_make,vehicle_model," +
             "store_id,department_id," +
-            "front_profit,back_profit,finance_type,finance_manager_id"
+            "front_profit,back_profit,finance_type,finance_manager_id," +
+            "acquisition_source"
         )
         .in("store_id", storeIds)
         .order("sale_date", { ascending: false })
