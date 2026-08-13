@@ -4,6 +4,7 @@ import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { isOwnerAdmin, isPlatformStaff } from "@/lib/roles";
 import { isImpersonating } from "@/lib/impersonation";
+import { redirectOwnerAdminIfMfaRequired } from "@/lib/mfa";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type AdminContext = {
@@ -49,6 +50,8 @@ export async function requireAdminContext(): Promise<AdminContext> {
   if (!profile || profile.status !== "active" || !isPlatformStaff(profile.role)) {
     redirect("/app");
   }
+
+  await redirectOwnerAdminIfMfaRequired(supabase, profile.role);
 
   return {
     supabase: service,

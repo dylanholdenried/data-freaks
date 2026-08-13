@@ -147,10 +147,25 @@ Source skill: [raroque/vibe-security-skill](https://github.com/raroque/vibe-secu
 
 ---
 
+## 2026-08-13 — Owner-admin TOTP MFA
+
+**What:**
+- `/mfa` enroll + verify (authenticator app) required for `owner_admin` after password/magic-link.
+- Layouts, `requireAdminContext`, and login redirect until session is AAL2.
+- `is_platform_admin()` / `is_owner_admin()` now require JWT `aal=aal2` for owner_admin so a password-only session cannot use the platform-admin data fast-path.
+- Verify/enroll APIs rate-limited (10/min). Other roles unchanged.
+
+**Why:** Stolen owner password was the remaining realistic path to all dealer data.
+
+**Verify:** Log in as owner_admin → scan QR → enter code → app/admin load. Log in as group_admin → no MFA screen. Lose-phone recovery: Supabase → Authentication → Users → remove factor, then re-enroll.
+
+---
+
 ## Remaining manual checklist
 
-- [ ] Rotate Supabase service_role (+ anon) keys; update Vercel
-- [ ] Set `IMPERSONATION_SECRET` on Vercel
-- [ ] Enable Auth leaked-password protection in Supabase Dashboard
-- [ ] Commit staged `.env.local` untrack + migration/code changes
-- [ ] Smoke test: login, admin bulk-upload confirm/unwind, store_viewer read-only, signup → provision → login
+- [x] Rotate Supabase service_role (+ anon) keys; update Vercel (migrated to `sb_publishable_` / `sb_secret_`; legacy JWT keys disabled)
+- [x] Set `IMPERSONATION_SECRET` on Vercel
+- [ ] Enable Auth leaked-password protection in Supabase Dashboard (optional; Captcha left off)
+- [x] Commit staged `.env.local` untrack + migration/code changes
+- [ ] Smoke test leftover: admin bulk-upload confirm/unwind, store_viewer read-only
+- [ ] Enroll owner_admin authenticator on next login (`/mfa`)

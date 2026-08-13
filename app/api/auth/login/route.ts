@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { clientIpFromRequest, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseRouteHandlerClient } from "@/lib/supabase/route-handler";
+import { ownerAdminNeedsMfa, loadActiveProfileRole } from "@/lib/mfa";
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -49,7 +50,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    return NextResponse.json({ ok: true });
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const role = user ? await loadActiveProfileRole(supabase, user.id) : null;
+    const next =
+      user && (await ownerAdminNeedsMfa(supabase, role)) ? "/mfa" : "/app";
+
+    return NextResponse.json({ ok: true, next });
   } catch (err: any) {
     console.error("POST /api/auth/login", err);
     const message =

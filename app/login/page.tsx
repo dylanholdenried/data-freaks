@@ -77,7 +77,8 @@ export default function LoginPage() {
         throw new Error(body.error ?? `Login failed (${res.status})`);
       }
 
-      window.location.href = "/app";
+      const body = await res.json().catch(() => ({}));
+      window.location.href = typeof body.next === "string" ? body.next : "/app";
     } catch (err: any) {
       console.error(err);
       const msg = String(err?.message ?? "");

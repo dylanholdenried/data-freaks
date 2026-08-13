@@ -7,6 +7,7 @@ import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { formatProfileName, formatRoleLabel } from "@/lib/profile-display";
 import { isPlatformStaff } from "@/lib/roles";
 import { isImpersonating } from "@/lib/impersonation";
+import { redirectOwnerAdminIfMfaRequired } from "@/lib/mfa";
 import { Button } from "@/components/ui/button";
 import { DaAppThemeProvider } from "@/components/theme/theme-context";
 import ThemeToggle from "@/components/theme/ThemeToggle";
@@ -40,6 +41,8 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   if (!profile || profile.status !== "active" || !isPlatformStaff(profile.role)) {
     redirect("/app");
   }
+
+  await redirectOwnerAdminIfMfaRequired(supabase, profile.role);
 
   const displayName = formatProfileName(profile.first_name, profile.last_name);
   const roleLabel = formatRoleLabel(profile.role);

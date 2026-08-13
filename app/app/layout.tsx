@@ -11,6 +11,7 @@ import {
 import { formatProfileName, formatRoleLabel } from "@/lib/profile-display";
 import { isPlatformStaff, isStoreViewer } from "@/lib/roles";
 import { getImpersonationState, isAppViewOnly } from "@/lib/impersonation";
+import { redirectOwnerAdminIfMfaRequired } from "@/lib/mfa";
 import { Button } from "@/components/ui/button";
 import { BarChart3, Shield } from "lucide-react";
 import { DaAppThemeProvider } from "@/components/theme/theme-context";
@@ -45,6 +46,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
   const impersonation = await getImpersonationState();
   const isImpersonatingSession = Boolean(impersonation);
+  if (!isImpersonatingSession) {
+    await redirectOwnerAdminIfMfaRequired(supabase, profile.role);
+  }
   const isPlatformAdmin = isPlatformStaff(profile.role) && !isImpersonatingSession;
   // Nav follows the real role (so store_admin sees full menus while impersonating).
   // Mutate/read-only overlay still applies during impersonation.
