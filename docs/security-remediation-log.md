@@ -123,6 +123,30 @@ Source skill: [raroque/vibe-security-skill](https://github.com/raroque/vibe-secu
 
 ---
 
+## 2026-08-13 — Hotfix: group_admin dashboard/nav slowness (production)
+
+**Symptom:** New Jim Butler `group_admin` (`dylan@dealeracq.com`) could log in but dashboard/nav took minutes. owner_admin was already fast.
+
+**Cause:** Platform staff had a one-shot `is_platform_admin()` SELECT policy. `group_admin` still used per-row `has_store_access(store_id)` over ~4,481 Jim Butler deals.
+
+**What:** Applied `rls_accessible_store_ids_initplan` ([`20260813120000_rls_accessible_store_ids_initplan.sql`](../supabase/migrations/20260813120000_rls_accessible_store_ids_initplan.sql)):
+- `accessible_store_ids()` computes the store set once (platform / group / assigned stores)
+- High-traffic SELECT policies use `store_id IN (SELECT accessible_store_ids())`
+
+**Verify:** Hard refresh as `dylan@dealeracq.com` — dashboard, Sales Registry, Profit Center, Calendar should navigate in a couple seconds.
+
+---
+
+## 2026-08-13 — Same store-set SELECT path for leftover tables (production)
+
+**Why:** `store_admin` / `store_viewer` already used `accessible_store_ids()` on dashboard/registry tables. Remaining SELECTs (deal flags/events, department_makes, inventory) still called `has_store_access()` per row.
+
+**What:** Applied `rls_remaining_select_store_set` ([`20260813121000_rls_remaining_select_store_set.sql`](../supabase/migrations/20260813121000_rls_remaining_select_store_set.sql)).
+
+**Verify:** Open a deal as store_admin; open Inventory Command if on plan; View Only dashboard/registry/calendar.
+
+---
+
 ## Remaining manual checklist
 
 - [ ] Rotate Supabase service_role (+ anon) keys; update Vercel
