@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { clientIpFromRequest, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseRouteHandlerClient } from "@/lib/supabase/route-handler";
 
 const loginSchema = z.object({
@@ -9,6 +10,15 @@ const loginSchema = z.object({
 
 export async function POST(req: Request) {
   try {
+    const ip = clientIpFromRequest(req);
+    const limited = rateLimit(`auth:login:${ip}`, 20, 60_000);
+    if (!limited.ok) {
+      return NextResponse.json(
+        { error: "Too many login attempts. Try again shortly." },
+        { status: 429, headers: { "Retry-After": String(limited.retryAfterSec) } }
+      );
+    }
+
     const supabase = createSupabaseRouteHandlerClient();
     const body = await req.json();
     const parsed = loginSchema.parse(body);

@@ -433,6 +433,13 @@ async function unwindDealImportBatchJs(
 
   let deleted = 0;
   if (dealIds.length > 0) {
+    // Child rows without ON DELETE CASCADE on older DBs block deal deletes
+    const { error: tradesError } = await supabase.from("trades").delete().in("deal_id", dealIds);
+    if (tradesError) throw new Error(tradesError.message);
+
+    const { error: notesError } = await supabase.from("deal_notes").delete().in("deal_id", dealIds);
+    if (notesError) throw new Error(notesError.message);
+
     const { error: delError, count } = await supabase
       .from("deals")
       .delete({ count: "exact" })

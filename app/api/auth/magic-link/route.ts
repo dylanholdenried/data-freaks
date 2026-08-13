@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { clientIpFromRequest, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseRouteHandlerClient } from "@/lib/supabase/route-handler";
 
 const schema = z.object({
@@ -8,6 +9,15 @@ const schema = z.object({
 
 export async function POST(req: Request) {
   try {
+    const ip = clientIpFromRequest(req);
+    const limited = rateLimit(`auth:magic:${ip}`, 5, 60_000);
+    if (!limited.ok) {
+      return NextResponse.json(
+        { error: "Too many magic-link requests. Try again shortly." },
+        { status: 429, headers: { "Retry-After": String(limited.retryAfterSec) } }
+      );
+    }
+
     const supabase = createSupabaseRouteHandlerClient();
     const body = await req.json();
     const parsed = schema.parse(body);

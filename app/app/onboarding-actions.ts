@@ -17,16 +17,16 @@ async function requireActiveProfileId() {
   await assertNotImpersonating();
   const supabase = createSupabaseServerClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session) {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
     throw new Error("Not signed in");
   }
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("id, status")
-    .or(profileMatchAuthUserId(session.user.id))
+    .or(profileMatchAuthUserId(user.id))
     .maybeSingle();
 
   if (!profile || profile.status !== "active") {

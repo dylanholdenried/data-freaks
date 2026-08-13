@@ -51,17 +51,17 @@ export async function loadProfitCenterRange(
 
   const supabase = createSupabaseServerClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     return { ok: false, error: "You must be signed in." };
   }
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("id, dealer_group_id, role")
-    .or(profileMatchAuthUserId(session.user.id))
+    .or(profileMatchAuthUserId(user.id))
     .maybeSingle();
 
   if (!profile || isStoreViewer(profile.role)) {

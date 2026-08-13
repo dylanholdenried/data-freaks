@@ -6,10 +6,10 @@ import { Card, CardContent } from "@/components/ui/card";
 export default async function AwaitingApprovalPage() {
   const supabase = createSupabaseServerClient();
   const {
-    data: { session }
-  } = await supabase.auth.getSession();
+    data: { user }
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     redirect("/login");
   }
 

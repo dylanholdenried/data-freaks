@@ -17,12 +17,11 @@ export type ImpersonationPayload = {
 };
 
 function getSecret(): string {
-  const secret =
-    process.env.IMPERSONATION_SECRET?.trim() ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ||
-    "";
+  // Dedicated secret only — never fall back to the service_role key.
+  // If service_role leaks, forged impersonation cookies must still be impossible.
+  const secret = process.env.IMPERSONATION_SECRET?.trim() || "";
   if (!secret) {
-    throw new Error("Missing IMPERSONATION_SECRET or SUPABASE_SERVICE_ROLE_KEY");
+    throw new Error("Missing IMPERSONATION_SECRET");
   }
   return secret;
 }

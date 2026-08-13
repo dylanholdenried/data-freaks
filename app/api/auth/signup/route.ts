@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { sendSignupRequestNotificationEmail } from "@/lib/email/resend";
+import { clientIpFromRequest, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 
 const signupSchema = z.object({
@@ -22,15 +23,25 @@ export async function POST(req: Request) {
   const supabase = createSupabaseServiceClient();
 
   try {
+    const ip = clientIpFromRequest(req);
+    const limited = rateLimit(`auth:signup:${ip}`, 5, 60 * 60_000);
+    if (!limited.ok) {
+      return NextResponse.json(
+        { error: "Too many signup attempts. Try again later." },
+        { status: 429, headers: { "Retry-After": String(limited.retryAfterSec) } }
+      );
+    }
+
     const body = await req.json();
     const parsed = signupSchema.parse(body);
     const email = parsed.email.trim().toLowerCase();
 
-    // 1) Create auth user without switching the service client session
+    // 1) Create auth user without switching the service client session.
+    // Leave email unconfirmed until they verify — reduces abuse of open signup.
     const { data: createData, error: createError } = await supabase.auth.admin.createUser({
       email,
       password: parsed.password,
-      email_confirm: true,
+      email_confirm: false,
       user_metadata: {
         first_name: parsed.first_name,
         last_name: parsed.last_name

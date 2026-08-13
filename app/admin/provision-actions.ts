@@ -25,6 +25,20 @@ function parseAuthUserIdFromNotes(notes: string | null | undefined): string | nu
   return match?.[1] ?? null;
 }
 
+/** Confirm Auth email when activating a signup so the user can sign in after provision. */
+async function confirmAuthEmailIfNeeded(
+  supabase: Awaited<ReturnType<typeof requireAdminServiceClient>>,
+  authUserId: string | null | undefined
+): Promise<void> {
+  if (!authUserId) return;
+  const { error } = await supabase.auth.admin.updateUserById(authUserId, {
+    email_confirm: true,
+  });
+  if (error) {
+    throw new Error(`Could not confirm auth email: ${error.message}`);
+  }
+}
+
 function isExistingJoinRequest(request: {
   request_mode?: string | null;
   notes?: string | null;
@@ -385,6 +399,11 @@ export async function activateAutoGroup(requestId: string): Promise<{ redirectTo
     throw new Error(`Activate profile failed: ${profileActivateError.message}`);
   }
 
+  await confirmAuthEmailIfNeeded(
+    supabase,
+    profile.user_id || profile.id || requestedUserId
+  );
+
   const { error: requestActivateError } = await supabase
     .from("dealer_group_requests")
     .update({
@@ -570,6 +589,12 @@ export async function approveJoinExistingRequest(formData: FormData): Promise<{
 
   if (profileUpdateError) {
     return { saved: false, error: `Update profile failed: ${profileUpdateError.message}` };
+  }
+
+  try {
+    await confirmAuthEmailIfNeeded(supabase, authUserId);
+  } catch (err: any) {
+    return { saved: false, error: err?.message || "Could not confirm auth email" };
   }
 
   const now = new Date().toISOString();

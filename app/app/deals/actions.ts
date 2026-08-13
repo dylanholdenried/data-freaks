@@ -29,10 +29,10 @@ export async function reopenDeal(
 
   const supabase = createSupabaseServerClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     return { ok: false, error: "You must be signed in to reopen a deal." };
   }
 
@@ -45,7 +45,7 @@ export async function reopenDeal(
   const { data: profile } = await supabase
     .from("profiles")
     .select("id, dealer_group_id, role, status")
-    .or(profileMatchAuthUserId(session.user.id))
+    .or(profileMatchAuthUserId(user.id))
     .maybeSingle();
 
   if (!profile || profile.status !== "active" || !canReopenDeal(profile.role)) {

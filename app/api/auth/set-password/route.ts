@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import type { EmailOtpType } from "@supabase/supabase-js";
+import { clientIpFromRequest, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseRouteHandlerClient } from "@/lib/supabase/route-handler";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
@@ -34,6 +35,15 @@ function normalizeEmail(email: string) {
  */
 export async function POST(req: Request) {
   try {
+    const ip = clientIpFromRequest(req);
+    const limited = rateLimit(`auth:set-password:${ip}`, 10, 60_000);
+    if (!limited.ok) {
+      return NextResponse.json(
+        { error: "Too many attempts. Try again shortly." },
+        { status: 429, headers: { "Retry-After": String(limited.retryAfterSec) } }
+      );
+    }
+
     const body = await req.json();
     const parsed = schema.parse(body);
     const confirmedEmail = normalizeEmail(parsed.confirmedEmail);

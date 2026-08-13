@@ -19,14 +19,14 @@ export async function signOut() {
 export async function createStore(formData: FormData) {
   const supabase = createSupabaseServerClient();
   const {
-    data: { session }
-  } = await supabase.auth.getSession();
-  if (!session) redirect("/login");
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("id, dealer_group_id, role")
-    .or(profileMatchAuthUserId(session.user.id))
+    .or(profileMatchAuthUserId(user.id))
     .maybeSingle();
 
   await assertCanMutateAppData(profile?.role);
@@ -50,14 +50,14 @@ export async function createStore(formData: FormData) {
 export async function createDepartment(formData: FormData) {
   const supabase = createSupabaseServerClient();
   const {
-    data: { session }
-  } = await supabase.auth.getSession();
-  if (!session) redirect("/login");
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("id, dealer_group_id, role")
-    .or(profileMatchAuthUserId(session.user.id))
+    .or(profileMatchAuthUserId(user.id))
     .maybeSingle();
 
   await assertCanMutateAppData(profile?.role);
@@ -77,14 +77,14 @@ export async function createDepartment(formData: FormData) {
 export async function createSalesperson(formData: FormData) {
   const supabase = createSupabaseServerClient();
   const {
-    data: { session }
-  } = await supabase.auth.getSession();
-  if (!session) redirect("/login");
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("id, dealer_group_id, role")
-    .or(profileMatchAuthUserId(session.user.id))
+    .or(profileMatchAuthUserId(user.id))
     .maybeSingle();
 
   await assertCanMutateAppData(profile?.role);
@@ -105,14 +105,14 @@ export async function createSalesperson(formData: FormData) {
 export async function createSource(formData: FormData) {
   const supabase = createSupabaseServerClient();
   const {
-    data: { session }
-  } = await supabase.auth.getSession();
-  if (!session) redirect("/login");
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("id, dealer_group_id, role")
-    .or(profileMatchAuthUserId(session.user.id))
+    .or(profileMatchAuthUserId(user.id))
     .maybeSingle();
 
   await assertCanMutateAppData(profile?.role);
@@ -132,14 +132,14 @@ export async function createSource(formData: FormData) {
 export async function toggleCalendarDay(storeId: string, date: string, isWorkingDay: boolean) {
   const supabase = createSupabaseServerClient();
   const {
-    data: { session }
-  } = await supabase.auth.getSession();
-  if (!session) redirect("/login");
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("id, dealer_group_id, role")
-    .or(profileMatchAuthUserId(session.user.id))
+    .or(profileMatchAuthUserId(user.id))
     .maybeSingle();
 
   await assertCanMutateAppData(profile?.role);
@@ -183,14 +183,14 @@ export async function toggleCalendarDay(storeId: string, date: string, isWorking
 export async function createDeal(formData: FormData) {
   const supabase = createSupabaseServerClient();
   const {
-    data: { session }
-  } = await supabase.auth.getSession();
-  if (!session) redirect("/login");
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("id,dealer_group_id,role")
-    .or(profileMatchAuthUserId(session.user.id))
+    .or(profileMatchAuthUserId(user.id))
     .maybeSingle();
 
   await assertCanMutateAppData(profile?.role);

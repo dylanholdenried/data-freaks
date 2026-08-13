@@ -26,17 +26,17 @@ import WelcomeOnboardingModal from "./WelcomeOnboardingModal";
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const supabase = createSupabaseServerClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     redirect("/login");
   }
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("first_name,last_name,role,status,dealer_group_id,onboarding_welcome_seen_at")
-    .or(profileMatchAuthUserId(session.user.id))
+    .or(profileMatchAuthUserId(user.id))
     .maybeSingle();
 
   if (!profile || profile.status !== "active") {
