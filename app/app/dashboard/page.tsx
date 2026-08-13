@@ -20,7 +20,12 @@ type Deal = {
   acquisition_source: string | null;
   finance_type: string | null;
 };
-type Department = { id: string; name: string; store_id: string };
+type Department = {
+  id: string;
+  name: string;
+  store_id: string;
+  rolls_up_to_department_id: string | null;
+};
 type CalendarDay = { date: string; is_working_day: boolean; store_id: string };
 type Goal = { department_id: string; volume_goal: number };
 
@@ -109,7 +114,7 @@ export default async function DashboardPage({
     ),
     supabase
       .from("departments")
-      .select("id,name,store_id")
+      .select("id,name,store_id,rolls_up_to_department_id")
       .in("store_id", storeIds)
       .order("name"),
     supabase

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ChevronRight } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { rollupIdSet } from "@/lib/departments/rollup";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -28,7 +29,12 @@ type Deal = {
 };
 
 type Store = { id: string; name: string };
-type DeptRow = { id: string; name: string; store_id: string };
+type DeptRow = {
+  id: string;
+  name: string;
+  store_id: string;
+  rolls_up_to_department_id: string | null;
+};
 type PersonRow = { id: string; name: string; store_id: string };
 type DealSalesperson = { deal_id: string; salesperson_id: string };
 
@@ -56,6 +62,7 @@ interface Props {
   initialStatus?: StatusFilter;
   initialStore?: "both" | string;
   initialDepartment?: string;
+  initialRollup?: boolean;
   viewOnly?: boolean;
 }
 
@@ -200,6 +207,7 @@ export default function DealsClient({
   initialStatus = "all",
   initialStore,
   initialDepartment = "",
+  initialRollup = false,
   viewOnly = false,
 }: Props) {
   // ── Local deals (updated when marking delivered without a full refetch) ──────
@@ -222,6 +230,7 @@ export default function DealsClient({
   const [yearFilter, setYearFilter] = useState(initialYear);
   const [monthFilter, setMonthFilter] = useState(initialMonth);
   const [departmentFilter, setDepartmentFilter] = useState(initialDepartment);
+  const [includeRollup, setIncludeRollup] = useState(initialRollup);
   const [salespersonFilter, setSalespersonFilter] = useState("");
   const [financeManagerFilter, setFinanceManagerFilter] = useState("");
   const [financeTypeFilter, setFinanceTypeFilter] = useState("");
@@ -300,6 +309,10 @@ export default function DealsClient({
     }
 
     const search = searchText.toLowerCase().trim();
+    const rollupIds =
+      departmentFilter && includeRollup
+        ? rollupIdSet(departmentFilter, departments)
+        : null;
 
     const filtered = localDeals.filter((deal) => {
       if (statusFilter !== "all" && deal.status !== statusFilter) return false;
@@ -309,7 +322,13 @@ export default function DealsClient({
         const m = parseInt(deal.sale_date.slice(5, 7), 10);
         if (y !== yearFilter || m !== monthFilter) return false;
       }
-      if (departmentFilter && deal.department_id !== departmentFilter) return false;
+      if (departmentFilter) {
+        if (rollupIds) {
+          if (!rollupIds.has(deal.department_id)) return false;
+        } else if (deal.department_id !== departmentFilter) {
+          return false;
+        }
+      }
       if (salespersonFilter && !dealSpIdMap.get(deal.id)?.includes(salespersonFilter))
         return false;
       if (financeManagerFilter && deal.finance_manager_id !== financeManagerFilter)
@@ -374,6 +393,7 @@ export default function DealsClient({
     yearFilter,
     monthFilter,
     departmentFilter,
+    includeRollup,
     salespersonFilter,
     financeManagerFilter,
     financeTypeFilter,
@@ -398,6 +418,7 @@ export default function DealsClient({
       !departmentOptions.some((d) => d.id === departmentFilter)
     ) {
       setDepartmentFilter("");
+      setIncludeRollup(false);
     }
   }, [departmentFilter, departmentOptions]);
 
@@ -518,7 +539,10 @@ export default function DealsClient({
           {/* Department */}
           <select
             value={departmentFilter}
-            onChange={(e) => setDepartmentFilter(e.target.value)}
+            onChange={(e) => {
+              setDepartmentFilter(e.target.value);
+              setIncludeRollup(false);
+            }}
             className={SEL}
           >
             <option value="">All Departments</option>

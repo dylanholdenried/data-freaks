@@ -287,11 +287,14 @@ create table public.departments (
   name text not null,
   is_active boolean not null default true,
   is_demo boolean not null default false,
+  rolls_up_to_department_id uuid references public.departments(id) on delete restrict,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 create index departments_store_id_idx on public.departments(store_id);
+create index departments_rolls_up_to_department_id_idx
+  on public.departments(rolls_up_to_department_id);
 
 -- Live shape: id, user_id (auth user), store_id
 create table public.user_store_access (

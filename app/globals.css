@@ -3776,6 +3776,25 @@ main:has(.da-app) + footer {
   border-top: 1px solid var(--da-line);
 }
 
+.dash-channel-split {
+  margin: -4px 0 0;
+  font-family: var(--da-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--da-muted);
+}
+
+.dash-channel-link {
+  color: var(--da-muted);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--da-line) 80%, transparent);
+}
+
+.dash-channel-link:hover {
+  color: var(--da-blue);
+  border-bottom-color: color-mix(in srgb, var(--da-blue) 45%, transparent);
+}
+
 .dash-finance-line {
   margin: 0;
   font-family: var(--da-mono);

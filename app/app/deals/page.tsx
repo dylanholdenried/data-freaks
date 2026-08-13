@@ -29,7 +29,12 @@ type Deal = {
 };
 
 type Store = { id: string; name: string };
-type DeptRow = { id: string; name: string; store_id: string };
+type DeptRow = {
+  id: string;
+  name: string;
+  store_id: string;
+  rolls_up_to_department_id: string | null;
+};
 type PersonRow = { id: string; name: string; store_id: string };
 type DealSalesperson = { deal_id: string; salesperson_id: string };
 
@@ -112,6 +117,7 @@ export default async function DealsPage({
   const statusParam = paramString(searchParams, "status");
   const storeParam = paramString(searchParams, "store");
   const departmentParam = paramString(searchParams, "department");
+  const rollupParam = paramString(searchParams, "rollup");
   const yearParam = paramString(searchParams, "year");
   const monthParam = paramString(searchParams, "month");
 
@@ -158,7 +164,7 @@ export default async function DealsPage({
     ),
     supabase
       .from("departments")
-      .select("id,name,store_id")
+      .select("id,name,store_id,rolls_up_to_department_id")
       .in("store_id", storeIds)
       .order("name"),
     supabase
@@ -187,6 +193,7 @@ export default async function DealsPage({
     )
       ? departmentParam
       : "";
+  const initialRollup = rollupParam === "1" && Boolean(initialDepartment);
 
   // deal_salespeople: chunk IDs + page each chunk past the 1000-row cap
   const dealIds = deals.map((d) => d.id);
@@ -213,6 +220,7 @@ export default async function DealsPage({
       initialStatus={initialStatus}
       initialStore={initialStore}
       initialDepartment={initialDepartment}
+      initialRollup={initialRollup}
       viewOnly={await isAppViewOnly(profile.role)}
     />
   );

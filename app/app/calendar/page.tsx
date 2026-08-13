@@ -84,12 +84,17 @@ export default async function CalendarPage({
     storeIds.length
       ? supabase
           .from("departments")
-          .select("id,name,store_id")
+          .select("id,name,store_id,rolls_up_to_department_id")
           .in("store_id", storeIds)
           .eq("is_active", true)
           .order("name")
       : Promise.resolve({
-          data: [] as { id: string; name: string; store_id: string }[],
+          data: [] as {
+            id: string;
+            name: string;
+            store_id: string;
+            rolls_up_to_department_id: string | null;
+          }[],
         }),
     storeIds.length
       ? supabase
@@ -111,7 +116,12 @@ export default async function CalendarPage({
   const calendarDays = (calendarRes.data ?? []) as CalendarDay[];
   const departments = (deptsRes.data ?? [])
     .filter((d) => !isFiDepartment(d.name))
-    .map((d) => ({ id: d.id, name: d.name, store_id: d.store_id }));
+    .map((d) => ({
+      id: d.id,
+      name: d.name,
+      store_id: d.store_id,
+      rolls_up_to_department_id: d.rolls_up_to_department_id ?? null,
+    }));
 
   const deals = (dealsRes.data ?? [])
     .filter((d) => isBooked(d.status))

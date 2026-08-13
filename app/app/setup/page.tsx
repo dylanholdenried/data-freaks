@@ -10,7 +10,12 @@ import SetupClient from "./SetupClient";
 import SelectAutoGroupEmptyState from "../SelectAutoGroupEmptyState";
 
 type StoreRow = { id: string; name: string };
-type DeptRow = { id: string; name: string; store_id: string };
+type DeptRow = {
+  id: string;
+  name: string;
+  store_id: string;
+  rolls_up_to_department_id: string | null;
+};
 type PersonRow = { id: string; name: string; store_id: string; active: boolean };
 type SourceRow = { id: string; name: string; store_id: string; active: boolean };
 type GoalRow = { department_id: string; year: number; month: number; volume_goal: number };
@@ -90,7 +95,7 @@ export default async function SetupPage({
   const [deptRes, spRes, srcRes, fmRes] = await Promise.all([
     supabase
       .from("departments")
-      .select("id,name,store_id")
+      .select("id,name,store_id,rolls_up_to_department_id")
       .in("store_id", storeIds)
       .order("name"),
     supabase

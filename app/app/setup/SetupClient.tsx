@@ -7,11 +7,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CheckCircle2, PlusCircle, Building2, UserMinus, UserCheck } from "lucide-react";
 import { updateOnboardingChecklist } from "@/app/app/onboarding-actions";
+import { isRolledUpDepartment } from "@/lib/departments/rollup";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type StoreRow = { id: string; name: string };
-type DeptRow = { id: string; name: string; store_id: string };
+type DeptRow = {
+  id: string;
+  name: string;
+  store_id: string;
+  rolls_up_to_department_id: string | null;
+};
 type PersonRow = { id: string; name: string; store_id: string; active: boolean };
 type SourceRow = { id: string; name: string; store_id: string; active: boolean };
 type GoalRow = { department_id: string; year: number; month: number; volume_goal: number };
@@ -71,6 +77,10 @@ function GoalsSection({
   initialMonth,
   readOnly = false,
 }: GoalsSectionProps) {
+  const goalDepartments = useMemo(
+    () => departments.filter((d) => !isRolledUpDepartment(d)),
+    [departments]
+  );
   const [year, setYear] = useState(initialYear);
   const [month, setMonth] = useState(initialMonth);
   const [goals, setGoals] = useState<GoalRow[]>(initialGoals);
@@ -91,7 +101,7 @@ function GoalsSection({
     setLoadingMonth(true);
     setBanner(null);
     const supabase = createSupabaseBrowserClient();
-    const deptIds = departments.map((d) => d.id);
+    const deptIds = goalDepartments.map((d) => d.id);
     if (deptIds.length === 0) {
       setGoals([]);
       setDrafts({});
@@ -136,7 +146,7 @@ function GoalsSection({
     setSaving(true);
     setBanner(null);
 
-    const rows = departments
+    const rows = goalDepartments
       .map((d) => {
         const raw = drafts[d.id] ?? "";
         const val = parseInt(raw, 10);
@@ -172,9 +182,9 @@ function GoalsSection({
     setSaving(false);
   }
 
-  // Group departments by store for display
+  // Group parent departments by store (rolled-up fleet desks share the parent goal)
   const deptsByStore = new Map<string, DeptRow[]>();
-  for (const d of departments) {
+  for (const d of goalDepartments) {
     const arr = deptsByStore.get(d.store_id) ?? [];
     arr.push(d);
     deptsByStore.set(d.store_id, arr);
@@ -239,7 +249,7 @@ function GoalsSection({
           </div>
         )}
 
-        {departments.length === 0 ? (
+        {goalDepartments.length === 0 ? (
           <p className="text-sm text-muted-foreground">No departments configured yet.</p>
         ) : (
           <div className="space-y-6">
@@ -254,7 +264,16 @@ function GoalsSection({
                   <div className="space-y-2">
                     {depts.map((dept) => (
                       <div key={dept.id} className="flex min-w-0 flex-wrap items-center gap-3">
-                        <label className="min-w-0 flex-1 basis-40 text-sm text-foreground sm:flex-none sm:basis-auto sm:w-40 sm:shrink-0">{dept.name}</label>
+                        <label className="min-w-0 flex-1 basis-40 text-sm text-foreground sm:flex-none sm:basis-auto sm:w-40 sm:shrink-0">
+                          {dept.name}
+                          {departments.some(
+                            (d) => d.rolls_up_to_department_id === dept.id
+                          ) ? (
+                            <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                              includes fleet
+                            </span>
+                          ) : null}
+                        </label>
                         <Input
                           type="number"
                           min={0}
@@ -277,14 +296,14 @@ function GoalsSection({
           </div>
         )}
 
-        {departments.length > 0 && !readOnly ? (
+        {goalDepartments.length > 0 && !readOnly ? (
           <div className="flex justify-end pt-2">
             <Button onClick={handleSave} disabled={saving || loadingMonth} className="min-w-[120px]">
               {saving ? "Saving…" : "Save Goals"}
             </Button>
           </div>
         ) : null}
-        {departments.length > 0 && readOnly ? (
+        {goalDepartments.length > 0 && readOnly ? (
           <p className="pt-2 text-xs text-muted-foreground">View only — goals cannot be changed.</p>
         ) : null}
       </CardContent>

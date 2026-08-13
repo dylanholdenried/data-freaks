@@ -15,9 +15,18 @@ import {
   type CalendarDay,
 } from "@/lib/dashboard/pace";
 import { cn } from "@/lib/utils";
+import {
+  cardDepartmentId,
+  isRolledUpDepartment,
+} from "@/lib/departments/rollup";
 
 export type CalendarStore = { id: string; name: string };
-export type CalendarDepartment = { id: string; name: string; store_id: string };
+export type CalendarDepartment = {
+  id: string;
+  name: string;
+  store_id: string;
+  rolls_up_to_department_id: string | null;
+};
 export type BookedDeal = {
   store_id: string;
   department_id: string;
@@ -120,6 +129,7 @@ export default function CalendarClient({
     const map = new Map<string, CalendarDepartment[]>();
     for (const store of stores) map.set(store.id, []);
     for (const dept of departments) {
+      if (isRolledUpDepartment(dept)) continue;
       const list = map.get(dept.store_id);
       if (list) list.push(dept);
     }
@@ -130,14 +140,19 @@ export default function CalendarClient({
   }, [stores, departments]);
 
   const countsByStoreDateDept = useMemo(() => {
+    const cardIdByDept = new Map(
+      departments.map((d) => [d.id, cardDepartmentId(d)])
+    );
     const map = new Map<string, number>();
     for (const deal of deals) {
       const date = deal.sale_date.slice(0, 10);
-      const key = `${deal.store_id}|${date}|${deal.department_id}`;
+      const cardId =
+        cardIdByDept.get(deal.department_id) ?? deal.department_id;
+      const key = `${deal.store_id}|${date}|${cardId}`;
       map.set(key, (map.get(key) ?? 0) + 1);
     }
     return map;
-  }, [deals]);
+  }, [deals, departments]);
 
   const daysInMonth = new Date(year, month, 0).getDate();
   const firstDow = new Date(year, month - 1, 1).getDay();

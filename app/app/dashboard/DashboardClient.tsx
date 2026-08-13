@@ -16,6 +16,10 @@ import {
   formatSigned,
   isFiDepartment,
 } from "@/lib/dashboard/pace";
+import {
+  isRolledUpDepartment,
+  rollupSegmentLabel,
+} from "@/lib/departments/rollup";
 
 type Store = { id: string; name: string };
 type Deal = {
@@ -29,7 +33,12 @@ type Deal = {
   acquisition_source: string | null;
   finance_type: string | null;
 };
-type Department = { id: string; name: string; store_id: string };
+type Department = {
+  id: string;
+  name: string;
+  store_id: string;
+  rolls_up_to_department_id: string | null;
+};
 type Goal = { department_id: string; volume_goal: number };
 
 type Props = {
@@ -45,6 +54,12 @@ type Props = {
   currentYear: number;
   currentMonth: number;
   viewOnly?: boolean;
+};
+
+type DeptSegment = {
+  id: string;
+  label: string;
+  sold: number;
 };
 
 type DeptSectionData = {
@@ -64,6 +79,7 @@ type DeptSectionData = {
   avgBack: number | null;
   sourceMix: { name: string; value: string; width: number }[];
   financeMix: { name: string; value: string; width: number }[];
+  segments: DeptSegment[];
 };
 
 type StoreSectionData = {
@@ -109,6 +125,25 @@ function mixRows(
         : 0
       : (i.count / max) * 100,
   }));
+}
+
+function dealsListHref(opts: {
+  status: string;
+  storeId: string;
+  departmentId: string;
+  year: number;
+  month: number;
+  rollup?: boolean;
+}) {
+  const params = new URLSearchParams({
+    status: opts.status,
+    store: opts.storeId,
+    department: opts.departmentId,
+    year: String(opts.year),
+    month: String(opts.month),
+  });
+  if (opts.rollup) params.set("rollup", "1");
+  return `/app/deals?${params.toString()}`;
 }
 
 function countBy(
@@ -306,11 +341,12 @@ export default function DashboardClient({
         return sm.year === year && sm.month === month;
       });
 
-      const scopedDepts = departments
-        .filter(
-          (d) =>
-            selectedStoreIds.includes(d.store_id) && !isFiDepartment(d.name)
-        )
+      const scopedDepts = departments.filter(
+        (d) =>
+          selectedStoreIds.includes(d.store_id) && !isFiDepartment(d.name)
+      );
+      const parentDepts = scopedDepts
+        .filter((d) => !isRolledUpDepartment(d))
         .sort((a, b) => {
           const sa = storeById.get(a.store_id) ?? "";
           const sb = storeById.get(b.store_id) ?? "";
@@ -338,18 +374,22 @@ export default function DashboardClient({
         isFutureMonth
       );
 
-      const deptSections: DeptSectionData[] = scopedDepts.map((dept) => {
+      const deptSections: DeptSectionData[] = parentDepts.map((dept) => {
+        const children = scopedDepts
+          .filter((d) => d.rolls_up_to_department_id === dept.id)
+          .sort((a, b) => a.name.localeCompare(b.name));
+        const memberIds = new Set([dept.id, ...children.map((c) => c.id)]);
         const deptWorkingDays = computeWorkingDays(year, month, calendarDays, [
           dept.store_id,
         ]);
         const booked = mtdDeals.filter(
-          (d) => d.department_id === dept.id && isBooked(d.status)
+          (d) => memberIds.has(d.department_id) && isBooked(d.status)
         );
         const closed = mtdDeals.filter(
-          (d) => d.department_id === dept.id && isClosed(d.status)
+          (d) => memberIds.has(d.department_id) && isClosed(d.status)
         );
         const pendingCount = mtdDeals.filter(
-          (d) => d.department_id === dept.id && d.status === "pending"
+          (d) => memberIds.has(d.department_id) && d.status === "pending"
         ).length;
         const sold = booked.length;
         const goal = goalMap.get(dept.id) ?? null;
@@ -398,6 +438,24 @@ export default function DashboardClient({
             ? `${shortStoreLabel(storeName)} · ${dept.name}`
             : dept.name;
 
+        const segments: DeptSegment[] =
+          children.length === 0
+            ? []
+            : [
+                {
+                  id: dept.id,
+                  label: rollupSegmentLabel(dept),
+                  sold: booked.filter((d) => d.department_id === dept.id)
+                    .length,
+                },
+                ...children.map((child) => ({
+                  id: child.id,
+                  label: rollupSegmentLabel(child),
+                  sold: booked.filter((d) => d.department_id === child.id)
+                    .length,
+                })),
+              ];
+
         return {
           id: dept.id,
           storeId: dept.store_id,
@@ -415,6 +473,7 @@ export default function DashboardClient({
           avgBack,
           sourceMix: mixRows(sourceCounts, false, booked.length),
           financeMix: mixRows(financeCounts, true, closedCount),
+          segments,
         };
       });
 
@@ -820,11 +879,26 @@ function DepartmentCard({
     1
   );
 
-  const viewAllHref = `/app/deals?status=all&store=${encodeURIComponent(dept.storeId)}&department=${encodeURIComponent(dept.id)}&year=${year}&month=${month}`;
+  const includeRollup = dept.segments.length > 0;
+  const viewAllHref = dealsListHref({
+    status: "all",
+    storeId: dept.storeId,
+    departmentId: dept.id,
+    year,
+    month,
+    rollup: includeRollup,
+  });
 
   const awaitingHref =
     dept.pendingCount > 0
-      ? `/app/deals?status=pending&store=${encodeURIComponent(dept.storeId)}&department=${encodeURIComponent(dept.id)}&year=${year}&month=${month}`
+      ? dealsListHref({
+          status: "pending",
+          storeId: dept.storeId,
+          departmentId: dept.id,
+          year,
+          month,
+          rollup: includeRollup,
+        })
       : null;
 
   const awaitingChip =
@@ -849,6 +923,7 @@ function DepartmentCard({
       {!hasGoal ? (
         <div className="dash-no-goal dash-no-goal-compact">
           <p>{sold} sold MTD · no volume goal set</p>
+          <ChannelSplit dept={dept} year={year} month={month} />
           <div className="dash-no-goal-actions">
             <Link href={viewAllHref} className="dash-view-deals" prefetch>
               View all deals
@@ -903,6 +978,7 @@ function DepartmentCard({
               {awaitingChip}
             </div>
           </div>
+          <ChannelSplit dept={dept} year={year} month={month} />
 
           <PaceBar
             sold={sold}
@@ -1018,6 +1094,40 @@ function DepartmentCard({
         )}
       </div>
     </section>
+  );
+}
+
+function ChannelSplit({
+  dept,
+  year,
+  month,
+}: {
+  dept: DeptSectionData;
+  year: number;
+  month: number;
+}) {
+  if (dept.segments.length === 0) return null;
+  return (
+    <p className="dash-channel-split">
+      {dept.segments.map((seg, i) => (
+        <span key={seg.id}>
+          {i > 0 ? <span aria-hidden> · </span> : null}
+          <Link
+            href={dealsListHref({
+              status: "all",
+              storeId: dept.storeId,
+              departmentId: seg.id,
+              year,
+              month,
+            })}
+            className="dash-channel-link"
+            prefetch
+          >
+            {seg.label} {seg.sold}
+          </Link>
+        </span>
+      ))}
+    </p>
   );
 }
 
