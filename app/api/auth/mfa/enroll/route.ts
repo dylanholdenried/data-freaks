@@ -32,8 +32,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: factors.error.message }, { status: 400 });
   }
 
-  const totp = factors.data.totp ?? [];
-  const verified = totp.find((f) => f.status === "verified");
+  const verified = (factors.data.totp ?? [])[0];
   if (verified) {
     return NextResponse.json({
       mode: "verify" as const,
@@ -41,10 +40,11 @@ export async function POST(req: Request) {
     });
   }
 
-  for (const factor of totp) {
-    if (factor.status === "unverified") {
-      await supabase.auth.mfa.unenroll({ factorId: factor.id });
-    }
+  const leftover = (factors.data.all ?? []).filter(
+    (factor) => factor.factor_type === "totp" && factor.status !== "verified"
+  );
+  for (const factor of leftover) {
+    await supabase.auth.mfa.unenroll({ factorId: factor.id });
   }
 
   const enrolled = await supabase.auth.mfa.enroll({
