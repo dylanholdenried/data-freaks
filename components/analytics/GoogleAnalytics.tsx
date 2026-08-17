@@ -1,41 +1,23 @@
-"use client";
-
 import Script from "next/script";
-import { usePathname } from "next/navigation";
 
-const PRIVATE_PATH_PREFIXES = [
-  "/app",
-  "/admin",
-  "/mfa",
-  "/set-password",
-  "/awaiting-approval",
-  "/auth",
-];
-
-function isPrivatePath(pathname: string | null): boolean {
-  if (!pathname) return true;
-  return PRIVATE_PATH_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
-  );
-}
+/** Public GA4 measurement ID. Fallback so production builds always emit the tag. */
+const DEFAULT_GA_MEASUREMENT_ID = "G-GK8XBP9LDR";
 
 function isValidMeasurementId(id: string): boolean {
   return /^G-[A-Z0-9]+$/i.test(id);
 }
 
+/**
+ * Server-rendered gtag snippet so Google's site checker sees it in the HTML.
+ * Client-only injection is invisible to that crawler. No user_id or deal data.
+ */
 export default function GoogleAnalytics({
   measurementId,
 }: {
   measurementId?: string;
 }) {
-  const pathname = usePathname();
-  const id = measurementId?.trim();
-
-  if (!id || !isValidMeasurementId(id) || isPrivatePath(pathname)) {
-    return null;
-  }
-
-  const encodedId = JSON.stringify(id);
+  const id = (measurementId?.trim() || DEFAULT_GA_MEASUREMENT_ID).trim();
+  if (!isValidMeasurementId(id)) return null;
 
   return (
     <>
@@ -48,7 +30,7 @@ export default function GoogleAnalytics({
           window.dataLayer = window.dataLayer || [];
           function gtag(){dataLayer.push(arguments);}
           gtag('js', new Date());
-          gtag('config', ${encodedId});
+          gtag('config', ${JSON.stringify(id)});
         `}
       </Script>
     </>
