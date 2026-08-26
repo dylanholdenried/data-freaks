@@ -64,6 +64,7 @@ export type InvPriceAction = {
 
 export type InventoryCommandTab =
   | "overview"
+  | "dh"
   | "trends"
   | "hot"
   | "merchandising"

@@ -6,6 +6,7 @@ import {
   hotAgeThreshold,
   isHotUnit,
 } from "@/lib/inventory-command/compute";
+import { collectDhUnitsForStore } from "@/lib/inventory-command/dh-purchases";
 import { fmtMoneyCompact, fmtNum } from "@/lib/inventory-command/format";
 import {
   formatExportDate,
@@ -17,6 +18,7 @@ import type { InventoryCommandTab } from "@/lib/inventory-command/types";
 import type { InvDailyMetrics, InvUnitRow } from "@/lib/inventory-command/types";
 import type { InvMovement, InvPriceAction } from "@/lib/inventory-command/types";
 import OverviewTab from "./tabs/OverviewTab";
+import DhPurchasesTab from "./tabs/DhPurchasesTab";
 import TrendsTab from "./tabs/TrendsTab";
 import HotListTab from "./tabs/HotListTab";
 import MerchandisingTab from "./tabs/MerchandisingTab";
@@ -42,6 +44,7 @@ export type InventoryCommandClientProps = {
 
 const TABS: { id: InventoryCommandTab; label: string }[] = [
   { id: "overview", label: "Overview" },
+  { id: "dh", label: "DH Purchases" },
   { id: "trends", label: "Trends" },
   { id: "hot", label: "Hot List" },
   { id: "merchandising", label: "Merchandising" },
@@ -78,6 +81,11 @@ export default function InventoryCommandClient({
     if (!snapshotDate) return 0;
     return units.filter((u) => isHotUnit(u.age, snapshotDate)).length;
   }, [units, snapshotDate]);
+
+  const dhCount = useMemo(
+    () => collectDhUnitsForStore(units, storeId, storeName).length,
+    [units, storeId, storeName]
+  );
 
   const totalCost = useMemo(
     () => units.reduce((s, u) => s + (u.cost || 0), 0),
@@ -155,7 +163,11 @@ export default function InventoryCommandClient({
         {TABS.map((t) => {
           const active = tab === t.id;
           const label =
-            t.id === "hot" ? `Hot List (${hotCount})` : t.label;
+            t.id === "hot"
+              ? `Hot List (${hotCount})`
+              : t.id === "dh"
+                ? `DH Purchases (${dhCount})`
+                : t.label;
           return (
             <button
               key={t.id}
@@ -190,6 +202,9 @@ export default function InventoryCommandClient({
           <>
             {tab === "overview" ? (
               <OverviewTab units={units} snapshotDate={snapshotDate} />
+            ) : null}
+            {tab === "dh" ? (
+              <DhPurchasesTab units={units} storeId={storeId} storeName={storeName} />
             ) : null}
             {tab === "trends" ? (
               <TrendsTab
