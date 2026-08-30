@@ -14,6 +14,8 @@ export type ProfitDeal = {
   vehicle_year: number;
   vehicle_make: string;
   vehicle_model: string;
+  trim: string | null;
+  stock_number: string | null;
   body_style: string | null;
   acquisition_source: string | null;
   finance_type: string | null;
@@ -42,6 +44,7 @@ export type Dimension =
   | "make"
   | "model"
   | "year"
+  | "trim"
   | "price"
   | "odometer"
   | "acquisition"
@@ -104,6 +107,10 @@ function dimensionKey(
           label: deal.vehicle_year ? String(deal.vehicle_year) : "(Unknown)",
         },
       ];
+    case "trim": {
+      const trim = deal.trim?.trim() || "(Unknown)";
+      return [{ key: trim.toLowerCase(), label: trim }];
+    }
     case "price": {
       const band = priceBandForSalePrice(deal.sale_price);
       if (!band) return [{ key: "(no price)", label: "(No sale price)" }];

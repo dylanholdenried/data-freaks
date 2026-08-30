@@ -77,6 +77,16 @@ export default async function ProfitCenterPage({
   const preset = parsePreset(
     typeof searchParams.preset === "string" ? searchParams.preset : undefined
   );
+  const storeParamRaw =
+    typeof searchParams.store === "string" ? searchParams.store : undefined;
+  const storeId =
+    storeParamRaw && stores.some((s) => s.id === storeParamRaw)
+      ? storeParamRaw
+      : "all";
+  const departmentParam =
+    typeof searchParams.department === "string"
+      ? searchParams.department
+      : undefined;
 
   const now = new Date();
   const range = resolveDateRange(preset, { now });
@@ -93,6 +103,8 @@ export default async function ProfitCenterPage({
       groupName={groupInfo?.name ?? ""}
       preset={preset}
       range={range}
+      initialStoreId={storeId}
+      initialDepartmentName={departmentParam}
     />
   );
 
@@ -140,6 +152,8 @@ export default async function ProfitCenterPage({
       groupName={groupInfo?.name ?? ""}
       preset={preset}
       range={range}
+      initialStoreId={storeId}
+      initialDepartmentName={departmentParam}
     />
   );
 }

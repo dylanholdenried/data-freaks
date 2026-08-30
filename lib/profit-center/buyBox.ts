@@ -35,6 +35,8 @@ export type BuyBoxResult = {
   buys: ScoredModel[];
   reds: ScoredModel[];
   scored: ScoredModel[];
+  /** Rows just under min volume — still useful to inspect. */
+  nearMiss: RollupRow[];
 };
 
 function normalizeHigher(values: number[], v: number): number {
@@ -62,6 +64,23 @@ export function normalizeWeights(s: BuyBoxSettings): BuyBoxSettings {
   };
 }
 
+function nearMissRows(
+  rows: RollupRow[],
+  minVol: number,
+  listSize: number
+): RollupRow[] {
+  const floor = Math.max(1, minVol - 2);
+  if (floor >= minVol) return [];
+  return rows
+    .filter((r) => !r.isTotal && r.volume >= floor && r.volume < minVol)
+    .sort((a, b) => b.volume - a.volume || a.label.localeCompare(b.label))
+    .slice(0, listSize);
+}
+
+/**
+ * Score any dimension rollup (model, acquisition, price band, etc.)
+ * with the same weighted buy / red-light engine.
+ */
 export function scoreBuyBox(
   modelRows: RollupRow[],
   settings: BuyBoxSettings = DEFAULT_BUY_BOX_SETTINGS
@@ -69,13 +88,14 @@ export function scoreBuyBox(
   const cfg = normalizeWeights(settings);
   const minVol = Math.max(1, Math.floor(cfg.minVolume) || 3);
   const listSize = Math.max(1, Math.floor(cfg.listSize) || 5);
+  const nearMiss = nearMissRows(modelRows, minVol, listSize);
 
   const eligible = modelRows.filter(
     (r) => !r.isTotal && r.volume >= minVol
   );
 
   if (eligible.length === 0) {
-    return { buys: [], reds: [], scored: [] };
+    return { buys: [], reds: [], scored: [], nearMiss };
   }
 
   const fronts = eligible.map((r) => r.avgFront ?? 0);
@@ -84,10 +104,10 @@ export function scoreBuyBox(
   const trades = eligible.map((r) => r.tradePct ?? 0);
 
   const scored: ScoredModel[] = eligible.map((row, i) => {
-    const frontScore = normalizeHigher(fronts, fronts[i]);
-    const backScore = normalizeHigher(backs, backs[i]);
-    const turnScore = normalizeLower(ages, ages[i]);
-    const tradeScore = normalizeHigher(trades, trades[i]);
+    const frontScore = normalizeHigher(fronts, fronts[i]!);
+    const backScore = normalizeHigher(backs, backs[i]!);
+    const turnScore = normalizeLower(ages, ages[i]!);
+    const tradeScore = normalizeHigher(trades, trades[i]!);
     const score =
       cfg.weightFront * frontScore +
       cfg.weightBack * backScore +
@@ -122,8 +142,11 @@ export function scoreBuyBox(
     reds = reds.filter((r) => !buyKeys.has(r.key));
   }
 
-  return { buys, reds, scored };
+  return { buys, reds, scored, nearMiss };
 }
+
+/** Alias — same engine for acquisition / price / odometer / year scoreboards. */
+export const scoreDimension = scoreBuyBox;
 
 export function settingsFromDbRow(
   row: {

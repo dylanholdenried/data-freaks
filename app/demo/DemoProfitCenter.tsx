@@ -70,6 +70,8 @@ export function DemoProfitCenter({ fixture, storeId, month }: Props) {
         vehicle_year: d.vehicle_year,
         vehicle_make: d.vehicle_make,
         vehicle_model: d.vehicle_model,
+        trim: null,
+        stock_number: null,
         body_style: d.body_style,
         acquisition_source: d.acquisition_source,
         finance_type: d.finance_type,
