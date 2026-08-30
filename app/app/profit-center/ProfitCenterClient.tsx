@@ -35,9 +35,19 @@ import { TRUCK_CLASS_LABELS } from "@/lib/profit-center/truckClass";
 import {
   scoreBuyBox,
   type BuyBoxSettings,
+  type BuyBoxResult,
+  type ScoredModel,
 } from "@/lib/profit-center/buyBox";
 import { cn } from "@/lib/utils";
 import { loadProfitCenterRange } from "./actions";
+import {
+  cohortHref,
+  compareHref,
+  modelCohortHref,
+  profitCenterHref,
+  splitMakeModel,
+} from "@/lib/profit-center/cohort";
+import Link from "next/link";
 
 type Store = { id: string; name: string };
 type Salesperson = { id: string; name: string; store_id: string };
@@ -243,6 +253,8 @@ interface Props {
   groupName: string;
   preset: DatePreset;
   range: DateRange;
+  initialStoreId?: string;
+  initialDepartmentName?: string;
 }
 
 type CachedRangeEntry = ProfitCenterDealBundle & {
@@ -266,6 +278,8 @@ export default function ProfitCenterClient({
   groupName,
   preset: initialPreset,
   range: initialRange,
+  initialStoreId = "all",
+  initialDepartmentName = "all",
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -273,7 +287,14 @@ export default function ProfitCenterClient({
   const [dimension, setDimension] = useState<Dimension>("make");
   const [sortKey, setSortKey] = useState<SortKey>("volume");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [filters, setFilters] = useState<ProfitFilters>(EMPTY_FILTERS);
+  const [filters, setFilters] = useState<ProfitFilters>(() => ({
+    ...EMPTY_FILTERS,
+    storeId:
+      initialStoreId !== "all" && stores.some((s) => s.id === initialStoreId)
+        ? initialStoreId
+        : "all",
+    departmentName: initialDepartmentName || "all",
+  }));
 
   const [preset, setPreset] = useState<DatePreset>(initialPreset);
   const [range, setRange] = useState<DateRange>(initialRange);
@@ -284,6 +305,7 @@ export default function ProfitCenterClient({
   >(initialDealSalespeople);
   const [dateLoading, setDateLoading] = useState(false);
   const [dateError, setDateError] = useState<string | null>(null);
+  const [showNearMiss, setShowNearMiss] = useState(false);
 
   const rangeCacheRef = useRef<Map<DatePreset, CachedRangeEntry>>(
     new Map([
@@ -313,10 +335,20 @@ export default function ProfitCenterClient({
         ...bundle,
         range: nextRange,
       });
-      router.replace(`${pathname}?preset=${nextPreset}`);
     },
-    [pathname, router]
+    []
   );
+
+  // Keep shareable URL in sync for preset + store + department
+  useEffect(() => {
+    const href = profitCenterHref({
+      preset,
+      storeId: filters.storeId,
+      departmentName: filters.departmentName,
+    });
+    const next = href.replace("/app/profit-center", pathname);
+    router.replace(next);
+  }, [preset, filters.storeId, filters.departmentName, pathname, router]);
 
   const fetchPreset = useCallback(async (targetPreset: DatePreset) => {
     const existing = inflightRef.current.get(targetPreset);
@@ -405,6 +437,50 @@ export default function ProfitCenterClient({
     () => scoreBuyBox(modelRows, buyBoxSettings),
     [modelRows, buyBoxSettings]
   );
+
+  const acquisitionRows = useMemo(
+    () => aggregateByDimension("acquisition", ctx).rows,
+    [ctx]
+  );
+
+  const priceRows = useMemo(
+    () => aggregateByDimension("price", ctx).rows,
+    [ctx]
+  );
+  const odometerRows = useMemo(
+    () => aggregateByDimension("odometer", ctx).rows,
+    [ctx]
+  );
+  const yearRows = useMemo(
+    () => aggregateByDimension("year", ctx).rows,
+    [ctx]
+  );
+  const priceBox = useMemo(
+    () => scoreBuyBox(priceRows, buyBoxSettings),
+    [priceRows, buyBoxSettings]
+  );
+  const odometerBox = useMemo(
+    () => scoreBuyBox(odometerRows, buyBoxSettings),
+    [odometerRows, buyBoxSettings]
+  );
+  const yearBox = useMemo(
+    () => scoreBuyBox(yearRows, buyBoxSettings),
+    [yearRows, buyBoxSettings]
+  );
+
+  const cohortCtx = useMemo(
+    () => ({
+      preset,
+      storeId: filters.storeId,
+      departmentName: filters.departmentName,
+    }),
+    [preset, filters.storeId, filters.departmentName]
+  );
+
+  function modelHrefFromLabel(label: string) {
+    const { make, model } = splitMakeModel(label, deals);
+    return modelCohortHref(make, model, cohortCtx);
+  }
 
   const makeRows = useMemo(() => {
     if (dimension === "make") return rows;
@@ -511,26 +587,6 @@ export default function ProfitCenterClient({
 
       setDateLoading(true);
       try {
-        // Prefer an in-flight / completed All time load, then slice — one accurate fetch.
-        const allTimeCached = cache.get("all_time");
-        const allTimeInflight = inflightRef.current.get("all_time");
-        if (
-          nextPreset !== "all_time" &&
-          (allTimeCached || allTimeInflight)
-        ) {
-          const allTime = allTimeCached
-            ? {
-                range: allTimeCached.range,
-                bundle: allTimeCached as ProfitCenterDealBundle,
-              }
-            : await fetchPreset("all_time");
-          if (rangeContains(allTime.range, nextRange)) {
-            const sliced = sliceDealBundleToRange(allTime.bundle, nextRange);
-            applyBundle(nextPreset, nextRange, sliced);
-            return;
-          }
-        }
-
         const loaded = await fetchPreset(nextPreset);
         applyBundle(loaded.preset, loaded.range, loaded.bundle);
       } catch (e) {
@@ -591,6 +647,22 @@ export default function ProfitCenterClient({
               ? ` · filtered from ${deals.length.toLocaleString()}`
               : ""}
           </p>
+          {stores.length > 1 && (
+            <p className="pc-meta">
+              <Link
+                href={compareHref({
+                  type: "store",
+                  a: stores[0]!.id,
+                  b: stores[1]!.id,
+                  preset,
+                  departmentName: filters.departmentName,
+                })}
+                className="pc-link"
+              >
+                Compare stores side-by-side
+              </Link>
+            </p>
+          )}
         </div>
         {stores.length > 0 && (
           <div className="pc-store-pills" role="group" aria-label="Store">
@@ -758,19 +830,17 @@ export default function ProfitCenterClient({
               </p>
             ) : (
               buyBox.buys.map((row) => (
-                <div key={row.key} className="pc-buybox-row">
-                  <div>
-                    <b>{row.label}</b>
-                    <span>
-                      {row.volume} deals · front {fmt$(row.avgFront)} · back{" "}
-                      {fmt$(row.avgBack)} · {fmtN(row.avgAge, 0)}d · trade{" "}
-                      {fmtPct(row.tradePct)}
-                    </span>
-                  </div>
-                  <div className="pc-buybox-score buy">
-                    {(row.score * 100).toFixed(0)}
-                  </div>
-                </div>
+                <BuyBoxRow
+                  key={row.key}
+                  row={row}
+                  kind="buy"
+                  href={modelHrefFromLabel(row.label)}
+                  compareHref={compareHref({
+                    type: "model",
+                    a: row.label,
+                    ...cohortCtx,
+                  })}
+                />
               ))
             )}
           </div>
@@ -780,22 +850,97 @@ export default function ProfitCenterClient({
               <p className="pc-muted">No red-lights in this cut.</p>
             ) : (
               buyBox.reds.map((row) => (
-                <div key={row.key} className="pc-buybox-row">
-                  <div>
-                    <b>{row.label}</b>
-                    <span>
-                      {row.volume} deals · front {fmt$(row.avgFront)} · back{" "}
-                      {fmt$(row.avgBack)} · {fmtN(row.avgAge, 0)}d · trade{" "}
-                      {fmtPct(row.tradePct)}
-                    </span>
-                  </div>
-                  <div className="pc-buybox-score red">
-                    {(row.score * 100).toFixed(0)}
-                  </div>
-                </div>
+                <BuyBoxRow
+                  key={row.key}
+                  row={row}
+                  kind="red"
+                  href={modelHrefFromLabel(row.label)}
+                  compareHref={compareHref({
+                    type: "model",
+                    a: row.label,
+                    ...cohortCtx,
+                  })}
+                />
               ))
             )}
           </div>
+        </div>
+        {buyBox.nearMiss.length > 0 && (
+          <div className="pc-near-miss pc-near-miss-collapsed">
+            <button
+              type="button"
+              className="pc-near-miss-toggle"
+              onClick={() => setShowNearMiss((v) => !v)}
+            >
+              {showNearMiss ? "Hide" : "Show"} {buyBox.nearMiss.length} near-miss
+              model{buyBox.nearMiss.length === 1 ? "" : "s"} (under{" "}
+              {buyBoxSettings.minVolume} deals)
+            </button>
+            {showNearMiss &&
+              buyBox.nearMiss.map((row) => (
+                <BuyBoxRow
+                  key={row.key}
+                  row={row}
+                  kind="near"
+                  href={modelHrefFromLabel(row.label)}
+                  compareHref={compareHref({
+                    type: "model",
+                    a: row.label,
+                    ...cohortCtx,
+                  })}
+                />
+              ))}
+          </div>
+        )}
+      </section>
+
+      <AcquisitionSection
+        rows={acquisitionRows}
+        cohortCtx={cohortCtx}
+      />
+
+      <section className="pc-stocking">
+        <div className="pc-buybox-head">
+          <h2>Stocking signals</h2>
+          <p>
+            Automated recommendations by sale price, odometer, and year — stock
+            what makes the bottom line, not just what sells fast.
+          </p>
+        </div>
+        <div className="pc-stocking-grid">
+          <StockingCol
+            title="Sale price"
+            box={priceBox}
+            hrefFor={(row) =>
+              cohortHref({
+                focus: "price",
+                value: row.key,
+                ...cohortCtx,
+              })
+            }
+          />
+          <StockingCol
+            title="Odometer"
+            box={odometerBox}
+            hrefFor={(row) =>
+              cohortHref({
+                focus: "odometer",
+                value: row.key,
+                ...cohortCtx,
+              })
+            }
+          />
+          <StockingCol
+            title="Year"
+            box={yearBox}
+            hrefFor={(row) =>
+              cohortHref({
+                focus: "year",
+                value: row.label,
+                ...cohortCtx,
+              })
+            }
+          />
         </div>
       </section>
 
@@ -1073,3 +1218,256 @@ export default function ProfitCenterClient({
     </div>
   );
 }
+
+function isScored(row: RollupRow | ScoredModel): row is ScoredModel {
+  return "score" in row && typeof (row as ScoredModel).score === "number";
+}
+
+function BuyBoxRow({
+  row,
+  kind,
+  href,
+  compareHref: compare,
+}: {
+  row: RollupRow | ScoredModel;
+  kind: "buy" | "red" | "near";
+  href: string;
+  compareHref: string;
+}) {
+  return (
+    <div className="pc-buybox-row">
+      <div className="pc-buybox-row-main">
+        <b>{row.label}</b>
+        <span>
+          {row.volume} deals · front {fmt$(row.avgFront)} · back{" "}
+          {fmt$(row.avgBack)} · {fmtN(row.avgAge, 0)}d · trade{" "}
+          {fmtPct(row.tradePct)}
+        </span>
+        <div className="pc-buybox-actions">
+          <Link href={href} className="pc-link">
+            View deals
+          </Link>
+          {kind !== "near" && (
+            <Link href={compare} className="pc-link">
+              Compare
+            </Link>
+          )}
+        </div>
+      </div>
+      {isScored(row) && kind !== "near" ? (
+        <div className={cn("pc-buybox-score", kind === "red" ? "red" : "buy")}>
+          {(row.score * 100).toFixed(0)}
+        </div>
+      ) : kind === "near" ? (
+        <div className="pc-buybox-score near">{row.volume}</div>
+      ) : null}
+    </div>
+  );
+}
+
+type CohortCtx = {
+  preset: DatePreset;
+  storeId: string;
+  departmentName: string;
+};
+
+function AcquisitionSection({
+  rows,
+  cohortCtx,
+}: {
+  rows: RollupRow[];
+  cohortCtx: CohortCtx;
+}) {
+  type AcqSort = "label" | "volume" | "avgTotal" | "avgFront" | "avgBack" | "avgAge" | "tradePct";
+  const [sortKey, setSortKey] = useState<AcqSort>("avgTotal");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const visible = useMemo(
+    () => rows.filter((r) => !r.isTotal && r.volume > 0),
+    [rows]
+  );
+
+  const sorted = useMemo(() => {
+    const copy = [...visible];
+    copy.sort((a, b) => {
+      let av: string | number | null = a[sortKey];
+      let bv: string | number | null = b[sortKey];
+      if (sortKey === "label") {
+        return sortDir === "asc"
+          ? String(av).localeCompare(String(bv))
+          : String(bv).localeCompare(String(av));
+      }
+      const an = typeof av === "number" && Number.isFinite(av) ? av : -Infinity;
+      const bn = typeof bv === "number" && Number.isFinite(bv) ? bv : -Infinity;
+      return sortDir === "asc" ? an - bn : bn - an;
+    });
+    return copy;
+  }, [visible, sortKey, sortDir]);
+
+  function toggle(k: AcqSort) {
+    if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(k);
+      setSortDir(k === "label" ? "asc" : "desc");
+    }
+  }
+
+  return (
+    <section className="pc-stocking">
+      <div className="pc-buybox-head">
+        <h2>Acquisition performance</h2>
+        <p>
+          How each source is performing in this cut — sorted by avg total gross
+          by default.
+        </p>
+      </div>
+      {sorted.length === 0 ? (
+        <p className="pc-muted">No acquisition data in this cut.</p>
+      ) : (
+        <div className="pc-table-wrap">
+          <table className="pc-table">
+            <thead>
+              <tr>
+                <th>
+                  <button type="button" className="pc-sort" onClick={() => toggle("label")}>
+                    Source{sortKey === "label" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+                  </button>
+                </th>
+                <th className="text-right">
+                  <button type="button" className="pc-sort" onClick={() => toggle("volume")}>
+                    Vol{sortKey === "volume" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+                  </button>
+                </th>
+                <th className="text-right">
+                  <button type="button" className="pc-sort" onClick={() => toggle("avgFront")}>
+                    Front{sortKey === "avgFront" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+                  </button>
+                </th>
+                <th className="text-right">
+                  <button type="button" className="pc-sort" onClick={() => toggle("avgBack")}>
+                    Back{sortKey === "avgBack" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+                  </button>
+                </th>
+                <th className="text-right">
+                  <button type="button" className="pc-sort" onClick={() => toggle("avgTotal")}>
+                    Total{sortKey === "avgTotal" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+                  </button>
+                </th>
+                <th className="text-right">
+                  <button type="button" className="pc-sort" onClick={() => toggle("avgAge")}>
+                    Turn{sortKey === "avgAge" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+                  </button>
+                </th>
+                <th className="text-right">
+                  <button type="button" className="pc-sort" onClick={() => toggle("tradePct")}>
+                    Trade %{sortKey === "tradePct" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+                  </button>
+                </th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((row) => (
+                <tr key={row.key}>
+                  <td>{row.label}</td>
+                  <td className="text-right">{row.volume}</td>
+                  <td className="text-right">{fmt$(row.avgFront)}</td>
+                  <td className="text-right">{fmt$(row.avgBack)}</td>
+                  <td className="text-right">{fmt$(row.avgTotal)}</td>
+                  <td className="text-right">
+                    {row.avgAge == null ? "—" : `${fmtN(row.avgAge, 0)}d`}
+                  </td>
+                  <td className="text-right">{fmtPct(row.tradePct)}</td>
+                  <td className="text-right">
+                    <Link
+                      href={cohortHref({
+                        focus: "acquisition",
+                        value: row.label,
+                        ...cohortCtx,
+                      })}
+                      className="pc-link"
+                    >
+                      View deals
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function StockingRow({
+  row,
+  kind,
+  href,
+}: {
+  row: ScoredModel;
+  kind: "buy" | "red";
+  href: string;
+}) {
+  return (
+    <div className="pc-buybox-row">
+      <div className="pc-buybox-row-main">
+        <b>{row.label}</b>
+        <span>
+          {row.volume} deals · front {fmt$(row.avgFront)} · back{" "}
+          {fmt$(row.avgBack)} · {fmtN(row.avgAge, 0)}d · trade{" "}
+          {fmtPct(row.tradePct)}
+        </span>
+        <Link href={href} className="pc-link">
+          View deals
+        </Link>
+      </div>
+      <div className={cn("pc-buybox-score", kind === "red" ? "red" : "buy")}>
+        {(row.score * 100).toFixed(0)}
+      </div>
+    </div>
+  );
+}
+
+function StockingCol({
+  title,
+  box,
+  hrefFor,
+}: {
+  title: string;
+  box: BuyBoxResult;
+  hrefFor: (row: RollupRow) => string;
+}) {
+  return (
+    <div className="pc-stocking-col">
+      <h3>{title}</h3>
+      <div className="pc-buybox-title buy">Lean in</div>
+      {box.buys.length === 0 ? (
+        <p className="pc-muted">No signals yet.</p>
+      ) : (
+        box.buys.slice(0, 3).map((row) => (
+          <StockingRow
+            key={row.key}
+            row={row}
+            kind="buy"
+            href={hrefFor(row)}
+          />
+        ))
+      )}
+      <div className="pc-buybox-title red">Caution</div>
+      {box.reds.length === 0 ? (
+        <p className="pc-muted">No cautions.</p>
+      ) : (
+        box.reds.slice(0, 3).map((row) => (
+          <StockingRow
+            key={row.key}
+            row={row}
+            kind="red"
+            href={hrefFor(row)}
+          />
+        ))
+      )}
+    </div>
+  );
+}
+

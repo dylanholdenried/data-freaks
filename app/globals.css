@@ -2808,6 +2808,256 @@ main:has(.da-app) + footer {
 .pc-buybox-score.red {
   color: var(--da-red);
 }
+.pc-buybox-score.near {
+  color: var(--da-amber);
+}
+
+.pc-buybox-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.pc-buybox-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 2px;
+}
+
+.pc-why {
+  display: block;
+  font-size: 12px;
+  color: var(--da-muted);
+  font-family: var(--da-body), system-ui, sans-serif !important;
+}
+
+.pc-action {
+  display: block;
+  font-size: 12px;
+  color: var(--da-text);
+  font-family: var(--da-body), system-ui, sans-serif !important;
+}
+
+.pc-near-miss-collapsed {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--da-line);
+}
+
+.pc-near-miss-toggle {
+  background: none;
+  border: none;
+  color: var(--da-amber);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 0 8px;
+  text-align: left;
+}
+
+.pc-near-miss-toggle:hover {
+  text-decoration: underline;
+}
+
+.pc-dial-in-summary {
+  font-size: 15px;
+  color: var(--da-text);
+  line-height: 1.5;
+  margin: 0 0 16px;
+}
+
+.pc-dial-in-list {
+  display: grid;
+  gap: 14px;
+}
+
+.pc-dial-in-dim h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--da-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pc-dial-in-stock {
+  margin: 0 0 4px;
+  font-size: 14px;
+  color: var(--da-green);
+}
+
+.pc-dial-in-avoid {
+  margin: 0;
+  font-size: 14px;
+  color: var(--da-red);
+}
+
+
+.pc-buybox-title.near {
+  color: var(--da-amber);
+}
+
+.pc-stocking {
+  background: var(--da-panel);
+  border: 1px solid var(--da-line);
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+
+.pc-stocking-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.pc-stocking-col h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 8px;
+  color: var(--da-text);
+}
+
+.pc-signal-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.pc-inv-bridge .pc-inv-cue {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--da-text);
+}
+
+.pc-kpi-grid-compact {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.pc-outlier-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--da-text);
+}
+
+.pc-outlier-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--da-amber-dim);
+  color: var(--da-amber);
+}
+
+.pc-row-outlier td {
+  background: rgba(255, 176, 32, 0.04);
+}
+
+.pc-section-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--da-text);
+}
+
+.pc-section-sub {
+  margin: 4px 0 12px;
+}
+
+.pc-breakdown-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.pc-compare-pickers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.pc-compare-pickers label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--da-muted);
+}
+
+.pc-compare-pickers select {
+  min-width: 220px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--da-line);
+  background: var(--da-panel);
+  color: var(--da-text);
+}
+
+.pc-compare-heads {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.pc-compare-heads h2 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--da-text);
+}
+
+.pc-compare-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.pc-compare-metric {
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--da-line);
+  background: var(--da-panel);
+}
+
+.pc-compare-values {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--da-text);
+}
+
+.pc-compare-values .is-better {
+  color: var(--da-green);
+}
+
+.pc-compare-vs {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--da-muted);
+}
+
+@media (max-width: 900px) {
+  .pc-stocking-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pc-compare-heads {
+    grid-template-columns: 1fr;
+  }
+
+  .pc-kpi-grid-compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 
 .pc-muted {
   color: var(--da-muted);
