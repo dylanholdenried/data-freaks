@@ -189,6 +189,7 @@ const validated = validateImportRows(goodParsed.rows, {
   salespeople: [{ id: "s1", name: "John Sales" }],
   financeManagers: [{ id: "f1", name: "Jane Doe" }],
   acquisitionSources: [{ id: "a1", name: "Auction" }],
+  acquisitionSourceDepartments: [],
   departmentMakes: [],
   existingStockNumbers: new Set(),
 });
@@ -199,6 +200,7 @@ const incompleteValidated = validateImportRows(incomplete.rows, {
   salespeople: [],
   financeManagers: [],
   acquisitionSources: [],
+  acquisitionSourceDepartments: [],
   departmentMakes: [],
   existingStockNumbers: new Set(),
 });
@@ -216,6 +218,7 @@ const wrongDept = validateImportRows(goodParsed.rows, {
   salespeople: [{ id: "s1", name: "John Sales" }],
   financeManagers: [{ id: "f1", name: "Jane Doe" }],
   acquisitionSources: [{ id: "a1", name: "Auction" }],
+  acquisitionSourceDepartments: [],
   departmentMakes: [],
   existingStockNumbers: new Set(),
 });
@@ -230,6 +233,7 @@ const dupStock = validateImportRows(goodParsed.rows, {
   salespeople: [{ id: "s1", name: "John Sales" }],
   financeManagers: [{ id: "f1", name: "Jane Doe" }],
   acquisitionSources: [{ id: "a1", name: "Auction" }],
+  acquisitionSourceDepartments: [],
   departmentMakes: [],
   existingStockNumbers: new Set(["stk-1001"]),
 });

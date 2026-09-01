@@ -8,6 +8,9 @@ import { canReopenDeal } from "@/lib/roles";
 import type { DealEventRow } from "@/lib/deals/deal-events";
 import UpdatePendingForm from "./UpdatePendingForm";
 import SelectAutoGroupEmptyState from "../../../SelectAutoGroupEmptyState";
+import {
+  flattenAcquisitionSourceDepartmentLinks,
+} from "@/lib/acquisition-sources";
 
 type DealRow = {
   id: string;
@@ -136,7 +139,7 @@ export default async function EditDealPage({ params }: { params: { id: string } 
   ] = await Promise.all([
       supabase
         .from("acquisition_sources")
-        .select("id,name")
+        .select("id,name,active,acquisition_source_departments(department_id)")
         .eq("store_id", deal.store_id)
         .order("name"),
       supabase
@@ -184,9 +187,17 @@ export default async function EditDealPage({ params }: { params: { id: string } 
         .order("created_at", { ascending: true }),
     ]);
 
-  const acquisitionSources = (srcResult.data ?? []) as { id: string; name: string }[];
-  const financeManagers = (fmResult.data ?? []) as { id: string; name: string }[];
+  const allAcquisitionSources = (srcResult.data ?? []) as {
+    id: string;
+    name: string;
+    active: boolean;
+    acquisition_source_departments?: { department_id: string }[];
+  }[];
+  const acquisitionSourceDepartments = flattenAcquisitionSourceDepartmentLinks(
+    allAcquisitionSources
+  );
   const departments = (deptResult.data ?? []) as DeptOption[];
+  const financeManagers = (fmResult.data ?? []) as { id: string; name: string }[];
 
   const dealSalespeople = (spResult.data ?? []) as SpRow[];
   let salespeople = (storeSpResult.data ?? []) as SalespersonOption[];
@@ -329,7 +340,12 @@ export default async function EditDealPage({ params }: { params: { id: string } 
       initialListPrice={deal.list_price}
       initialListPriceNa={deal.list_price_na ?? false}
       initialAge={deal.age}
-      acquisitionSources={acquisitionSources}
+      allAcquisitionSources={allAcquisitionSources.map((s) => ({
+        id: s.id,
+        name: s.name,
+        active: s.active,
+      }))}
+      acquisitionSourceDepartments={acquisitionSourceDepartments}
       financeManagers={financeManagers}
       vehicleMakes={vehicleMakes}
       vehicleModels={vehicleModels}

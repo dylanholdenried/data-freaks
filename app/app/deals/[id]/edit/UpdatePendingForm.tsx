@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -20,6 +20,7 @@ import {
 import type { DealEventRow } from "@/lib/deals/deal-events";
 import { reopenDeal } from "@/app/app/deals/actions";
 import { cn } from "@/lib/utils";
+import { filterAcquisitionSourcesForDepartment } from "@/lib/acquisition-sources";
 import DealAuditLog from "./DealAuditLog";
 
 type TradeRow = {
@@ -91,7 +92,11 @@ interface Props {
   initialListPriceNa: boolean;
   initialAge: number | null;
   // Dropdown options
-  acquisitionSources: { id: string; name: string }[];
+  allAcquisitionSources: { id: string; name: string; active?: boolean }[];
+  acquisitionSourceDepartments: {
+    acquisition_source_id: string;
+    department_id: string;
+  }[];
   financeManagers: { id: string; name: string }[];
   vehicleMakes: { id: string; name: string }[];
   vehicleModels: { id: string; name: string; make_id: string }[];
@@ -236,7 +241,8 @@ export default function UpdatePendingForm({
   initialListPrice,
   initialListPriceNa,
   initialAge,
-  acquisitionSources,
+  allAcquisitionSources,
+  acquisitionSourceDepartments,
   financeManagers,
   vehicleMakes,
   vehicleModels,
@@ -342,6 +348,49 @@ export default function UpdatePendingForm({
   const [acquisitionSource, setAcquisitionSource] = useState(
     initialAcquisitionSource ?? ""
   );
+
+  const departmentIds = useMemo(
+    () => departments.map((d) => d.id),
+    [departments]
+  );
+
+  const visibleAcquisitionSources = useMemo(
+    () =>
+      filterAcquisitionSourcesForDepartment(
+        allAcquisitionSources,
+        acquisitionSourceDepartments,
+        departmentId,
+        departmentIds,
+        acquisitionSource
+      ),
+    [
+      allAcquisitionSources,
+      acquisitionSourceDepartments,
+      departmentId,
+      departmentIds,
+      acquisitionSource,
+    ]
+  );
+
+  useEffect(() => {
+    if (!departmentId || !acquisitionSource) return;
+    const allowed = filterAcquisitionSourcesForDepartment(
+      allAcquisitionSources,
+      acquisitionSourceDepartments,
+      departmentId,
+      departmentIds
+    );
+    if (!allowed.some((s) => s.name === acquisitionSource)) {
+      setAcquisitionSource("");
+    }
+  }, [
+    departmentId,
+    allAcquisitionSources,
+    acquisitionSourceDepartments,
+    departmentIds,
+    acquisitionSource,
+  ]);
+
   const [financeType, setFinanceType] = useState(initialFinanceType ?? "");
   const [financeManagerId, setFinanceManagerId] = useState(
     initialFinanceManagerId ?? ""
@@ -1719,11 +1768,11 @@ export default function UpdatePendingForm({
                 className={cn(SEL, emptyCls(acquisitionSource, isLocked))}
               >
                 <option value="">
-                  {acquisitionSources.length === 0
+                  {visibleAcquisitionSources.length === 0
                     ? "No sources configured"
                     : "None / Unknown"}
                 </option>
-                {acquisitionSources.map((src) => (
+                {visibleAcquisitionSources.map((src) => (
                   <option key={src.id} value={src.name}>
                     {src.name}
                   </option>

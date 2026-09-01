@@ -8,6 +8,7 @@ import { isAppViewOnly } from "@/lib/impersonation";
 import { redirect } from "next/navigation";
 import SetupClient from "./SetupClient";
 import SelectAutoGroupEmptyState from "../SelectAutoGroupEmptyState";
+import { flattenAcquisitionSourceDepartmentLinks } from "@/lib/acquisition-sources";
 
 type StoreRow = { id: string; name: string };
 type DeptRow = {
@@ -80,6 +81,7 @@ export default async function SetupPage({
         departments={[]}
         salespeople={[]}
         acquisitionSources={[]}
+        acquisitionSourceDepartments={[]}
         financeManagers={[]}
         initialGoals={[]}
         initialYear={initialYear}
@@ -105,7 +107,7 @@ export default async function SetupPage({
       .order("name"),
     supabase
       .from("acquisition_sources")
-      .select("id,name,store_id,active")
+      .select("id,name,store_id,active,acquisition_source_departments(department_id)")
       .in("store_id", storeIds)
       .order("name"),
     supabase
@@ -117,7 +119,11 @@ export default async function SetupPage({
 
   const departments = (deptRes.data ?? []) as unknown as DeptRow[];
   const salespeople = (spRes.data ?? []) as unknown as PersonRow[];
-  const acquisitionSources = (srcRes.data ?? []) as unknown as SourceRow[];
+  const rawSources = (srcRes.data ?? []) as Array<
+    SourceRow & { acquisition_source_departments?: { department_id: string }[] }
+  >;
+  const acquisitionSources = rawSources.map(({ acquisition_source_departments: _d, ...source }) => source);
+  const acquisitionSourceDepartments = flattenAcquisitionSourceDepartmentLinks(rawSources);
   const financeManagers = (fmRes.data ?? []) as unknown as PersonRow[];
 
   // Goals: sequential after departments — for the requested year/month
@@ -139,6 +145,7 @@ export default async function SetupPage({
       departments={departments}
       salespeople={salespeople}
       acquisitionSources={acquisitionSources}
+      acquisitionSourceDepartments={acquisitionSourceDepartments}
       financeManagers={financeManagers}
       initialGoals={initialGoals}
       initialYear={initialYear}

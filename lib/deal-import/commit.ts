@@ -175,11 +175,26 @@ async function commitDealImportBatchJs(
     if (res.create_acquisition_source) {
       const key = res.create_acquisition_source.trim().toLowerCase();
       if (!existingSources.has(key)) {
-        const { error } = await supabase.from("acquisition_sources").insert({
-          store_id: b.store_id,
-          name: res.create_acquisition_source,
-        });
+        const { data: createdSource, error } = await supabase
+          .from("acquisition_sources")
+          .insert({
+            store_id: b.store_id,
+            name: res.create_acquisition_source,
+            active: true,
+          })
+          .select("id")
+          .single();
         if (error) throw new Error(`Create acquisition source failed: ${error.message}`);
+        const sourceId = (createdSource as { id: string }).id;
+        const { error: linkError } = await supabase
+          .from("acquisition_source_departments")
+          .insert({
+            acquisition_source_id: sourceId,
+            department_id: res.department_id,
+          });
+        if (linkError) {
+          throw new Error(`Link acquisition source to department failed: ${linkError.message}`);
+        }
         existingSources.add(key);
         createdRefs += 1;
       }

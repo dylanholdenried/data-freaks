@@ -1,4 +1,5 @@
 import { isMakeAllowedForDepartment } from "@/lib/vehicle";
+import { storeHasDepartmentSourceLinks } from "@/lib/acquisition-sources";
 import type { NormalizedDealImportRow } from "./csv-schema";
 import type { ParsedCsvRow } from "./parse";
 
@@ -7,6 +8,10 @@ export type StoreReferenceData = {
   salespeople: { id: string; name: string }[];
   financeManagers: { id: string; name: string }[];
   acquisitionSources: { id: string; name: string }[];
+  acquisitionSourceDepartments: {
+    acquisition_source_id: string;
+    department_id: string;
+  }[];
   departmentMakes: { department_id: string; make: string }[];
   existingStockNumbers: Set<string>;
 };
@@ -148,6 +153,20 @@ export function validateImportRows(
       if (!src) {
         create_acquisition_source = n.acquisition_source;
         warnings.push(`Will create acquisition source "${n.acquisition_source}"`);
+      } else if (department) {
+        const departmentIds = refs.departments.map((d) => d.id);
+        if (storeHasDepartmentSourceLinks(departmentIds, refs.acquisitionSourceDepartments)) {
+          const allowed = refs.acquisitionSourceDepartments.some(
+            (link) =>
+              link.acquisition_source_id === src.id &&
+              link.department_id === department.id
+          );
+          if (!allowed) {
+            errors.push(
+              `acquisition_source "${n.acquisition_source}" is not configured for department "${n.department}"`
+            );
+          }
+        }
       }
     }
 

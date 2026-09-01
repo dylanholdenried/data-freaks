@@ -2,12 +2,12 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { isRolledUpDepartment } from "@/lib/departments/rollup";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CheckCircle2, PlusCircle, Building2, UserMinus, UserCheck } from "lucide-react";
 import { updateOnboardingChecklist } from "@/app/app/onboarding-actions";
-import { isRolledUpDepartment } from "@/lib/departments/rollup";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -20,6 +20,10 @@ type DeptRow = {
 };
 type PersonRow = { id: string; name: string; store_id: string; active: boolean };
 type SourceRow = { id: string; name: string; store_id: string; active: boolean };
+type SourceDepartmentLink = {
+  acquisition_source_id: string;
+  department_id: string;
+};
 type GoalRow = { department_id: string; year: number; month: number; volume_goal: number };
 
 interface Props {
@@ -27,6 +31,7 @@ interface Props {
   departments: DeptRow[];
   salespeople: PersonRow[];
   acquisitionSources: SourceRow[];
+  acquisitionSourceDepartments: SourceDepartmentLink[];
   financeManagers: PersonRow[];
   initialGoals: GoalRow[];
   initialYear: number;
@@ -311,6 +316,293 @@ function GoalsSection({
   );
 }
 
+// ── AcquisitionSourcesSection ─────────────────────────────────────────────────
+
+interface AcquisitionSourcesSectionProps {
+  stores: StoreRow[];
+  departments: DeptRow[];
+  initialSources: SourceRow[];
+  initialLinks: SourceDepartmentLink[];
+  readOnly?: boolean;
+}
+
+function AcquisitionSourcesSection({
+  stores,
+  departments,
+  initialSources,
+  initialLinks,
+  readOnly = false,
+}: AcquisitionSourcesSectionProps) {
+  const [sources, setSources] = useState<SourceRow[]>(initialSources);
+  const [links, setLinks] = useState<SourceDepartmentLink[]>(initialLinks);
+  const [addName, setAddName] = useState("");
+  const [addStoreId, setAddStoreId] = useState(stores.length === 1 ? stores[0].id : "");
+  const [addDepartmentId, setAddDepartmentId] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [banner, setBanner] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
+
+  const deptById = new Map(departments.map((d) => [d.id, d]));
+  const goalDepartments = useMemo(
+    () => departments.filter((d) => !isRolledUpDepartment(d)),
+    [departments]
+  );
+  const departmentsForStore = addStoreId
+    ? goalDepartments.filter((d) => d.store_id === addStoreId)
+    : [];
+
+  async function handleAdd() {
+    if (readOnly) {
+      setBanner({ kind: "err", msg: "View only — changes are not allowed." });
+      return;
+    }
+    const name = addName.trim();
+    if (!name || !addStoreId || !addDepartmentId) return;
+    setAdding(true);
+    setBanner(null);
+
+    const supabase = createSupabaseBrowserClient();
+    const { data, error } = await supabase
+      .from("acquisition_sources")
+      .insert({ name, store_id: addStoreId, active: true })
+      .select("id,name,store_id,active")
+      .single();
+
+    if (error) {
+      setBanner({ kind: "err", msg: `Add failed: ${error.message}` });
+      setAdding(false);
+      return;
+    }
+
+    const newSource = data as unknown as SourceRow;
+    const { error: linkError } = await supabase
+      .from("acquisition_source_departments")
+      .insert({
+        acquisition_source_id: newSource.id,
+        department_id: addDepartmentId,
+      });
+
+    if (linkError) {
+      setBanner({ kind: "err", msg: `Source created but department link failed: ${linkError.message}` });
+      setAdding(false);
+      return;
+    }
+
+    setSources((prev) => [...prev, newSource].sort((a, b) => a.name.localeCompare(b.name)));
+    setLinks((prev) => [
+      ...prev,
+      { acquisition_source_id: newSource.id, department_id: addDepartmentId },
+    ]);
+    setAddName("");
+    if (stores.length > 1) setAddStoreId("");
+    setAddDepartmentId("");
+    setBanner({
+      kind: "ok",
+      msg: `${name} added to ${deptById.get(addDepartmentId)?.name ?? "department"}.`,
+    });
+    setAdding(false);
+  }
+
+  async function handleToggleActive(item: SourceRow) {
+    if (readOnly) return;
+    const next = !item.active;
+    setTogglingId(item.id);
+    setBanner(null);
+    setSources((prev) => prev.map((i) => (i.id === item.id ? { ...i, active: next } : i)));
+
+    const supabase = createSupabaseBrowserClient();
+    const { error } = await supabase
+      .from("acquisition_sources")
+      .update({ active: next })
+      .eq("id", item.id);
+
+    if (error) {
+      setSources((prev) =>
+        prev.map((i) => (i.id === item.id ? { ...i, active: item.active } : i))
+      );
+      setBanner({ kind: "err", msg: `Update failed: ${error.message}` });
+    } else {
+      setBanner({
+        kind: "ok",
+        msg: `${item.name} ${next ? "reactivated" : "deactivated"}.`,
+      });
+    }
+    setTogglingId(null);
+  }
+
+  const sourceById = new Map(sources.map((s) => [s.id, s]));
+  const activeCount = sources.filter((s) => s.active).length;
+
+  return (
+    <Card className="app-panel border-border shadow-none">
+      <CardHeader className="border-border">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-lg">Acquisition Sources</CardTitle>
+          <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
+            {activeCount} active
+          </span>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4 pt-4">
+        {banner && (
+          <div
+            className={`flex items-start gap-3 rounded-xl border p-3 ${
+              banner.kind === "ok"
+                ? "border-green-200 bg-green-50 text-green-800"
+                : "border-[color-mix(in_srgb,var(--da-red)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-red)_12%,transparent)] text-[var(--da-red)]"
+            }`}
+          >
+            {banner.kind === "ok" && <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />}
+            <p className="text-sm">{banner.msg}</p>
+            <button
+              type="button"
+              onClick={() => setBanner(null)}
+              className="ml-auto shrink-0 text-xs underline opacity-60 hover:opacity-100"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {!readOnly ? (
+          <div className="flex flex-wrap items-end gap-2">
+            {stores.length > 1 && (
+              <div className="space-y-1">
+                <label className={LBL}>Store</label>
+                <select
+                  value={addStoreId}
+                  onChange={(e) => {
+                    setAddStoreId(e.target.value);
+                    setAddDepartmentId("");
+                  }}
+                  className={SEL}
+                >
+                  <option value="">Select store</option>
+                  {stores.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="space-y-1">
+              <label className={LBL}>Department</label>
+              <select
+                value={addDepartmentId}
+                onChange={(e) => setAddDepartmentId(e.target.value)}
+                className={SEL}
+                disabled={!addStoreId}
+              >
+                <option value="">Select department</option>
+                {departmentsForStore.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="min-w-[200px] flex-1 space-y-1">
+              <label className={LBL}>Name</label>
+              <Input
+                value={addName}
+                onChange={(e) => setAddName(e.target.value)}
+                placeholder="Add acquisition source…"
+                onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+              />
+            </div>
+            <Button
+              onClick={handleAdd}
+              disabled={adding || !addName.trim() || !addStoreId || !addDepartmentId}
+              className="shrink-0"
+            >
+              <PlusCircle className="mr-1.5 h-4 w-4" />
+              {adding ? "Adding…" : "Add"}
+            </Button>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">View only — sources cannot be changed.</p>
+        )}
+
+        {sources.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No acquisition sources yet. Add one above.</p>
+        ) : (
+          <div className="space-y-4">
+            {stores.map((store) => {
+              const storeDepts = goalDepartments.filter((d) => d.store_id === store.id);
+              if (storeDepts.length === 0) return null;
+              return (
+                <div key={store.id}>
+                  {stores.length > 1 && (
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {store.name}
+                    </p>
+                  )}
+                  <div className="space-y-3">
+                    {storeDepts.map((dept) => {
+                      const deptLinks = links.filter((l) => l.department_id === dept.id);
+                      if (deptLinks.length === 0) return null;
+                      return (
+                        <div key={dept.id}>
+                          <p className="mb-1.5 text-xs font-medium text-muted-foreground">{dept.name}</p>
+                          <div className="divide-y divide-border rounded-xl border border-border">
+                            {deptLinks.map((link) => {
+                              const item = sourceById.get(link.acquisition_source_id);
+                              if (!item) return null;
+                              return (
+                                <div
+                                  key={`${dept.id}-${item.id}`}
+                                  className="flex items-center justify-between gap-3 px-4 py-2.5"
+                                >
+                                  <span
+                                    className={`text-sm font-medium ${
+                                      item.active ? "text-foreground" : "text-muted-foreground line-through"
+                                    }`}
+                                  >
+                                    {item.name}
+                                  </span>
+                                  {!readOnly && (
+                                    <button
+                                      type="button"
+                                      disabled={togglingId === item.id}
+                                      onClick={() => handleToggleActive(item)}
+                                      className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
+                                        item.active
+                                          ? "text-muted-foreground hover:bg-[color-mix(in_srgb,var(--da-red)_12%,transparent)] hover:text-red-600"
+                                          : "text-emerald-600 hover:bg-[color-mix(in_srgb,var(--da-green)_12%,transparent)]"
+                                      }`}
+                                    >
+                                      {item.active ? (
+                                        <>
+                                          <UserMinus className="h-3.5 w-3.5" />
+                                          Deactivate
+                                        </>
+                                      ) : (
+                                        <>
+                                          <UserCheck className="h-3.5 w-3.5" />
+                                          Reactivate
+                                        </>
+                                      )}
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── RosterSection ─────────────────────────────────────────────────────────────
 
 interface RosterSectionProps {
@@ -568,6 +860,7 @@ export default function SetupClient({
   departments,
   salespeople,
   acquisitionSources,
+  acquisitionSourceDepartments,
   financeManagers,
   initialGoals,
   initialYear,
@@ -699,11 +992,11 @@ export default function SetupClient({
       />
 
       {/* Section 4: Acquisition Sources */}
-      <RosterSection
-        title="Acquisition Sources"
-        table="acquisition_sources"
+      <AcquisitionSourcesSection
         stores={stores}
-        initialItems={acquisitionSources}
+        departments={departments}
+        initialSources={acquisitionSources}
+        initialLinks={acquisitionSourceDepartments}
         readOnly={readOnly}
       />
 

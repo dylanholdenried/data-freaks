@@ -118,14 +118,30 @@ export async function createSource(formData: FormData) {
   await assertCanMutateAppData(profile?.role);
 
   const storeId = String(formData.get("store_id") || "").trim();
+  const departmentId = String(formData.get("department_id") || "").trim();
   if (!(await assertStoreAccess(supabase, profile, storeId))) {
     throw new Error("Store not allowed");
   }
+  if (!departmentId) {
+    throw new Error("Department is required");
+  }
 
-  await supabase.from("acquisition_sources").insert({
-    store_id: storeId,
-    name: String(formData.get("source_name"))
+  const { data: createdSource, error: sourceError } = await supabase
+    .from("acquisition_sources")
+    .insert({
+      store_id: storeId,
+      name: String(formData.get("source_name")),
+      active: true,
+    })
+    .select("id")
+    .single();
+  if (sourceError) throw sourceError;
+
+  const { error: linkError } = await supabase.from("acquisition_source_departments").insert({
+    acquisition_source_id: (createdSource as { id: string }).id,
+    department_id: departmentId,
   });
+  if (linkError) throw linkError;
   revalidatePath("/app/setup");
 }
 

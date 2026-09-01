@@ -202,18 +202,15 @@ export async function createBatchFromCsv(input: {
       return { ok: false, error: fileErrors.join("; ") };
     }
 
-    const [
-      deptsResult,
-      spResult,
-      fmResult,
-      srcResult,
-      deptMakesResult,
-      dealsResult,
-    ] = await Promise.all([
+    const [deptsResult, spResult, fmResult, srcResult, deptMakesResult, dealsResult] =
+      await Promise.all([
       supabase.from("departments").select("id,name").eq("store_id", storeId),
       supabase.from("salespeople").select("id,name").eq("store_id", storeId),
       supabase.from("finance_managers").select("id,name").eq("store_id", storeId),
-      supabase.from("acquisition_sources").select("id,name").eq("store_id", storeId),
+      supabase
+        .from("acquisition_sources")
+        .select("id,name,acquisition_source_departments(department_id)")
+        .eq("store_id", storeId),
       supabase.from("department_makes").select("department_id,make"),
       fetchAllRows<{ stock_number: string }>((from, to) =>
         supabase
@@ -230,11 +227,23 @@ export async function createBatchFromCsv(input: {
       dealsResult.data.map((d) => d.stock_number.trim().toLowerCase())
     );
 
+    const rawSources = (srcResult.data ?? []) as Array<{
+      id: string;
+      name: string;
+      acquisition_source_departments?: { department_id: string }[];
+    }>;
+
     const validated = validateImportRows(parsedRows, {
       departments: (deptsResult.data ?? []) as { id: string; name: string }[],
       salespeople: (spResult.data ?? []) as { id: string; name: string }[],
       financeManagers: (fmResult.data ?? []) as { id: string; name: string }[],
-      acquisitionSources: (srcResult.data ?? []) as { id: string; name: string }[],
+      acquisitionSources: rawSources.map(({ acquisition_source_departments: _d, ...source }) => source),
+      acquisitionSourceDepartments: rawSources.flatMap((source) =>
+        (source.acquisition_source_departments ?? []).map((row) => ({
+          acquisition_source_id: source.id,
+          department_id: row.department_id,
+        }))
+      ),
       departmentMakes: (deptMakesResult.data ?? []) as {
         department_id: string;
         make: string;
