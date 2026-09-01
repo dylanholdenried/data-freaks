@@ -7,8 +7,8 @@ export type DatePreset =
   | "last_6_months"
   | "last_12_months"
   | "all_time"
-  /** @deprecated kept for old URLs — resolves then maps via parse */
   | "last_month"
+  /** @deprecated kept for old URLs */
   | "month"
   | "custom";
 
@@ -104,9 +104,10 @@ export function resolveDateRange(
   }
 }
 
-/** Active UI presets (legacy month/custom/last_month omitted). */
+/** Active UI presets (legacy month/custom omitted). */
 export const DATE_PRESET_OPTIONS: { value: DatePreset; label: string }[] = [
   { value: "mtd", label: "MTD" },
+  { value: "last_month", label: "Last Month" },
   { value: "ytd", label: "YTD" },
   { value: "last_3_months", label: "Previous 3 months" },
   { value: "last_6_months", label: "Previous 6 months" },
