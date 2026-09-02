@@ -27,6 +27,7 @@ export function canAccessBuyBox(plan: string | null | undefined): boolean {
 const ANALYZE_HREFS = new Set([
   "/app/profit-center",
   "/app/salesperson-leaderboard",
+  "/app/trades",
 ]);
 
 /** Nav hrefs that require Advise */

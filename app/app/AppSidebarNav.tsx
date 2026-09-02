@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType } from "react";
 import {
+  ArrowLeftRight,
   CalendarRange,
   LayoutDashboard,
   ListOrdered,
@@ -70,6 +71,12 @@ const ANALYZE_LINKS: NavItem[] = [
     label: "Profit Center",
     icon: CircleDollarSign,
     match: (p) => p.startsWith("/app/profit-center"),
+  },
+  {
+    href: "/app/trades",
+    label: "Trades",
+    icon: ArrowLeftRight,
+    match: (p) => p.startsWith("/app/trades"),
   },
 ];
 

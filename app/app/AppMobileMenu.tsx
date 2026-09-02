@@ -31,6 +31,7 @@ const SECTIONS: { title: string; links: NavItem[] }[] = [
     links: [
       { href: "/app/salesperson-leaderboard", label: "Salesperson Leaderboard" },
       { href: "/app/profit-center", label: "Profit Center" },
+      { href: "/app/trades", label: "Trades" },
     ],
   },
   {

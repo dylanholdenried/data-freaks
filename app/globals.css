@@ -2679,12 +2679,23 @@ main:has(.da-app) + footer {
 .pc-kpi-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  gap: 16px;
 }
 
 @media (min-width: 1100px) {
   .pc-kpi-grid {
     grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+}
+
+/* Trades page: keep room between tiles; avoid 8-up squeeze with 9 KPIs */
+.pc-kpi-grid.trades-kpi-grid {
+  gap: 20px;
+}
+
+@media (min-width: 1100px) {
+  .pc-kpi-grid.trades-kpi-grid {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   }
 }
 
@@ -3136,6 +3147,87 @@ main:has(.da-app) + footer {
   font-size: 11.5px;
   white-space: nowrap;
   text-align: right;
+}
+
+/* Diverging hold bars (salesperson avg hold on Trades) */
+.trades-hold-bars {
+  max-height: 260px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.trades-hold-row {
+  display: grid;
+  grid-template-columns: minmax(88px, 120px) 1fr auto;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.trades-hold-row:last-child {
+  margin-bottom: 0;
+}
+
+.trades-hold-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--da-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trades-hold-track {
+  position: relative;
+  height: 22px;
+  border-radius: 4px;
+  background: rgba(35, 42, 56, 0.9);
+  overflow: hidden;
+}
+
+.trades-hold-mid {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: rgba(148, 163, 184, 0.45);
+  z-index: 1;
+}
+
+.trades-hold-fill {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  border-radius: 3px;
+  min-width: 3px;
+}
+
+.trades-hold-fill.is-pos {
+  left: 50%;
+  background: var(--da-green);
+}
+
+.trades-hold-fill.is-neg {
+  right: 50%;
+  background: var(--da-red);
+}
+
+.trades-hold-value {
+  font-family: var(--da-mono);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  min-width: 4.5rem;
+  text-align: right;
+}
+
+.trades-hold-value.is-pos {
+  color: var(--da-green);
+}
+
+.trades-hold-value.is-neg {
+  color: var(--da-red);
 }
 
 .pc-filters {
