@@ -1,6 +1,9 @@
 /**
  * Buy-box / red-light scoring for Profit Center model rollups.
- * Weights and min volume are admin-adjustable per dealer group.
+ *
+ * Component scores are absolute (platform defaults): linear clamps for
+ * front / back / trade %, age buckets for turn. Weights and min volume
+ * are admin-adjustable per dealer group.
  */
 
 import type { RollupRow } from "./aggregate";
@@ -23,6 +26,33 @@ export const DEFAULT_BUY_BOX_SETTINGS: BuyBoxSettings = {
   listSize: 5,
 };
 
+/** Absolute score anchors — higher metric → higher score. */
+export type ScoreAnchor = {
+  floor: number;
+  ceiling: number;
+};
+
+/** Turn bands: age ≤ maxDays maps to score (first match wins). */
+export type TurnBand = {
+  maxDays: number;
+  score: number;
+};
+
+/** Platform defaults for absolute component scoring. */
+export const DEFAULT_SCORE_CURVES = {
+  front: { floor: -1500, ceiling: 2500 } satisfies ScoreAnchor,
+  back: { floor: 0, ceiling: 2500 } satisfies ScoreAnchor,
+  /** tradePct is stored as 0–100. */
+  trade: { floor: 20, ceiling: 60 } satisfies ScoreAnchor,
+  turnBands: [
+    { maxDays: 30, score: 1 },
+    { maxDays: 45, score: 0.75 },
+    { maxDays: 60, score: 0.5 },
+    { maxDays: 90, score: 0.25 },
+    { maxDays: Infinity, score: 0 },
+  ] satisfies TurnBand[],
+} as const;
+
 export type ScoredModel = RollupRow & {
   score: number;
   frontScore: number;
@@ -39,15 +69,55 @@ export type BuyBoxResult = {
   nearMiss: RollupRow[];
 };
 
-function normalizeHigher(values: number[], v: number): number {
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) return 0.5;
-  return (v - min) / (max - min);
+/**
+ * Linear clamp: below floor → 0, above ceiling → 1, even gradient between.
+ */
+export function clampLinear(
+  value: number,
+  floor: number,
+  ceiling: number
+): number {
+  if (!Number.isFinite(value)) return 0;
+  if (!Number.isFinite(floor) || !Number.isFinite(ceiling) || ceiling === floor) {
+    return 0.5;
+  }
+  if (value <= floor) return 0;
+  if (value >= ceiling) return 1;
+  return (value - floor) / (ceiling - floor);
 }
 
-function normalizeLower(values: number[], v: number): number {
-  return 1 - normalizeHigher(values, v);
+/** Score days-on-lot against ordered turn bands (≤ maxDays). */
+export function scoreTurnBuckets(
+  ageDays: number,
+  bands: readonly TurnBand[] = DEFAULT_SCORE_CURVES.turnBands
+): number {
+  const age = Number.isFinite(ageDays) ? ageDays : 60;
+  for (const band of bands) {
+    if (age <= band.maxDays) return band.score;
+  }
+  return 0;
+}
+
+export function scoreFrontProfit(
+  avgFront: number,
+  anchor: ScoreAnchor = DEFAULT_SCORE_CURVES.front
+): number {
+  return clampLinear(avgFront, anchor.floor, anchor.ceiling);
+}
+
+export function scoreBackProfit(
+  avgBack: number,
+  anchor: ScoreAnchor = DEFAULT_SCORE_CURVES.back
+): number {
+  return clampLinear(avgBack, anchor.floor, anchor.ceiling);
+}
+
+/** tradePct is 0–100 (e.g. 45 means 45%). */
+export function scoreTradePct(
+  tradePct: number,
+  anchor: ScoreAnchor = DEFAULT_SCORE_CURVES.trade
+): number {
+  return clampLinear(tradePct, anchor.floor, anchor.ceiling);
 }
 
 /** Normalize weights so they sum to 1 (falls back to defaults if all zero). */
@@ -98,16 +168,11 @@ export function scoreBuyBox(
     return { buys: [], reds: [], scored: [], nearMiss };
   }
 
-  const fronts = eligible.map((r) => r.avgFront ?? 0);
-  const backs = eligible.map((r) => r.avgBack ?? 0);
-  const ages = eligible.map((r) => r.avgAge ?? 60);
-  const trades = eligible.map((r) => r.tradePct ?? 0);
-
-  const scored: ScoredModel[] = eligible.map((row, i) => {
-    const frontScore = normalizeHigher(fronts, fronts[i]!);
-    const backScore = normalizeHigher(backs, backs[i]!);
-    const turnScore = normalizeLower(ages, ages[i]!);
-    const tradeScore = normalizeHigher(trades, trades[i]!);
+  const scored: ScoredModel[] = eligible.map((row) => {
+    const frontScore = scoreFrontProfit(row.avgFront ?? 0);
+    const backScore = scoreBackProfit(row.avgBack ?? 0);
+    const turnScore = scoreTurnBuckets(row.avgAge ?? 60);
+    const tradeScore = scoreTradePct(row.tradePct ?? 0);
     const score =
       cfg.weightFront * frontScore +
       cfg.weightBack * backScore +
