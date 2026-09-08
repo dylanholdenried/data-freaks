@@ -267,7 +267,6 @@ export async function updateAcquirePurchase(
       recon_merchandising_done: parseBool(formData.get("recon_merchandising_done")),
       recon_frontline_done: parseBool(formData.get("recon_frontline_done")),
       frontline_date: emptyToNull(formData.get("frontline_date")),
-      website_price: parseNum(formData.get("website_price")),
       sold_date: emptyToNull(formData.get("sold_date")),
       sold_price: parseNum(formData.get("sold_price")),
       front_gross: parseNum(formData.get("front_gross")),

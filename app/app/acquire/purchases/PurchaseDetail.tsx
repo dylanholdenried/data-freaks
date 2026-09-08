@@ -184,6 +184,7 @@ export default function PurchaseDetail({
   const [model, setModel] = useState(purchase.vehicle_model ?? "");
   const [trim, setTrim] = useState(purchase.vehicle_trim ?? "");
   const [hasTrade, setHasTrade] = useState(Boolean(purchase.has_trade));
+  const [stage, setStage] = useState(purchase.stage);
   const [exitStrategy, setExitStrategy] = useState(purchase.exit_strategy ?? "");
   const [tradeVin, setTradeVin] = useState(purchase.trade_vin ?? "");
   const [tradeYear, setTradeYear] = useState(purchase.trade_year != null ? String(purchase.trade_year) : "");
@@ -279,63 +280,70 @@ export default function PurchaseDetail({
       className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-2xl border shadow-2xl"
       style={{ background: IC.bg, borderColor: IC.border, color: IC.text }}
     >
-      <header
-        className="flex shrink-0 items-start justify-between gap-3 border-b px-4 py-3"
-        style={{ borderColor: IC.border }}
-      >
-        <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: IC.muted }}>
-            {storeName}
-          </p>
-          <h2
-            className="mt-1 truncate text-2xl font-bold leading-tight"
-            style={{ fontFamily: "var(--ic-font-display), Barlow Condensed, sans-serif" }}
-          >
-            {purchase.stock_number || "—"} · {year || purchase.vehicle_year || "—"} {make || purchase.vehicle_make || ""}{" "}
-            {model || purchase.vehicle_model || ""}
-          </h2>
-          <p className="mt-1 text-xs" style={{ color: IC.muted }}>
-            {isCompletedStage(purchase.stage) ? "Sold age" : "Age"}{" "}
-            {age != null ? `${age}d` : "—"}
-            {" · "}
-            Status: {ACQ_STAGE_LABELS[purchase.stage]}
-          </p>
-        </div>
-        <button type="button" onClick={onClose} className="rounded-md p-1.5 hover:bg-white/5" aria-label="Close">
-          <X className="h-4 w-4" />
-        </button>
-      </header>
-
-      <div className="flex shrink-0 gap-1 overflow-x-auto border-b px-2 py-2" style={{ borderColor: IC.border }}>
-        {TABS.map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTab(t)}
-            className="shrink-0 rounded-md px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide"
-            style={{
-              background: tab === t ? IC.panel : "transparent",
-              color: tab === t ? IC.text : IC.muted,
-              border: tab === t ? `1px solid ${IC.border}` : "1px solid transparent",
-            }}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
-
       <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
+        <header
+          className="flex shrink-0 items-start justify-between gap-3 border-b px-4 py-3"
+          style={{ borderColor: IC.border }}
+        >
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: IC.muted }}>
+              {storeName}
+            </p>
+            <h2
+              className="mt-1 truncate text-2xl font-bold leading-tight"
+              style={{ fontFamily: "var(--ic-font-display), Barlow Condensed, sans-serif" }}
+            >
+              {purchase.stock_number || "—"} · {year || purchase.vehicle_year || "—"} {make || purchase.vehicle_make || ""}{" "}
+              {model || purchase.vehicle_model || ""}
+            </h2>
+            <p className="mt-1 text-xs" style={{ color: IC.muted }}>
+              {isCompletedStage(stage) ? "Sold age" : "Age"} {age != null ? `${age}d` : "—"}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-start gap-2">
+            <label className="block text-right text-[10px] font-semibold uppercase tracking-wide">
+              <span style={{ color: IC.muted }}>Status</span>
+              <select
+                name="stage"
+                value={stage}
+                disabled={!canEdit}
+                onChange={(e) => setStage(e.target.value as typeof stage)}
+                className="mt-1 block min-w-[10.5rem] rounded-md border px-2 py-1.5 text-left text-sm font-medium normal-case tracking-normal"
+                style={{ background: "#0f141c", borderColor: IC.border, color: IC.text }}
+              >
+                {ACQ_STAGES.map((s) => (
+                  <option key={s} value={s}>
+                    {ACQ_STAGE_LABELS[s]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="button" onClick={onClose} className="rounded-md p-1.5 hover:bg-white/5" aria-label="Close">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </header>
+
+        <div className="flex shrink-0 gap-1 overflow-x-auto border-b px-2 py-2" style={{ borderColor: IC.border }}>
+          {TABS.map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              className="shrink-0 rounded-md px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide"
+              style={{
+                background: tab === t ? IC.panel : "transparent",
+                color: tab === t ? IC.text : IC.muted,
+                border: tab === t ? `1px solid ${IC.border}` : "1px solid transparent",
+              }}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+
         <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
           <div className={tab === "Overview" ? "grid grid-cols-2 gap-3" : "hidden"}>
-            <div className="col-span-2">
-              <SelectField
-                label="Stage"
-                name="stage"
-                defaultValue={purchase.stage}
-                disabled={!canEdit}
-                options={ACQ_STAGES.map((s) => ({ value: s, label: ACQ_STAGE_LABELS[s] }))}
-              />
-            </div>
             <Field label="Stock #" name="stock_number" defaultValue={purchase.stock_number} readOnly={!canEdit} />
             <label className="block text-xs">
               <span style={{ color: IC.muted }}>VIN</span>
@@ -405,14 +413,14 @@ export default function PurchaseDetail({
 
           <div className={tab === "Books" ? "space-y-1" : "hidden"}>
             <ReadRow label="MMR at purchase" value={formatMoney(purchase.purchase_mmr)} />
-            <ReadRow label="JD Power Clean Trade at purchase" value={formatMoney(purchase.purchase_jd)} />
             <ReadRow label="Current MMR" value={formatMoney(mmrNow)} />
-            <ReadRow label="Current JD Power Clean Trade" value={formatMoney(jdNow)} />
             <ReadRow
               label="MMR change"
               value={formatDelta(mmrDelta)}
               tone={mmrDelta == null ? IC.muted : mmrDelta >= 0 ? IC.green : IC.red}
             />
+            <ReadRow label="JD Power Clean Trade at purchase" value={formatMoney(purchase.purchase_jd)} />
+            <ReadRow label="Current JD Power Clean Trade" value={formatMoney(jdNow)} />
             <ReadRow
               label="JD change"
               value={formatDelta(jdDelta)}
@@ -425,35 +433,28 @@ export default function PurchaseDetail({
 
           <div className={tab === "Recon" ? "space-y-3" : "hidden"}>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Actual reconditioning cost" name="recon_cost" type="number" step="0.01" defaultValue={purchase.recon_cost} readOnly={!canEdit} />
               <Field label="Delivery date" name="delivery_date" type="date" defaultValue={purchase.delivery_date} readOnly={!canEdit} />
               <Field label="Frontline date" name="frontline_date" type="date" defaultValue={purchase.frontline_date} readOnly={!canEdit} />
+              <Field label="Actual reconditioning cost" name="recon_cost" type="number" step="0.01" defaultValue={purchase.recon_cost} readOnly={!canEdit} />
             </div>
             <div className="space-y-2">
               <CheckField label="Description" name="recon_description_done" defaultChecked={purchase.recon_description_done} disabled={!canEdit} />
               <CheckField label="Merchandising" name="recon_merchandising_done" defaultChecked={purchase.recon_merchandising_done} disabled={!canEdit} />
               <CheckField label="Frontline" name="recon_frontline_done" defaultChecked={purchase.recon_frontline_done} disabled={!canEdit} />
             </div>
+            <ReadRow label="Transport time (delivery − purchase)" value={transportDays != null ? `${transportDays}d` : "—"} />
             <ReadRow
               label="Recon vs estimate"
               value={formatDelta(reconMiss)}
               tone={reconMiss == null ? IC.muted : reconMiss <= 0 ? IC.green : IC.red}
             />
-            <ReadRow label="Transport time (delivery − purchase)" value={transportDays != null ? `${transportDays}d` : "—"} />
             <ReadRow label="Days in recon" value={daysInRecon != null ? `${daysInRecon}d` : "—"} />
             <ReadRow label="Time to line" value={timeToLine != null ? `${timeToLine}d` : "—"} />
           </div>
 
           <div className={tab === "Merchandising" ? "space-y-3" : "hidden"}>
             <ReadRow label="Cost" value={formatMoney(merchCost(purchase))} />
-            <Field
-              label="Website price"
-              name="website_price"
-              type="number"
-              step="0.01"
-              defaultValue={purchase.website_price ?? purchase.live_price}
-              readOnly={!canEdit}
-            />
+            <ReadRow label="Price" value={formatMoney(websitePrice(purchase))} />
             <ReadRow label="Markup" value={formatMoneyExact(markup(purchase))} />
             <ReadRow label="Photo count" value={purchase.live_photo_count ?? "—"} />
             <ReadRow
@@ -565,7 +566,6 @@ export default function PurchaseDetail({
           {/* Persist fields across tabs */}
           {tab !== "Overview" ? (
             <>
-              <input type="hidden" name="stage" value={purchase.stage} />
               <input type="hidden" name="stock_number" value={purchase.stock_number ?? ""} />
               <input type="hidden" name="buyer_id" value={purchase.buyer_id ?? ""} />
               <input type="hidden" name="color" value={purchase.color ?? ""} />
@@ -599,9 +599,6 @@ export default function PurchaseDetail({
               {purchase.recon_merchandising_done ? <input type="hidden" name="recon_merchandising_done" value="true" /> : null}
               {purchase.recon_frontline_done ? <input type="hidden" name="recon_frontline_done" value="true" /> : null}
             </>
-          ) : null}
-          {tab !== "Merchandising" ? (
-            <input type="hidden" name="website_price" value={purchase.website_price ?? purchase.live_price ?? ""} />
           ) : null}
           {tab !== "Exit" ? (
             <>

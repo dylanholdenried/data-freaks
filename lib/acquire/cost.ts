@@ -63,7 +63,7 @@ export function headerAgeDays(p: AcqPurchase, now = new Date()): number | null {
 }
 
 export function websitePrice(p: AcqPurchase): number | null {
-  if (p.website_price != null) return Number(p.website_price);
+  // Inventory Command "Price" — live overlay only (not manual entry)
   if (p.live_price != null) return Number(p.live_price);
   return null;
 }
