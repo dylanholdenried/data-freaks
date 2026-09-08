@@ -4,13 +4,16 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { IC } from "@/lib/inventory-command/midmo";
 import { ACQ_EXIT_STRATEGIES, ACQ_SOURCE_TYPES, ACQ_STAGES } from "@/lib/acquire/types";
-import { ACQ_BULK_TEMPLATE_FILENAME } from "@/lib/acquire/bulk-upload";
+import {
+  ACQ_BULK_TEMPLATE_FILENAME,
+  type AcqBulkPreviewSummary,
+} from "@/lib/acquire/bulk-upload";
 import { BODY_STYLES, COLORS, DRIVETRAINS } from "@/lib/vehicle";
 import {
   bulkUploadAcquirePurchasesAction,
   getAcquirePurchasesTemplateCsvAction,
 } from "../actions";
-import { Download, Loader2, Upload, X } from "lucide-react";
+import { Download, Eye, Loader2, Upload, X } from "lucide-react";
 
 export default function BulkUploadModal({
   storeNames,
@@ -24,6 +27,7 @@ export default function BulkUploadModal({
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [resultMsg, setResultMsg] = useState<string | null>(null);
+  const [preview, setPreview] = useState<AcqBulkPreviewSummary | null>(null);
   const [pending, startTransition] = useTransition();
 
   async function downloadTemplate() {
@@ -42,30 +46,33 @@ export default function BulkUploadModal({
     }
   }
 
-  function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  function runUpload(dryRun: boolean) {
     setError(null);
     setWarnings([]);
     setResultMsg(null);
+    if (!dryRun) setPreview(null);
     if (!file) {
       setError("Choose a CSV file.");
       return;
     }
     const fd = new FormData();
     fd.set("file", file);
+    if (dryRun) fd.set("dry_run", "true");
     startTransition(async () => {
       const res = await bulkUploadAcquirePurchasesAction(fd);
       if (!res.ok) {
         setError(res.error);
         setWarnings(res.warnings ?? []);
+        setPreview(null);
         return;
       }
       setWarnings(res.warnings);
-      setResultMsg(
-        `Imported ${res.inserted} purchase${res.inserted === 1 ? "" : "s"}${
-          res.skipped ? ` · ${res.skipped} skipped` : ""
-        }.`
-      );
+      setResultMsg(res.summary);
+      if (res.dryRun) {
+        setPreview(res.preview);
+        return;
+      }
+      setPreview(null);
       setFile(null);
       router.refresh();
     });
@@ -86,9 +93,12 @@ export default function BulkUploadModal({
         </div>
 
         <p className="mb-3 text-xs" style={{ color: IC.muted }}>
-          Upload a CSV of purchases. Only <span className="font-semibold" style={{ color: IC.text }}>dealership</span>{" "}
-          is required per row — all other fields can be blank. Match dealership to a store name (or last word, e.g.
-          Fenton).
+          Preview first, then import. Only{" "}
+          <span className="font-semibold" style={{ color: IC.text }}>
+            dealership
+          </span>{" "}
+          is required per row. Duplicate store + stock rows are skipped. On Hold is manual (not in the
+          template).
         </p>
 
         <div
@@ -117,14 +127,20 @@ export default function BulkUploadModal({
           Download CSV template
         </button>
 
-        <form onSubmit={onSubmit} className="space-y-3">
+        <div className="space-y-3">
           <label className="block text-xs">
             <span style={{ color: IC.muted }}>CSV file</span>
             <input
               type="file"
               accept=".csv,text/csv"
               className="mt-1 block w-full text-xs"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => {
+                setFile(e.target.files?.[0] ?? null);
+                setPreview(null);
+                setResultMsg(null);
+                setWarnings([]);
+                setError(null);
+              }}
             />
           </label>
 
@@ -138,6 +154,41 @@ export default function BulkUploadModal({
               {resultMsg}
             </p>
           ) : null}
+
+          {preview ? (
+            <div
+              className="rounded-md border px-3 py-2 text-[11px] leading-relaxed"
+              style={{ borderColor: IC.border, background: IC.rowAlt, color: IC.muted }}
+            >
+              <p className="font-semibold uppercase tracking-wide" style={{ color: IC.text }}>
+                Preview
+              </p>
+              <p className="mt-1">
+                Parsed {preview.rowsParsed} · ready {preview.wouldInsert} · skip {preview.wouldSkip}
+              </p>
+              {preview.storeCounts.length ? (
+                <p className="mt-1">
+                  Stores:{" "}
+                  {preview.storeCounts.map((s) => `${s.store} (${s.count})`).join(" · ")}
+                </p>
+              ) : null}
+              <p className="mt-1">
+                Missing stock: {preview.missingStock} · Missing price: {preview.missingPurchasePrice}
+              </p>
+              <p className="mt-1">
+                Out of catalog — body: {preview.bodyOutOfCatalog} · color: {preview.colorOutOfCatalog}{" "}
+                · drivetrain: {preview.drivetrainOutOfCatalog}
+              </p>
+              <p className="mt-1">
+                Duplicates — in file: {preview.duplicateInFile} · already in Acquire:{" "}
+                {preview.duplicateExisting}
+                {preview.unknownDealership
+                  ? ` · unknown dealership: ${preview.unknownDealership}`
+                  : ""}
+              </p>
+            </div>
+          ) : null}
+
           {warnings.length ? (
             <div
               className="max-h-32 overflow-y-auto rounded-md border px-2 py-2 text-[11px]"
@@ -150,7 +201,7 @@ export default function BulkUploadModal({
             </div>
           ) : null}
 
-          <div className="flex justify-end gap-2 pt-1">
+          <div className="flex flex-wrap justify-end gap-2 pt-1">
             <button
               type="button"
               onClick={onClose}
@@ -160,16 +211,27 @@ export default function BulkUploadModal({
               Close
             </button>
             <button
-              type="submit"
+              type="button"
               disabled={pending || !file}
+              onClick={() => runUpload(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs font-semibold disabled:opacity-60"
+              style={{ borderColor: IC.border, color: IC.blue }}
+            >
+              {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />}
+              Preview
+            </button>
+            <button
+              type="button"
+              disabled={pending || !file || !preview || preview.wouldInsert === 0}
+              onClick={() => runUpload(false)}
               className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
               style={{ background: IC.blue }}
             >
               {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-              {pending ? "Uploading…" : "Upload CSV"}
+              {preview ? `Import ${preview.wouldInsert}` : "Import"}
             </button>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );

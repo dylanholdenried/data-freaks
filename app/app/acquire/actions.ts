@@ -415,9 +415,21 @@ export async function getAcquirePurchasesTemplateCsvAction(): Promise<string> {
 export type AcqBulkUploadResult =
   | {
       ok: true;
+      dryRun: false;
       inserted: number;
       skipped: number;
       warnings: string[];
+      summary: string;
+      liveMatched: number;
+    }
+  | {
+      ok: true;
+      dryRun: true;
+      inserted: 0;
+      skipped: number;
+      warnings: string[];
+      summary: string;
+      preview: import("@/lib/acquire/bulk-upload").AcqBulkPreviewSummary;
     }
   | { ok: false; error: string; warnings?: string[] };
 
@@ -427,6 +439,8 @@ export async function bulkUploadAcquirePurchasesAction(
   try {
     const ctx = await requireAcquireMutator();
     if (!ctx.ok) return { ok: false, error: ctx.error };
+
+    const dryRun = String(formData.get("dry_run") ?? "") === "true";
 
     const file = formData.get("file");
     if (!(file instanceof File) || file.size === 0) {
@@ -438,6 +452,11 @@ export async function bulkUploadAcquirePurchasesAction(
       parseAcquirePurchasesCsv,
       matchStoreId,
       matchBuyerId,
+      stockStoreKey,
+      isBodyStyleInCatalog,
+      isColorInCatalog,
+      isDrivetrainInCatalog,
+      formatBulkUploadSummary,
     } = await import("@/lib/acquire/bulk-upload");
     const { computeIsIncoming } = await import("@/lib/acquire/incoming");
 
@@ -448,7 +467,7 @@ export async function bulkUploadAcquirePurchasesAction(
 
     const warnings = [...parsed.warnings];
 
-    const [{ data: storeRows }, { data: buyerRows }] = await Promise.all([
+    const [{ data: storeRows }, { data: buyerRows }, { data: existingRows }] = await Promise.all([
       ctx.supabase
         .from("stores")
         .select("id, name, dealer_group_id")
@@ -457,13 +476,34 @@ export async function bulkUploadAcquirePurchasesAction(
         .from("acq_buyers")
         .select("id, name, active")
         .eq("dealer_group_id", ctx.dealerGroupId),
+      ctx.supabase
+        .from("acq_purchases")
+        .select("store_id, stock_number")
+        .eq("dealer_group_id", ctx.dealerGroupId)
+        .not("stock_number", "is", null),
     ]);
 
     const stores = (storeRows ?? []).map((s) => ({ id: s.id, name: s.name }));
+    const storeNameById = Object.fromEntries(stores.map((s) => [s.id, s.name]));
     const buyers = (buyerRows ?? []) as { id: string; name: string; active: boolean }[];
+    const existingKeys = new Set(
+      (existingRows ?? [])
+        .map((r) => stockStoreKey(r.store_id, r.stock_number))
+        .filter((k): k is string => Boolean(k))
+    );
 
     const inserts: Record<string, unknown>[] = [];
     let skipped = 0;
+    let duplicateInFile = 0;
+    let duplicateExisting = 0;
+    let unknownDealership = 0;
+    let missingStock = 0;
+    let missingPurchasePrice = 0;
+    let bodyOutOfCatalog = 0;
+    let colorOutOfCatalog = 0;
+    let drivetrainOutOfCatalog = 0;
+    const storeCounts = new Map<string, number>();
+    const seenInFile = new Set<string>();
     const storeIdsToSync = new Set<string>();
 
     for (const row of parsed.rows) {
@@ -471,6 +511,7 @@ export async function bulkUploadAcquirePurchasesAction(
       if (!storeId) {
         warnings.push(`Row ${row.rowNumber}: unknown dealership "${row.dealership}" — skipped.`);
         skipped += 1;
+        unknownDealership += 1;
         continue;
       }
       if (!(await assertStoreAccess(ctx.supabase, ctx.profile, storeId))) {
@@ -479,12 +520,43 @@ export async function bulkUploadAcquirePurchasesAction(
         continue;
       }
 
+      const key = stockStoreKey(storeId, row.stock_number);
+      if (key) {
+        if (seenInFile.has(key)) {
+          warnings.push(
+            `Row ${row.rowNumber}: duplicate stock "${row.stock_number}" in this file for ${storeNameById[storeId]} — skipped.`
+          );
+          skipped += 1;
+          duplicateInFile += 1;
+          continue;
+        }
+        if (existingKeys.has(key)) {
+          warnings.push(
+            `Row ${row.rowNumber}: stock "${row.stock_number}" already exists at ${storeNameById[storeId]} — skipped.`
+          );
+          skipped += 1;
+          duplicateExisting += 1;
+          continue;
+        }
+        seenInFile.add(key);
+      } else {
+        missingStock += 1;
+      }
+
+      if (row.purchase_price == null) missingPurchasePrice += 1;
+      if (!isBodyStyleInCatalog(row.body_style)) bodyOutOfCatalog += 1;
+      if (!isColorInCatalog(row.color)) colorOutOfCatalog += 1;
+      if (!isDrivetrainInCatalog(row.drivetrain)) drivetrainOutOfCatalog += 1;
+
       let buyerId = matchBuyerId(row.buyerName, buyers);
       if (row.buyerName && !buyerId) {
         warnings.push(
           `Row ${row.rowNumber}: buyer "${row.buyerName}" not found in Setup — purchase will save without buyer.`
         );
       }
+
+      const storeLabel = storeNameById[storeId] ?? row.dealership;
+      storeCounts.set(storeLabel, (storeCounts.get(storeLabel) ?? 0) + 1);
 
       const hasTrade = row.has_trade;
       const payload = {
@@ -544,10 +616,48 @@ export async function bulkUploadAcquirePurchasesAction(
       storeIdsToSync.add(storeId);
     }
 
+    const preview = {
+      rowsParsed: parsed.rows.length,
+      wouldInsert: inserts.length,
+      wouldSkip: skipped,
+      missingStock,
+      missingPurchasePrice,
+      bodyOutOfCatalog,
+      colorOutOfCatalog,
+      drivetrainOutOfCatalog,
+      duplicateInFile,
+      duplicateExisting,
+      unknownDealership,
+      storeCounts: Array.from(storeCounts.entries())
+        .map(([store, count]) => ({ store, count }))
+        .sort((a, b) => b.count - a.count),
+    };
+
+    if (dryRun) {
+      const summaryBits = [
+        `Preview: ${preview.wouldInsert} ready to import`,
+        preview.wouldSkip ? `${preview.wouldSkip} would skip` : null,
+        preview.duplicateExisting || preview.duplicateInFile
+          ? `${preview.duplicateExisting + preview.duplicateInFile} duplicate stock`
+          : null,
+        preview.bodyOutOfCatalog ? `${preview.bodyOutOfCatalog} body style out of catalog` : null,
+        preview.missingStock ? `${preview.missingStock} missing stock` : null,
+      ].filter(Boolean);
+      return {
+        ok: true,
+        dryRun: true,
+        inserted: 0,
+        skipped,
+        warnings,
+        summary: summaryBits.join(" · ") + ".",
+        preview,
+      };
+    }
+
     if (!inserts.length) {
       return {
         ok: false,
-        error: "No rows could be imported. Check dealership names against your stores.",
+        error: "No rows could be imported. Check dealership names and duplicates.",
         warnings,
       };
     }
@@ -585,12 +695,36 @@ export async function bulkUploadAcquirePurchasesAction(
       console.error("Acquire overlay sync after bulk upload", syncErr);
     }
 
+    let liveMatched = 0;
+    if (created.length) {
+      const { data: matchedRows } = await ctx.supabase
+        .from("acq_purchases")
+        .select("id")
+        .in(
+          "id",
+          created.map((r) => r.id)
+        )
+        .eq("live_matched", true);
+      liveMatched = matchedRows?.length ?? 0;
+    }
+
     revalidateAcquire();
     return {
       ok: true,
+      dryRun: false,
       inserted: created.length,
       skipped,
       warnings,
+      liveMatched,
+      summary: formatBulkUploadSummary({
+        inserted: created.length,
+        skipped,
+        liveMatched,
+        missingStock,
+        bodyOutOfCatalog,
+        colorOutOfCatalog,
+        duplicatesSkipped: duplicateInFile + duplicateExisting,
+      }),
     };
   } catch (e) {
     return {

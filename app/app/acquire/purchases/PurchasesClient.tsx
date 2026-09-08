@@ -26,6 +26,7 @@ import PurchaseFlipOverlay from "./PurchaseFlipOverlay";
 import AddPurchaseModal from "./AddPurchaseModal";
 import BulkUploadModal from "./BulkUploadModal";
 import type { VehicleCatalogMake, VehicleCatalogModel } from "./AcquireVehicleFields";
+import { Search, X } from "lucide-react";
 
 export default function PurchasesClient({
   stores,
@@ -90,17 +91,14 @@ export default function PurchasesClient({
         p.vehicle_year,
         p.vehicle_make,
         p.vehicle_model,
-        p.seller_name,
-        p.auction_house,
-        p.exit_strategy,
-        storeNameById[p.store_id],
+        p.vehicle_trim,
       ]
-        .filter(Boolean)
+        .filter((v) => v != null && String(v).trim() !== "")
         .join(" ")
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [storePurchases, stageFilter, showCompleted, onHoldOnly, query, storeNameById]);
+  }, [storePurchases, stageFilter, showCompleted, onHoldOnly, query]);
 
   const selected = selectedId
     ? storePurchases.find((p) => p.id === selectedId) ?? null
@@ -264,18 +262,49 @@ export default function PurchasesClient({
             />
             Show sold / arb complete in Active mix
           </label>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search stock, VIN, YMM…"
-            className="rounded-md border px-3 py-1.5 text-xs"
-            style={{ background: "#0f141c", borderColor: IC.border, color: IC.text, minWidth: 180 }}
-          />
+        </div>
+
+        <div className="mb-4">
+          <label className="relative block">
+            <span className="sr-only">Search purchases</span>
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"
+              style={{ color: IC.muted }}
+              aria-hidden
+            />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search stock, VIN, year, make, model…"
+              autoComplete="off"
+              className="w-full rounded-lg border py-2.5 pl-10 pr-10 text-sm"
+              style={{ background: "#0f141c", borderColor: IC.border, color: IC.text }}
+            />
+            {query.trim() ? (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 hover:bg-white/5"
+                aria-label="Clear search"
+              >
+                <X className="h-4 w-4" style={{ color: IC.muted }} />
+              </button>
+            ) : null}
+          </label>
+          {query.trim() ? (
+            <p className="mt-1.5 text-[11px]" style={{ color: IC.muted }}>
+              {filtered.length} match{filtered.length === 1 ? "" : "es"}
+            </p>
+          ) : null}
         </div>
 
         {filtered.length === 0 ? (
           <p className="py-10 text-center text-sm" style={{ color: IC.muted }}>
-            No purchase cars in this view. {canEdit ? "Log a purchase to start the collection." : null}
+            {query.trim()
+              ? "No cars match that search in this view."
+              : canEdit
+                ? "No purchase cars in this view. Log a purchase to start the collection."
+                : "No purchase cars in this view."}
           </p>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">

@@ -5,6 +5,12 @@
 
 import Papa from "papaparse";
 import {
+  BODY_STYLES,
+  COLORS,
+  DRIVETRAINS,
+  mapBodyStyle,
+} from "@/lib/vehicle";
+import {
   ACQ_EXIT_STRATEGIES,
   ACQ_EXIT_STRATEGY_LABELS,
   ACQ_SOURCE_LABELS,
@@ -125,6 +131,23 @@ export type AcqBulkParseResult =
   | { ok: true; rows: AcqBulkParsedRow[]; warnings: string[] }
   | { ok: false; error: string; warnings: string[] };
 
+export type AcqBulkPreviewStoreCount = { store: string; count: number };
+
+export type AcqBulkPreviewSummary = {
+  rowsParsed: number;
+  wouldInsert: number;
+  wouldSkip: number;
+  missingStock: number;
+  missingPurchasePrice: number;
+  bodyOutOfCatalog: number;
+  colorOutOfCatalog: number;
+  drivetrainOutOfCatalog: number;
+  duplicateInFile: number;
+  duplicateExisting: number;
+  unknownDealership: number;
+  storeCounts: AcqBulkPreviewStoreCount[];
+};
+
 function cell(row: Record<string, string>, key: AcqBulkHeader): string {
   const raw = row[key] ?? row[key.toLowerCase()] ?? "";
   return String(raw).trim();
@@ -152,9 +175,7 @@ function toBool(v: string): boolean {
 
 function toDate(v: string): string | null {
   if (!v) return null;
-  // YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
-  // M/D/YYYY or MM/DD/YYYY
   const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(v);
   if (m) {
     const mm = m[1]!.padStart(2, "0");
@@ -209,6 +230,81 @@ function normalizeHeaderKey(h: string): string {
     .toLowerCase()
     .replace(/^\ufeff/, "")
     .replace(/\s+/g, "_");
+}
+
+function canonicalColor(raw: string | null, rowNumber: number, warnings: string[]): string | null {
+  if (!raw) return null;
+  const exact = COLORS.find((c) => c.toLowerCase() === raw.toLowerCase());
+  if (exact) return exact;
+  warnings.push(
+    `Row ${rowNumber}: color "${raw}" is not in Sales Registry list — kept as typed.`
+  );
+  return raw;
+}
+
+/**
+ * Align body_style with Sales Registry. Ambiguous plain "Van" is left as-is
+ * (could be Minivan or Cargo Van) with a warning.
+ */
+function canonicalBodyStyle(
+  raw: string | null,
+  rowNumber: number,
+  warnings: string[]
+): string | null {
+  if (!raw) return null;
+  const exact = BODY_STYLES.find((b) => b.toLowerCase() === raw.toLowerCase());
+  if (exact) return exact;
+  if (raw.trim().toLowerCase() === "van") {
+    warnings.push(
+      `Row ${rowNumber}: body_style "Van" is ambiguous — use Minivan or Cargo Van. Left as Van.`
+    );
+    return "Van";
+  }
+  const mapped = mapBodyStyle(raw);
+  if (mapped) {
+    if (mapped.toLowerCase() !== raw.toLowerCase()) {
+      warnings.push(`Row ${rowNumber}: body_style "${raw}" → "${mapped}".`);
+    }
+    return mapped;
+  }
+  warnings.push(
+    `Row ${rowNumber}: body_style "${raw}" is not in Sales Registry list — kept as typed.`
+  );
+  return raw;
+}
+
+function canonicalDrivetrain(
+  raw: string | null,
+  rowNumber: number,
+  warnings: string[]
+): string | null {
+  if (!raw) return null;
+  const s = raw.trim().toUpperCase();
+  const exact = DRIVETRAINS.find((d) => d === s);
+  if (exact) return exact;
+  if (s.includes("4WD") || s.includes("4X4") || s.includes("FOUR")) return "4WD";
+  if (s.includes("AWD") || s.includes("ALL WHEEL") || s === "ALL") return "AWD";
+  if (s.includes("RWD") || s.includes("REAR")) return "RWD";
+  if (s.includes("FWD") || s.includes("FRONT")) return "FWD";
+  warnings.push(
+    `Row ${rowNumber}: drivetrain "${raw}" is not in Sales Registry list — kept as typed.`
+  );
+  return raw;
+}
+
+export function isBodyStyleInCatalog(v: string | null): boolean {
+  if (!v) return true;
+  return (BODY_STYLES as readonly string[]).includes(v);
+}
+
+export function isColorInCatalog(v: string | null): boolean {
+  if (!v) return true;
+  return (COLORS as readonly string[]).includes(v);
+}
+
+export function isDrivetrainInCatalog(v: string | null): boolean {
+  if (!v) return true;
+  return (DRIVETRAINS as readonly string[]).includes(v);
 }
 
 /** Alias headers users might type */
@@ -322,7 +418,6 @@ export function parseAcquirePurchasesCsv(text: string): AcqBulkParseResult {
   for (let i = 0; i < data.length; i++) {
     const raw = data[i]!;
     const dealership = cell(raw, "dealership");
-    // Skip completely empty rows
     const anyValue = ACQ_BULK_HEADERS.some((h) => cell(raw, h));
     if (!anyValue) continue;
     if (!dealership) {
@@ -336,8 +431,9 @@ export function parseAcquirePurchasesCsv(text: string): AcqBulkParseResult {
       warnings.push(`Row ${i + 2}: could not parse purchase_date "${purchaseDateRaw}".`);
     }
 
+    const rowNumber = i + 2;
     rows.push({
-      rowNumber: i + 2,
+      rowNumber,
       dealership,
       status: parseStage(cell(raw, "status")),
       buyerName: toStr(cell(raw, "buyer")),
@@ -347,9 +443,9 @@ export function parseAcquirePurchasesCsv(text: string): AcqBulkParseResult {
       vehicle_make: toStr(cell(raw, "vehicle_make")),
       vehicle_model: toStr(cell(raw, "vehicle_model")),
       vehicle_trim: toStr(cell(raw, "vehicle_trim")),
-      color: toStr(cell(raw, "color")),
-      body_style: toStr(cell(raw, "body_style")),
-      drivetrain: toStr(cell(raw, "drivetrain")),
+      color: canonicalColor(toStr(cell(raw, "color")), rowNumber, warnings),
+      body_style: canonicalBodyStyle(toStr(cell(raw, "body_style")), rowNumber, warnings),
+      drivetrain: canonicalDrivetrain(toStr(cell(raw, "drivetrain")), rowNumber, warnings),
       odometer: toInt(cell(raw, "odometer")),
       source_type: parseSource(cell(raw, "source_type")),
       seller_name: toStr(cell(raw, "seller_name")),
@@ -400,13 +496,11 @@ export function matchStoreId(
   if (!needle) return null;
   const exact = stores.find((s) => s.name.trim().toLowerCase() === needle);
   if (exact) return exact.id;
-  // Last-word match (e.g. "Fenton" → "Jim Butler Fenton")
   const byLast = stores.filter((s) => {
     const parts = s.name.trim().split(/\s+/);
     return (parts[parts.length - 1] ?? "").toLowerCase() === needle;
   });
   if (byLast.length === 1) return byLast[0]!.id;
-  // Contains
   const contains = stores.filter((s) => s.name.toLowerCase().includes(needle));
   if (contains.length === 1) return contains[0]!.id;
   return null;
@@ -420,4 +514,30 @@ export function matchBuyerId(
   const needle = buyerName.trim().toLowerCase();
   const exact = buyers.find((b) => b.name.trim().toLowerCase() === needle);
   return exact?.id ?? null;
+}
+
+export function stockStoreKey(storeId: string, stock: string | null): string | null {
+  if (!stock?.trim()) return null;
+  return `${storeId}::${stock.trim().toLowerCase()}`;
+}
+
+export function formatBulkUploadSummary(parts: {
+  inserted: number;
+  skipped: number;
+  liveMatched?: number;
+  missingStock?: number;
+  bodyOutOfCatalog?: number;
+  colorOutOfCatalog?: number;
+  duplicatesSkipped?: number;
+}): string {
+  const bits = [
+    `Imported ${parts.inserted} purchase${parts.inserted === 1 ? "" : "s"}`,
+  ];
+  if (parts.skipped) bits.push(`${parts.skipped} skipped`);
+  if (parts.duplicatesSkipped) bits.push(`${parts.duplicatesSkipped} duplicate stock`);
+  if (parts.liveMatched != null) bits.push(`${parts.liveMatched} IC matched`);
+  if (parts.missingStock) bits.push(`${parts.missingStock} missing stock`);
+  if (parts.bodyOutOfCatalog) bits.push(`${parts.bodyOutOfCatalog} body style out of catalog`);
+  if (parts.colorOutOfCatalog) bits.push(`${parts.colorOutOfCatalog} color out of catalog`);
+  return bits.join(" · ") + ".";
 }
