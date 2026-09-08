@@ -129,11 +129,11 @@ export function missingAcquireActionItems(p: AcqPurchase): AcqActionItem[] {
   // ── Recon+ ────────────────────────────────────────────────────────────────
   if (rank >= STAGE_RANK.recon) {
     if (isBlank(p.delivery_date)) push(missing, "delivery_date", "Delivery date", "Recon");
-    if (isBlank(p.recon_cost)) push(missing, "recon_cost", "Actual recon cost", "Recon");
   }
 
   // ── Frontline+ (incl. demo / pending / wholesale / arbitration) ───────────
   if (rank >= STAGE_RANK.frontline) {
+    if (isBlank(p.recon_cost)) push(missing, "recon_cost", "Actual recon cost", "Recon");
     if (isBlank(p.frontline_date)) push(missing, "frontline_date", "Frontline date", "Recon");
     if (isUnchecked(p.recon_description_done)) {
       push(missing, "recon_description_done", "Recon: description", "Recon");
