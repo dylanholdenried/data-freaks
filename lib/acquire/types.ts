@@ -88,6 +88,36 @@ export const ACQ_SOURCE_COLORS: Record<
   wholesaler: { stripe: "#C084FC", glow: "#24182e", badge: "#5b3a7a" },
 };
 
+/** Card chrome colors keyed by pipeline status (front of purchase cards). */
+export type AcqCardTheme = { stripe: string; glow: string; badge: string };
+
+export const ACQ_STAGE_COLORS: Record<AcqPurchaseStage, AcqCardTheme> = {
+  need_to_stock_in: { stripe: "#E8C547", glow: "#2a2410", badge: "#6b5a1a" },
+  in_transit: { stripe: "#7EC8E8", glow: "#152832", badge: "#2a5a6e" },
+  recon: { stripe: "#4A90D9", glow: "#152036", badge: "#1e4a7a" },
+  frontline: { stripe: "#7DCF9A", glow: "#15281f", badge: "#1f5a3a" },
+  pending_sale: { stripe: "#F472B6", glow: "#2a1524", badge: "#7a3a5a" },
+  wholesale: { stripe: "#F08C2E", glow: "#2a1f14", badge: "#6e4a1f" },
+  arbitration: { stripe: "#EF4444", glow: "#2a1414", badge: "#7a2a2a" },
+  sold: { stripe: "#1FA96A", glow: "#0c1f16", badge: "#0d5c38" },
+  arbitration_complete: { stripe: "#71717a", glow: "#0c0c0e", badge: "#27272a" },
+  demo: { stripe: "#A1A1AA", glow: "#0c0c0e", badge: "#27272a" },
+};
+
+/** On Hold overrides stage theme so held cars read as yellow at a glance. */
+export const ACQ_ON_HOLD_COLORS: AcqCardTheme = {
+  stripe: "#F5D76E",
+  glow: "#2a2410",
+  badge: "#7a6a1f",
+};
+
+export function purchaseCardColors(
+  p: Pick<AcqPurchase, "stage" | "on_hold">
+): AcqCardTheme {
+  if (p.on_hold) return ACQ_ON_HOLD_COLORS;
+  return ACQ_STAGE_COLORS[p.stage] ?? ACQ_STAGE_COLORS.need_to_stock_in;
+}
+
 export type AcqBuyer = {
   id: string;
   dealer_group_id: string;
@@ -132,6 +162,8 @@ export type AcqPurchase = {
   live_mmr: number | null;
   live_jd: number | null;
   live_price: number | null;
+  /** Adjusted % of market from Inventory Command overlay */
+  live_pom: number | null;
   live_photo_count: number | null;
   live_synced_at: string | null;
   frozen_mmr: number | null;
@@ -162,6 +194,11 @@ export type AcqPurchase = {
   updated_by: string | null;
   created_at: string;
   updated_at: string;
+  /**
+   * Days since entering the current pipeline stage (from latest matching
+   * acq_stage_events). Enriched on the purchases page — not a DB column.
+   */
+  days_in_step?: number | null;
 };
 
 export function isCompletedStage(stage: AcqPurchaseStage): boolean {

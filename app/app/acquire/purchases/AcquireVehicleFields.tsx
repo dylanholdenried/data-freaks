@@ -79,6 +79,8 @@ type Props = {
   onColorChange: (v: string) => void;
   onBodyStyleChange: (v: string) => void;
   onDrivetrainChange: (v: string) => void;
+  /** Field keys that are missing action items (red highlight). */
+  alertKeys?: ReadonlySet<string>;
   compact?: boolean;
 };
 
@@ -100,6 +102,7 @@ export default function AcquireVehicleFields({
   onColorChange,
   onBodyStyleChange,
   onDrivetrainChange,
+  alertKeys,
   compact = false,
 }: Props) {
   const matchedMakeId = useMemo(
@@ -149,11 +152,15 @@ export default function AcquireVehicleFields({
 
   const style = canEdit ? inputStyle : readOnlyStyle;
   const grid = compact ? "grid grid-cols-2 gap-2" : "grid grid-cols-2 gap-3";
+  const alert = (key: string) => Boolean(alertKeys?.has(key));
+  const fieldStyle = (key: string) =>
+    alert(key) ? { ...style, borderColor: IC.red } : style;
+  const labelColor = (key: string) => (alert(key) ? IC.red : IC.muted);
 
   return (
     <div className={grid}>
       <label className="block text-xs">
-        <span style={{ color: IC.muted }}>Year</span>
+        <span style={{ color: labelColor("vehicle_year") }}>Year</span>
         <input
           name="vehicle_year"
           type="number"
@@ -161,12 +168,12 @@ export default function AcquireVehicleFields({
           readOnly={!canEdit}
           onChange={(e) => onYearChange(e.target.value)}
           className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm"
-          style={style}
+          style={fieldStyle("vehicle_year")}
         />
       </label>
 
       <label className="block text-xs">
-        <span style={{ color: IC.muted }}>Make</span>
+        <span style={{ color: labelColor("vehicle_make") }}>Make</span>
         {makeIsManual ? (
           <input
             name="vehicle_make"
@@ -174,7 +181,7 @@ export default function AcquireVehicleFields({
             readOnly={!canEdit}
             onChange={(e) => onMakeChange(e.target.value)}
             className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm"
-            style={style}
+            style={fieldStyle("vehicle_make")}
           />
         ) : (
           <select
@@ -192,7 +199,7 @@ export default function AcquireVehicleFields({
               onModelChange("");
             }}
             className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm"
-            style={style}
+            style={fieldStyle("vehicle_make")}
           >
             <option value="">—</option>
             {vehicleMakes.map((m) => (
@@ -236,7 +243,7 @@ export default function AcquireVehicleFields({
       </label>
 
       <label className="block text-xs">
-        <span style={{ color: IC.muted }}>Model</span>
+        <span style={{ color: labelColor("vehicle_model") }}>Model</span>
         {modelIsManual || makeIsManual ? (
           <input
             name="vehicle_model"
@@ -244,7 +251,7 @@ export default function AcquireVehicleFields({
             readOnly={!canEdit}
             onChange={(e) => onModelChange(e.target.value)}
             className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm"
-            style={style}
+            style={fieldStyle("vehicle_model")}
           />
         ) : (
           <select
@@ -259,7 +266,7 @@ export default function AcquireVehicleFields({
               onModelChange(found?.name ?? "");
             }}
             className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm"
-            style={style}
+            style={fieldStyle("vehicle_model")}
           >
             <option value="">—</option>
             {modelsForMake.map((m) => (
@@ -285,26 +292,26 @@ export default function AcquireVehicleFields({
       </label>
 
       <label className="block text-xs">
-        <span style={{ color: IC.muted }}>Trim</span>
+        <span style={{ color: labelColor("vehicle_trim") }}>Trim</span>
         <input
           name="vehicle_trim"
           value={trim}
           readOnly={!canEdit}
           onChange={(e) => onTrimChange(e.target.value)}
           className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm"
-          style={style}
+          style={fieldStyle("vehicle_trim")}
         />
       </label>
 
       <label className="block text-xs">
-        <span style={{ color: IC.muted }}>Color</span>
+        <span style={{ color: labelColor("color") }}>Color</span>
         <select
           name="color"
           value={color}
           disabled={!canEdit}
           onChange={(e) => onColorChange(e.target.value)}
           className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm"
-          style={style}
+          style={fieldStyle("color")}
         >
           <option value="">—</option>
           {COLORS.map((c) => (
@@ -319,14 +326,14 @@ export default function AcquireVehicleFields({
       </label>
 
       <label className="block text-xs">
-        <span style={{ color: IC.muted }}>Body style</span>
+        <span style={{ color: labelColor("body_style") }}>Body style</span>
         <select
           name="body_style"
           value={bodyStyle}
           disabled={!canEdit}
           onChange={(e) => onBodyStyleChange(e.target.value)}
           className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm"
-          style={style}
+          style={fieldStyle("body_style")}
         >
           <option value="">—</option>
           {BODY_STYLES.map((b) => (
@@ -341,14 +348,14 @@ export default function AcquireVehicleFields({
       </label>
 
       <label className="block text-xs">
-        <span style={{ color: IC.muted }}>Drivetrain</span>
+        <span style={{ color: labelColor("drivetrain") }}>Drivetrain</span>
         <select
           name="drivetrain"
           value={drivetrain}
           disabled={!canEdit}
           onChange={(e) => onDrivetrainChange(e.target.value)}
           className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm"
-          style={style}
+          style={fieldStyle("drivetrain")}
         >
           <option value="">—</option>
           {DRIVETRAINS.map((d) => (

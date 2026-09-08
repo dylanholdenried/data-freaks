@@ -122,7 +122,7 @@ export default function PurchaseFlipOverlay({
               storeName={storeName}
               canEdit={canEdit}
               interactive={false}
-              className="h-full rounded-xl"
+              className="rounded-xl"
             />
           </div>
           <div className="acq-flip-face acq-flip-back pointer-events-auto">

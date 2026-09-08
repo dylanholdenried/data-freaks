@@ -80,6 +80,43 @@ export function markup(p: AcqPurchase): number | null {
   return price - cost;
 }
 
+/** Adjusted % of market (IC POM), rounded to nearest whole percent. */
+export function adjPctOfMarket(p: AcqPurchase): number | null {
+  if (p.live_pom == null || !Number.isFinite(Number(p.live_pom))) return null;
+  return Math.round(Number(p.live_pom));
+}
+
+/** Calendar days since entering the current stage (ISO timestamp). */
+export function daysInStep(enteredAt: string | null | undefined, now = new Date()): number | null {
+  if (!enteredAt) return null;
+  const start = new Date(enteredAt);
+  if (Number.isNaN(start.getTime())) return null;
+  return Math.max(0, Math.floor((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
+}
+
+/**
+ * Resolve when each purchase entered its current stage from stage events
+ * (newest first). Falls back to purchase.created_at.
+ */
+export function stageEnteredAtByPurchase(
+  purchases: Pick<AcqPurchase, "id" | "stage" | "created_at">[],
+  events: { purchase_id: string; to_stage: string; created_at: string }[]
+): Record<string, string> {
+  const byPurchase = new Map<string, { to_stage: string; created_at: string }[]>();
+  for (const e of events) {
+    const list = byPurchase.get(e.purchase_id) ?? [];
+    list.push(e);
+    byPurchase.set(e.purchase_id, list);
+  }
+  const out: Record<string, string> = {};
+  for (const p of purchases) {
+    const list = byPurchase.get(p.id) ?? [];
+    const match = list.find((e) => e.to_stage === p.stage);
+    out[p.id] = match?.created_at ?? p.created_at;
+  }
+  return out;
+}
+
 export function formatMoney(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(Number(n))) return "—";
   return new Intl.NumberFormat("en-US", {

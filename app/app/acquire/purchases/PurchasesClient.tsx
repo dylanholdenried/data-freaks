@@ -50,9 +50,7 @@ export default function PurchasesClient({
   const [selectedStoreIds, setSelectedStoreIds] = useState<string[]>(
     initialStoreIds.length ? initialStoreIds : allIds
   );
-  const [stageFilter, setStageFilter] = useState<AcqPurchaseStage | "active" | "all">("active");
-  const [onHoldOnly, setOnHoldOnly] = useState(false);
-  const [showCompleted, setShowCompleted] = useState(false);
+  const [pill, setPill] = useState<AcqPurchaseStage | "on_hold">("frontline");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [flipOrigin, setFlipOrigin] = useState<CardOriginRect | null>(null);
@@ -72,15 +70,10 @@ export default function PurchasesClient({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return storePurchases.filter((p) => {
-      if (onHoldOnly && !p.on_hold) return false;
-
-      const completed = isCompletedStage(p.stage);
-      if (stageFilter === "active") {
-        if (completed) return false;
-      } else if (stageFilter === "all") {
-        if (!showCompleted && completed) return false;
-      } else if (p.stage !== stageFilter) {
+    const list = storePurchases.filter((p) => {
+      if (pill === "on_hold") {
+        if (!p.on_hold) return false;
+      } else if (p.stage !== pill) {
         return false;
       }
 
@@ -98,7 +91,10 @@ export default function PurchasesClient({
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [storePurchases, stageFilter, showCompleted, onHoldOnly, query]);
+
+    // Default: longest time in current step first
+    return list.sort((a, b) => (b.days_in_step ?? -1) - (a.days_in_step ?? -1));
+  }, [storePurchases, pill, query]);
 
   const selected = selectedId
     ? storePurchases.find((p) => p.id === selectedId) ?? null
@@ -206,62 +202,36 @@ export default function PurchasesClient({
 
       <IcPanel title="Collection" note={`${filtered.length} cards`}>
         <div className="mb-4 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setStageFilter("active")}
-            className="rounded-full px-3 py-1 text-[11px] font-semibold"
-            style={{
-              background: stageFilter === "active" ? IC.blue : IC.rowAlt,
-              color: stageFilter === "active" ? "#fff" : IC.muted,
-            }}
-          >
-            Active
-          </button>
           {ACQ_STAGES.map((stage) => (
             <button
               key={stage}
               type="button"
-              onClick={() => {
-                if (isCompletedStage(stage)) setShowCompleted(true);
-                setStageFilter(stage);
-              }}
+              onClick={() => setPill(stage)}
               className="rounded-full px-3 py-1 text-[11px] font-semibold"
               style={{
-                background: stageFilter === stage ? IC.blue : IC.rowAlt,
-                color: stageFilter === stage ? "#fff" : IC.muted,
+                background: pill === stage ? IC.blue : IC.rowAlt,
+                color: pill === stage ? "#fff" : IC.muted,
                 border: isCompletedStage(stage) ? `1px solid ${IC.border}` : undefined,
               }}
             >
               {ACQ_STAGE_LABELS[stage]}
-              {isCompletedStage(stage) && stageCounts.find((c) => c.stage === stage)?.count
+              {stageCounts.find((c) => c.stage === stage)?.count
                 ? ` (${stageCounts.find((c) => c.stage === stage)!.count})`
                 : ""}
             </button>
           ))}
           <button
             type="button"
-            onClick={() => setOnHoldOnly((v) => !v)}
+            onClick={() => setPill("on_hold")}
             className="rounded-full px-3 py-1 text-[11px] font-semibold"
             style={{
-              background: onHoldOnly ? IC.orange : IC.rowAlt,
-              color: onHoldOnly ? "#fff" : IC.muted,
-              border: `1px solid ${onHoldOnly ? IC.orange : IC.border}`,
+              background: pill === "on_hold" ? IC.orange : IC.rowAlt,
+              color: pill === "on_hold" ? "#fff" : IC.muted,
+              border: `1px solid ${pill === "on_hold" ? IC.orange : IC.border}`,
             }}
           >
             On Hold{onHoldCount ? ` (${onHoldCount})` : ""}
           </button>
-          <label className="ml-auto flex items-center gap-2 text-[11px]" style={{ color: IC.muted }}>
-            <input
-              type="checkbox"
-              checked={showCompleted}
-              onChange={(e) => {
-                setShowCompleted(e.target.checked);
-                if (e.target.checked) setStageFilter("all");
-                else setStageFilter("active");
-              }}
-            />
-            Show sold / arb complete in Active mix
-          </label>
         </div>
 
         <div className="mb-4">
@@ -307,7 +277,7 @@ export default function PurchasesClient({
                 : "No purchase cars in this view."}
           </p>
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          <div className="grid grid-cols-1 items-start gap-2 min-[420px]:grid-cols-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 xl:grid-cols-5">
             {filtered.map((p) => (
               <PurchaseCard
                 key={p.id}

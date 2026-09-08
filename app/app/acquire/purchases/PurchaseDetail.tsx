@@ -29,6 +29,11 @@ import {
   num,
   websitePrice,
 } from "@/lib/acquire/cost";
+import {
+  actionItemCountsByTab,
+  missingAcquireActionItems,
+  type AcqActionItemKey,
+} from "@/lib/acquire/action-items";
 import { updateAcquirePurchase } from "../actions";
 import { decodeVin, VinDecodeError } from "@/lib/vehicle";
 import { Loader2, X } from "lucide-react";
@@ -58,6 +63,7 @@ function Field({
   type = "text",
   readOnly,
   step,
+  alert,
 }: {
   label: string;
   name: string;
@@ -67,11 +73,12 @@ function Field({
   type?: string;
   readOnly?: boolean;
   step?: string;
+  alert?: boolean;
 }) {
   const controlled = value !== undefined;
   return (
     <label className="block text-xs">
-      <span style={{ color: IC.muted }}>{label}</span>
+      <span style={{ color: alert ? IC.red : IC.muted }}>{label}</span>
       <input
         name={name}
         type={type}
@@ -83,7 +90,7 @@ function Field({
         className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm"
         style={{
           background: readOnly ? IC.rowAlt : "#0f141c",
-          borderColor: IC.border,
+          borderColor: alert ? IC.red : IC.border,
           color: IC.text,
           opacity: readOnly ? 0.85 : 1,
         }}
@@ -112,22 +119,24 @@ function SelectField({
   defaultValue,
   disabled,
   options,
+  alert,
 }: {
   label: string;
   name: string;
   defaultValue: string;
   disabled?: boolean;
   options: { value: string; label: string }[];
+  alert?: boolean;
 }) {
   return (
     <label className="block text-xs">
-      <span style={{ color: IC.muted }}>{label}</span>
+      <span style={{ color: alert ? IC.red : IC.muted }}>{label}</span>
       <select
         name={name}
         defaultValue={defaultValue}
         disabled={disabled}
         className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm"
-        style={{ background: "#0f141c", borderColor: IC.border, color: IC.text }}
+        style={{ background: "#0f141c", borderColor: alert ? IC.red : IC.border, color: IC.text }}
       >
         {options.map((o) => (
           <option key={o.value || "__empty"} value={o.value}>
@@ -144,14 +153,16 @@ function CheckField({
   name,
   defaultChecked,
   disabled,
+  alert,
 }: {
   label: string;
   name: string;
   defaultChecked?: boolean;
   disabled?: boolean;
+  alert?: boolean;
 }) {
   return (
-    <label className="flex items-center gap-2 text-sm" style={{ color: IC.text }}>
+    <label className="flex items-center gap-2 text-sm" style={{ color: alert ? IC.red : IC.text }}>
       <input
         type="checkbox"
         name={name}
@@ -159,6 +170,7 @@ function CheckField({
         defaultChecked={defaultChecked}
         disabled={disabled}
         className="h-4 w-4 rounded border"
+        style={alert ? { outline: `1px solid ${IC.red}` } : undefined}
       />
       {label}
     </label>
@@ -232,6 +244,54 @@ export default function PurchaseDetail({
         : null;
 
   const activeBuyers = useMemo(() => buyers.filter((b) => b.active || b.id === purchase.buyer_id), [buyers, purchase.buyer_id]);
+
+  const draftForAudit = useMemo((): AcqPurchase => {
+    const yearNum = year.trim() ? Number(year) : null;
+    const tradeYearNum = tradeYear.trim() ? Number(tradeYear) : null;
+    return {
+      ...purchase,
+      vin: vin.trim() || null,
+      vehicle_year: yearNum != null && Number.isFinite(yearNum) ? yearNum : null,
+      vehicle_make: make.trim() || null,
+      vehicle_model: model.trim() || null,
+      vehicle_trim: trim.trim() || null,
+      color: color.trim() || null,
+      body_style: bodyStyle.trim() || null,
+      drivetrain: drivetrain.trim() || null,
+      stage,
+      exit_strategy: (exitStrategy || null) as AcqExitStrategy | null,
+      has_trade: hasTrade,
+      trade_vin: tradeVin.trim() || null,
+      trade_year: tradeYearNum != null && Number.isFinite(tradeYearNum) ? tradeYearNum : null,
+      trade_make: tradeMake.trim() || null,
+      trade_model: tradeModel.trim() || null,
+    };
+  }, [
+    purchase,
+    vin,
+    year,
+    make,
+    model,
+    trim,
+    color,
+    bodyStyle,
+    drivetrain,
+    stage,
+    exitStrategy,
+    hasTrade,
+    tradeVin,
+    tradeYear,
+    tradeMake,
+    tradeModel,
+  ]);
+
+  const missingItems = useMemo(() => missingAcquireActionItems(draftForAudit), [draftForAudit]);
+  const tabCounts = useMemo(() => actionItemCountsByTab(missingItems), [missingItems]);
+  const alertKeys = useMemo(
+    () => new Set<AcqActionItemKey>(missingItems.map((i) => i.key)),
+    [missingItems]
+  );
+  const isAlert = (key: AcqActionItemKey) => alertKeys.has(key);
 
   async function handleDecode(target: "vehicle" | "trade") {
     const raw = (target === "vehicle" ? vin : tradeVin).trim().toUpperCase();
@@ -362,29 +422,38 @@ export default function PurchaseDetail({
         </header>
 
         <div className="flex shrink-0 gap-1 overflow-x-auto border-b px-2 py-2" style={{ borderColor: IC.border }}>
-          {TABS.map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTab(t)}
-              className="shrink-0 rounded-md px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide"
-              style={{
-                background: tab === t ? IC.panel : "transparent",
-                color: tab === t ? IC.text : IC.muted,
-                border: tab === t ? `1px solid ${IC.border}` : "1px solid transparent",
-              }}
-            >
-              {t}
-            </button>
-          ))}
+          {TABS.map((t) => {
+            const count = tabCounts[t];
+            const hasActions = count > 0;
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTab(t)}
+                className="shrink-0 rounded-md px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide"
+                style={{
+                  background: tab === t ? IC.panel : "transparent",
+                  color: hasActions ? IC.red : tab === t ? IC.text : IC.muted,
+                  border: tab === t
+                    ? `1px solid ${hasActions ? IC.red : IC.border}`
+                    : `1px solid ${hasActions ? `${IC.red}66` : "transparent"}`,
+                }}
+              >
+                {t}
+                {hasActions ? (
+                  <span className="ml-1.5 tabular-nums normal-case tracking-normal">({count})</span>
+                ) : null}
+              </button>
+            );
+          })}
         </div>
 
         <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
           <div className={tab === "Overview" ? "space-y-3" : "hidden"}>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Stock #" name="stock_number" defaultValue={purchase.stock_number} readOnly={!canEdit} />
+              <Field label="Stock #" name="stock_number" defaultValue={purchase.stock_number} readOnly={!canEdit} alert={isAlert("stock_number")} />
               <label className="block text-xs">
-                <span style={{ color: IC.muted }}>VIN</span>
+                <span style={{ color: isAlert("vin") ? IC.red : IC.muted }}>VIN</span>
                 <div className="mt-1 flex gap-1">
                   <input
                     name="vin"
@@ -393,7 +462,7 @@ export default function PurchaseDetail({
                     readOnly={!canEdit}
                     maxLength={17}
                     className="w-full rounded-md border px-2 py-1.5 text-sm uppercase"
-                    style={{ background: canEdit ? "#0f141c" : IC.rowAlt, borderColor: IC.border, color: IC.text }}
+                    style={{ background: canEdit ? "#0f141c" : IC.rowAlt, borderColor: isAlert("vin") ? IC.red : IC.border, color: IC.text }}
                   />
                   {canEdit ? (
                     <button
@@ -427,14 +496,16 @@ export default function PurchaseDetail({
               onColorChange={setColor}
               onBodyStyleChange={setBodyStyle}
               onDrivetrainChange={setDrivetrain}
+              alertKeys={alertKeys}
             />
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Odometer" name="odometer" type="number" defaultValue={purchase.odometer} readOnly={!canEdit} />
+              <Field label="Odometer" name="odometer" type="number" defaultValue={purchase.odometer} readOnly={!canEdit} alert={isAlert("odometer")} />
               <SelectField
                 label="Buyer"
                 name="buyer_id"
                 defaultValue={purchase.buyer_id ?? ""}
                 disabled={!canEdit}
+                alert={isAlert("buyer_id")}
                 options={[
                   { value: "", label: "—" },
                   ...activeBuyers.map((b) => ({ value: b.id, label: b.name })),
@@ -453,15 +524,15 @@ export default function PurchaseDetail({
                 options={ACQ_SOURCE_TYPES.map((s) => ({ value: s, label: ACQ_SOURCE_LABELS[s] }))}
               />
             </div>
-            <Field label="Auction house / seller" name="seller_name" defaultValue={purchase.seller_name} readOnly={!canEdit} />
-            <Field label="Purchase date" name="purchase_date" type="date" defaultValue={purchase.purchase_date} readOnly={!canEdit} />
-            <Field label="CR grade" name="cr_grade" defaultValue={purchase.cr_grade} readOnly={!canEdit} />
-            <Field label="Purchase price" name="purchase_price" type="number" step="0.01" defaultValue={purchase.purchase_price} readOnly={!canEdit} />
-            <Field label="Auction fees" name="auction_fees" type="number" step="0.01" defaultValue={purchase.auction_fees} readOnly={!canEdit} />
-            <Field label="Transport cost" name="transport_cost" type="number" step="0.01" defaultValue={purchase.transport_cost} readOnly={!canEdit} />
-            <Field label="Estimate recon" name="recon_estimate" type="number" step="0.01" defaultValue={purchase.recon_estimate} readOnly={!canEdit} />
-            <Field label="MMR" name="purchase_mmr" type="number" step="0.01" defaultValue={purchase.purchase_mmr} readOnly={!canEdit} />
-            <Field label="JD Power Clean Trade" name="purchase_jd" type="number" step="0.01" defaultValue={purchase.purchase_jd} readOnly={!canEdit} />
+            <Field label="Auction house / seller" name="seller_name" defaultValue={purchase.seller_name} readOnly={!canEdit} alert={isAlert("seller_name")} />
+            <Field label="Purchase date" name="purchase_date" type="date" defaultValue={purchase.purchase_date} readOnly={!canEdit} alert={isAlert("purchase_date")} />
+            <Field label="CR grade" name="cr_grade" defaultValue={purchase.cr_grade} readOnly={!canEdit} alert={isAlert("cr_grade")} />
+            <Field label="Purchase price" name="purchase_price" type="number" step="0.01" defaultValue={purchase.purchase_price} readOnly={!canEdit} alert={isAlert("purchase_price")} />
+            <Field label="Auction fees" name="auction_fees" type="number" step="0.01" defaultValue={purchase.auction_fees} readOnly={!canEdit} alert={isAlert("auction_fees")} />
+            <Field label="Transport cost" name="transport_cost" type="number" step="0.01" defaultValue={purchase.transport_cost} readOnly={!canEdit} alert={isAlert("transport_cost")} />
+            <Field label="Estimate recon" name="recon_estimate" type="number" step="0.01" defaultValue={purchase.recon_estimate} readOnly={!canEdit} alert={isAlert("recon_estimate")} />
+            <Field label="MMR" name="purchase_mmr" type="number" step="0.01" defaultValue={purchase.purchase_mmr} readOnly={!canEdit} alert={isAlert("purchase_mmr")} />
+            <Field label="JD Power Clean Trade" name="purchase_jd" type="number" step="0.01" defaultValue={purchase.purchase_jd} readOnly={!canEdit} alert={isAlert("purchase_jd")} />
           </div>
 
           <div className={tab === "Books" ? "space-y-1" : "hidden"}>
@@ -486,14 +557,14 @@ export default function PurchaseDetail({
 
           <div className={tab === "Recon" ? "space-y-3" : "hidden"}>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Delivery date" name="delivery_date" type="date" defaultValue={purchase.delivery_date} readOnly={!canEdit} />
-              <Field label="Frontline date" name="frontline_date" type="date" defaultValue={purchase.frontline_date} readOnly={!canEdit} />
-              <Field label="Actual reconditioning cost" name="recon_cost" type="number" step="0.01" defaultValue={purchase.recon_cost} readOnly={!canEdit} />
+              <Field label="Delivery date" name="delivery_date" type="date" defaultValue={purchase.delivery_date} readOnly={!canEdit} alert={isAlert("delivery_date")} />
+              <Field label="Frontline date" name="frontline_date" type="date" defaultValue={purchase.frontline_date} readOnly={!canEdit} alert={isAlert("frontline_date")} />
+              <Field label="Actual reconditioning cost" name="recon_cost" type="number" step="0.01" defaultValue={purchase.recon_cost} readOnly={!canEdit} alert={isAlert("recon_cost")} />
             </div>
             <div className="space-y-2">
-              <CheckField label="Description" name="recon_description_done" defaultChecked={purchase.recon_description_done} disabled={!canEdit} />
-              <CheckField label="Merchandising" name="recon_merchandising_done" defaultChecked={purchase.recon_merchandising_done} disabled={!canEdit} />
-              <CheckField label="Frontline" name="recon_frontline_done" defaultChecked={purchase.recon_frontline_done} disabled={!canEdit} />
+              <CheckField label="Description" name="recon_description_done" defaultChecked={purchase.recon_description_done} disabled={!canEdit} alert={isAlert("recon_description_done")} />
+              <CheckField label="Merchandising" name="recon_merchandising_done" defaultChecked={purchase.recon_merchandising_done} disabled={!canEdit} alert={isAlert("recon_merchandising_done")} />
+              <CheckField label="Frontline" name="recon_frontline_done" defaultChecked={purchase.recon_frontline_done} disabled={!canEdit} alert={isAlert("recon_frontline_done")} />
             </div>
             <ReadRow label="Transport time (delivery − purchase)" value={transportDays != null ? `${transportDays}d` : "—"} />
             <ReadRow
@@ -518,17 +589,17 @@ export default function PurchaseDetail({
 
           <div className={tab === "Exit" ? "space-y-3" : "hidden"}>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Sold date" name="sold_date" type="date" defaultValue={purchase.sold_date} readOnly={!canEdit} />
-              <Field label="Sale price" name="sold_price" type="number" step="0.01" defaultValue={purchase.sold_price} readOnly={!canEdit} />
+              <Field label="Sold date" name="sold_date" type="date" defaultValue={purchase.sold_date} readOnly={!canEdit} alert={isAlert("sold_date")} />
+              <Field label="Sale price" name="sold_price" type="number" step="0.01" defaultValue={purchase.sold_price} readOnly={!canEdit} alert={isAlert("sold_price")} />
               <label className="col-span-2 block text-xs">
-                <span style={{ color: IC.muted }}>Exit strategy</span>
+                <span style={{ color: isAlert("exit_strategy") ? IC.red : IC.muted }}>Exit strategy</span>
                 <select
                   name="exit_strategy"
                   value={exitStrategy}
                   disabled={!canEdit}
                   onChange={(e) => setExitStrategy(e.target.value)}
                   className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm"
-                  style={{ background: "#0f141c", borderColor: IC.border, color: IC.text }}
+                  style={{ background: "#0f141c", borderColor: isAlert("exit_strategy") ? IC.red : IC.border, color: IC.text }}
                 >
                   <option value="">—</option>
                   {ACQ_EXIT_STRATEGIES.map((s) => (
@@ -538,9 +609,9 @@ export default function PurchaseDetail({
                   ))}
                 </select>
               </label>
-              <Field label="Front profit" name="front_gross" type="number" step="0.01" defaultValue={purchase.front_gross} readOnly={!canEdit} />
-              <Field label="Back profit" name="back_gross" type="number" step="0.01" defaultValue={purchase.back_gross} readOnly={!canEdit} />
-              <Field label="Total profit" name="total_gross" type="number" step="0.01" defaultValue={purchase.total_gross ?? totalProfit} readOnly={!canEdit} />
+              <Field label="Front profit" name="front_gross" type="number" step="0.01" defaultValue={purchase.front_gross} readOnly={!canEdit} alert={isAlert("front_gross")} />
+              <Field label="Back profit" name="back_gross" type="number" step="0.01" defaultValue={purchase.back_gross} readOnly={!canEdit} alert={isAlert("back_gross")} />
+              <Field label="Total profit" name="total_gross" type="number" step="0.01" defaultValue={purchase.total_gross ?? totalProfit} readOnly={!canEdit} alert={isAlert("total_gross")} />
               {exitStrategy === "internal_transfer" ? (
                 <Field
                   label="Next store profit"
@@ -549,6 +620,7 @@ export default function PurchaseDetail({
                   step="0.01"
                   defaultValue={purchase.next_store_profit}
                   readOnly={!canEdit}
+                  alert={isAlert("next_store_profit")}
                 />
               ) : (
                 <input type="hidden" name="next_store_profit" value={purchase.next_store_profit ?? ""} />
@@ -580,9 +652,9 @@ export default function PurchaseDetail({
               <input type="hidden" name="has_trade" value={hasTrade ? "true" : "false"} />
               {hasTrade ? (
                 <div className="grid grid-cols-2 gap-3">
-                  <Field label="Trade stock" name="trade_stock_number" defaultValue={purchase.trade_stock_number} readOnly={!canEdit} />
+                  <Field label="Trade stock" name="trade_stock_number" defaultValue={purchase.trade_stock_number} readOnly={!canEdit} alert={isAlert("trade_stock_number")} />
                   <label className="block text-xs">
-                    <span style={{ color: IC.muted }}>Trade VIN</span>
+                    <span style={{ color: isAlert("trade_vin") ? IC.red : IC.muted }}>Trade VIN</span>
                     <div className="mt-1 flex gap-1">
                       <input
                         name="trade_vin"
@@ -591,7 +663,7 @@ export default function PurchaseDetail({
                         readOnly={!canEdit}
                         maxLength={17}
                         className="w-full rounded-md border px-2 py-1.5 text-sm uppercase"
-                        style={{ background: canEdit ? "#0f141c" : IC.rowAlt, borderColor: IC.border, color: IC.text }}
+                        style={{ background: canEdit ? "#0f141c" : IC.rowAlt, borderColor: isAlert("trade_vin") ? IC.red : IC.border, color: IC.text }}
                       />
                       {canEdit ? (
                         <button
@@ -606,11 +678,11 @@ export default function PurchaseDetail({
                       ) : null}
                     </div>
                   </label>
-                  <Field label="Year" name="trade_year" value={tradeYear} onChange={setTradeYear} type="number" readOnly={!canEdit} />
-                  <Field label="Make" name="trade_make" value={tradeMake} onChange={setTradeMake} readOnly={!canEdit} />
-                  <Field label="Model" name="trade_model" value={tradeModel} onChange={setTradeModel} readOnly={!canEdit} />
-                  <Field label="ACV" name="trade_acv" type="number" step="0.01" defaultValue={purchase.trade_acv} readOnly={!canEdit} />
-                  <Field label="Allowance" name="trade_allowance" type="number" step="0.01" defaultValue={purchase.trade_allowance} readOnly={!canEdit} />
+                  <Field label="Year" name="trade_year" value={tradeYear} onChange={setTradeYear} type="number" readOnly={!canEdit} alert={isAlert("trade_year")} />
+                  <Field label="Make" name="trade_make" value={tradeMake} onChange={setTradeMake} readOnly={!canEdit} alert={isAlert("trade_make")} />
+                  <Field label="Model" name="trade_model" value={tradeModel} onChange={setTradeModel} readOnly={!canEdit} alert={isAlert("trade_model")} />
+                  <Field label="ACV" name="trade_acv" type="number" step="0.01" defaultValue={purchase.trade_acv} readOnly={!canEdit} alert={isAlert("trade_acv")} />
+                  <Field label="Allowance" name="trade_allowance" type="number" step="0.01" defaultValue={purchase.trade_allowance} readOnly={!canEdit} alert={isAlert("trade_allowance")} />
                 </div>
               ) : null}
             </div>

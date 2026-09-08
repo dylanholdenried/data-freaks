@@ -9,6 +9,7 @@ import { canAccessAcquire } from "@/lib/plan-access";
 import { canMutateAcquire } from "@/lib/roles";
 import { parseStoreIdsParam } from "@/lib/acquire/store-labels";
 import { syncAcquireOverlaysForStoresLatest } from "@/lib/acquire/sync-inventory";
+import { daysInStep, stageEnteredAtByPurchase } from "@/lib/acquire/cost";
 import type { AcqBuyer, AcqPurchase } from "@/lib/acquire/types";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import SelectAutoGroupEmptyState from "../../SelectAutoGroupEmptyState";
@@ -88,6 +89,28 @@ export default async function AcquirePurchasesPage({
     console.error("acq_buyers load (purchases)", buyersError);
   }
 
+  const basePurchases = (rows ?? []) as AcqPurchase[];
+  let purchases = basePurchases;
+  if (basePurchases.length) {
+    const { data: eventRows, error: eventsError } = await supabase
+      .from("acq_stage_events")
+      .select("purchase_id, to_stage, created_at")
+      .in(
+        "purchase_id",
+        basePurchases.map((p) => p.id)
+      )
+      .order("created_at", { ascending: false });
+    if (eventsError) {
+      console.error("acq_stage_events load (purchases)", eventsError);
+    }
+    const enteredAt = stageEnteredAtByPurchase(basePurchases, eventRows ?? []);
+    const now = new Date();
+    purchases = basePurchases.map((p) => ({
+      ...p,
+      days_in_step: daysInStep(enteredAt[p.id] ?? p.created_at, now),
+    }));
+  }
+
   return (
     <PurchasesClient
       stores={stores.map((s) => ({ id: s.id, name: s.name }))}
@@ -95,7 +118,7 @@ export default async function AcquirePurchasesPage({
       vehicleMakes={(makeRows ?? []) as { id: string; name: string }[]}
       vehicleModels={(modelRows ?? []) as { id: string; name: string; make_id: string }[]}
       initialStoreIds={initialStoreIds}
-      purchases={(rows ?? []) as AcqPurchase[]}
+      purchases={purchases}
       canEdit={canMutateAcquire(profile.role)}
     />
   );
