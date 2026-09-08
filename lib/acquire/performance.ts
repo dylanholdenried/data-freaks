@@ -1,11 +1,11 @@
 import { allInCost, effectiveGross, num } from "./cost";
 import {
-  ACQ_ACTIVE_STAGES,
   ACQ_COMPLETED_STAGES,
   ACQ_EXIT_STRATEGIES,
   ACQ_EXIT_STRATEGY_LABELS,
   ACQ_SOURCE_LABELS,
   ACQ_STAGE_LABELS,
+  ACQ_STAGES,
   type AcqExitStrategy,
   type AcqPurchase,
   type AcqPurchaseStage,
@@ -102,8 +102,7 @@ export function computeAcquirePerformance(
   purchases: AcqPurchase[],
   now = new Date()
 ): AcquirePerformance {
-  const allStages = [...ACQ_ACTIVE_STAGES, ...ACQ_COMPLETED_STAGES] as AcqPurchaseStage[];
-  const stageCounts: StageCount[] = allStages.map((stage) => ({
+  const stageCounts: StageCount[] = ACQ_STAGES.map((stage) => ({
     stage,
     label: ACQ_STAGE_LABELS[stage],
     count: purchases.filter((p) => p.stage === stage).length,

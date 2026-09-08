@@ -29,6 +29,8 @@ export const ACQ_BULK_HEADERS = [
   "vehicle_model",
   "vehicle_trim",
   "color",
+  "body_style",
+  "drivetrain",
   "odometer",
   "source_type",
   "seller_name",
@@ -83,6 +85,8 @@ export type AcqBulkParsedRow = {
   vehicle_model: string | null;
   vehicle_trim: string | null;
   color: string | null;
+  body_style: string | null;
+  drivetrain: string | null;
   odometer: number | null;
   source_type: AcqSourceType;
   seller_name: string | null;
@@ -229,6 +233,10 @@ const HEADER_ALIASES: Record<string, AcqBulkHeader> = {
   trim: "vehicle_trim",
   vehicle_trim: "vehicle_trim",
   color: "color",
+  body_style: "body_style",
+  body: "body_style",
+  drivetrain: "drivetrain",
+  drive: "drivetrain",
   odometer: "odometer",
   miles: "odometer",
   source: "source_type",
@@ -340,6 +348,8 @@ export function parseAcquirePurchasesCsv(text: string): AcqBulkParseResult {
       vehicle_model: toStr(cell(raw, "vehicle_model")),
       vehicle_trim: toStr(cell(raw, "vehicle_trim")),
       color: toStr(cell(raw, "color")),
+      body_style: toStr(cell(raw, "body_style")),
+      drivetrain: toStr(cell(raw, "drivetrain")),
       odometer: toInt(cell(raw, "odometer")),
       source_type: parseSource(cell(raw, "source_type")),
       seller_name: toStr(cell(raw, "seller_name")),

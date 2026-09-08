@@ -61,7 +61,12 @@ export default async function AcquirePurchasesPage({
     console.error("Acquire overlay refresh on purchases page", e);
   }
 
-  const [{ data: rows, error }, { data: buyerRows, error: buyersError }] = await Promise.all([
+  const [
+    { data: rows, error },
+    { data: buyerRows, error: buyersError },
+    { data: makeRows },
+    { data: modelRows },
+  ] = await Promise.all([
     supabase
       .from("acq_purchases")
       .select("*")
@@ -72,6 +77,8 @@ export default async function AcquirePurchasesPage({
       .select("id, dealer_group_id, name, active")
       .eq("dealer_group_id", dealerGroupId)
       .order("name"),
+    supabase.from("vehicle_makes").select("id,name").eq("active", true).order("name"),
+    supabase.from("vehicle_models").select("id,name,make_id").eq("active", true).order("name"),
   ]);
 
   if (error) {
@@ -85,6 +92,8 @@ export default async function AcquirePurchasesPage({
     <PurchasesClient
       stores={stores.map((s) => ({ id: s.id, name: s.name }))}
       buyers={(buyerRows ?? []) as AcqBuyer[]}
+      vehicleMakes={(makeRows ?? []) as { id: string; name: string }[]}
+      vehicleModels={(modelRows ?? []) as { id: string; name: string; make_id: string }[]}
       initialStoreIds={initialStoreIds}
       purchases={(rows ?? []) as AcqPurchase[]}
       canEdit={canMutateAcquire(profile.role)}

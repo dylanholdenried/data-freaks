@@ -32,6 +32,11 @@ import {
 import { updateAcquirePurchase } from "../actions";
 import { decodeVin, VinDecodeError } from "@/lib/vehicle";
 import { Loader2, X } from "lucide-react";
+import AcquireVehicleFields, {
+  normalizeDrivetrain,
+  type VehicleCatalogMake,
+  type VehicleCatalogModel,
+} from "./AcquireVehicleFields";
 
 const TABS = [
   "Overview",
@@ -164,12 +169,16 @@ export default function PurchaseDetail({
   purchase,
   storeName,
   buyers,
+  vehicleMakes,
+  vehicleModels,
   canEdit,
   onClose,
 }: {
   purchase: AcqPurchase;
   storeName: string;
   buyers: AcqBuyer[];
+  vehicleMakes: VehicleCatalogMake[];
+  vehicleModels: VehicleCatalogModel[];
   canEdit: boolean;
   onClose: () => void;
 }) {
@@ -183,6 +192,9 @@ export default function PurchaseDetail({
   const [make, setMake] = useState(purchase.vehicle_make ?? "");
   const [model, setModel] = useState(purchase.vehicle_model ?? "");
   const [trim, setTrim] = useState(purchase.vehicle_trim ?? "");
+  const [color, setColor] = useState(purchase.color ?? "");
+  const [bodyStyle, setBodyStyle] = useState(purchase.body_style ?? "");
+  const [drivetrain, setDrivetrain] = useState(purchase.drivetrain ?? "");
   const [hasTrade, setHasTrade] = useState(Boolean(purchase.has_trade));
   const [stage, setStage] = useState(purchase.stage);
   const [exitStrategy, setExitStrategy] = useState(purchase.exit_strategy ?? "");
@@ -235,6 +247,8 @@ export default function PurchaseDetail({
         if (d.make) setMake(d.make);
         if (d.model) setModel(d.model);
         if (d.trim) setTrim(d.trim);
+        if (d.bodyStyle) setBodyStyle(d.bodyStyle);
+        if (d.drivetrain) setDrivetrain(normalizeDrivetrain(d.drivetrain));
       } else {
         if (d.year != null) setTradeYear(String(d.year));
         if (d.make) setTradeMake(d.make);
@@ -256,6 +270,9 @@ export default function PurchaseDetail({
     fd.set("vehicle_make", make);
     fd.set("vehicle_model", model);
     fd.set("vehicle_trim", trim);
+    fd.set("color", color);
+    fd.set("body_style", bodyStyle);
+    fd.set("drivetrain", drivetrain);
     fd.set("has_trade", hasTrade ? "true" : "false");
     fd.set("exit_strategy", exitStrategy);
     if (hasTrade) {
@@ -343,40 +360,56 @@ export default function PurchaseDetail({
         </div>
 
         <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
-          <div className={tab === "Overview" ? "grid grid-cols-2 gap-3" : "hidden"}>
-            <Field label="Stock #" name="stock_number" defaultValue={purchase.stock_number} readOnly={!canEdit} />
-            <label className="block text-xs">
-              <span style={{ color: IC.muted }}>VIN</span>
-              <div className="mt-1 flex gap-1">
-                <input
-                  name="vin"
-                  value={vin}
-                  onChange={(e) => setVin(e.target.value.toUpperCase())}
-                  readOnly={!canEdit}
-                  maxLength={17}
-                  className="w-full rounded-md border px-2 py-1.5 text-sm uppercase"
-                  style={{ background: canEdit ? "#0f141c" : IC.rowAlt, borderColor: IC.border, color: IC.text }}
-                />
-                {canEdit ? (
-                  <button
-                    type="button"
-                    onClick={() => void handleDecode("vehicle")}
-                    disabled={decoding}
-                    className="shrink-0 rounded-md border px-2 text-[10px] font-semibold"
-                    style={{ borderColor: IC.border, color: IC.blue }}
-                  >
-                    {decoding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Decode"}
-                  </button>
-                ) : null}
-              </div>
-            </label>
-            <Field label="Year" name="vehicle_year" value={year} onChange={setYear} type="number" readOnly={!canEdit} />
-            <Field label="Make" name="vehicle_make" value={make} onChange={setMake} readOnly={!canEdit} />
-            <Field label="Model" name="vehicle_model" value={model} onChange={setModel} readOnly={!canEdit} />
-            <Field label="Trim" name="vehicle_trim" value={trim} onChange={setTrim} readOnly={!canEdit} />
-            <Field label="Color" name="color" defaultValue={purchase.color} readOnly={!canEdit} />
-            <Field label="Odometer" name="odometer" type="number" defaultValue={purchase.odometer} readOnly={!canEdit} />
-            <div className="col-span-2">
+          <div className={tab === "Overview" ? "space-y-3" : "hidden"}>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Stock #" name="stock_number" defaultValue={purchase.stock_number} readOnly={!canEdit} />
+              <label className="block text-xs">
+                <span style={{ color: IC.muted }}>VIN</span>
+                <div className="mt-1 flex gap-1">
+                  <input
+                    name="vin"
+                    value={vin}
+                    onChange={(e) => setVin(e.target.value.toUpperCase())}
+                    readOnly={!canEdit}
+                    maxLength={17}
+                    className="w-full rounded-md border px-2 py-1.5 text-sm uppercase"
+                    style={{ background: canEdit ? "#0f141c" : IC.rowAlt, borderColor: IC.border, color: IC.text }}
+                  />
+                  {canEdit ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleDecode("vehicle")}
+                      disabled={decoding}
+                      className="shrink-0 rounded-md border px-2 text-[10px] font-semibold"
+                      style={{ borderColor: IC.border, color: IC.blue }}
+                    >
+                      {decoding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Decode"}
+                    </button>
+                  ) : null}
+                </div>
+              </label>
+            </div>
+            <AcquireVehicleFields
+              vehicleMakes={vehicleMakes}
+              vehicleModels={vehicleModels}
+              canEdit={canEdit}
+              year={year}
+              make={make}
+              model={model}
+              trim={trim}
+              color={color}
+              bodyStyle={bodyStyle}
+              drivetrain={drivetrain}
+              onYearChange={setYear}
+              onMakeChange={setMake}
+              onModelChange={setModel}
+              onTrimChange={setTrim}
+              onColorChange={setColor}
+              onBodyStyleChange={setBodyStyle}
+              onDrivetrainChange={setDrivetrain}
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Odometer" name="odometer" type="number" defaultValue={purchase.odometer} readOnly={!canEdit} />
               <SelectField
                 label="Buyer"
                 name="buyer_id"
@@ -568,8 +601,14 @@ export default function PurchaseDetail({
             <>
               <input type="hidden" name="stock_number" value={purchase.stock_number ?? ""} />
               <input type="hidden" name="buyer_id" value={purchase.buyer_id ?? ""} />
-              <input type="hidden" name="color" value={purchase.color ?? ""} />
               <input type="hidden" name="odometer" value={purchase.odometer ?? ""} />
+              <input type="hidden" name="vehicle_year" value={year} />
+              <input type="hidden" name="vehicle_make" value={make} />
+              <input type="hidden" name="vehicle_model" value={model} />
+              <input type="hidden" name="vehicle_trim" value={trim} />
+              <input type="hidden" name="color" value={color} />
+              <input type="hidden" name="body_style" value={bodyStyle} />
+              <input type="hidden" name="drivetrain" value={drivetrain} />
             </>
           ) : null}
           {tab !== "Acquisition" ? (

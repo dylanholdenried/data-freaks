@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { IC } from "@/lib/inventory-command/midmo";
 import { ACQ_EXIT_STRATEGIES, ACQ_SOURCE_TYPES, ACQ_STAGES } from "@/lib/acquire/types";
 import { ACQ_BULK_TEMPLATE_FILENAME } from "@/lib/acquire/bulk-upload";
+import { BODY_STYLES, COLORS, DRIVETRAINS } from "@/lib/vehicle";
 import {
   bulkUploadAcquirePurchasesAction,
   getAcquirePurchasesTemplateCsvAction,
@@ -101,6 +102,9 @@ export default function BulkUploadModal({
           <p className="mt-2">Status: {ACQ_STAGES.join(", ")}</p>
           <p className="mt-1">Source: {ACQ_SOURCE_TYPES.join(", ")}</p>
           <p className="mt-1">Exit: {ACQ_EXIT_STRATEGIES.join(", ")}</p>
+          <p className="mt-1">Color: {COLORS.join(", ")}</p>
+          <p className="mt-1">Body style: {BODY_STYLES.join(", ")}</p>
+          <p className="mt-1">Drivetrain: {DRIVETRAINS.join(", ")}</p>
         </div>
 
         <button

@@ -7,22 +7,31 @@ import {
   ACQ_SOURCE_LABELS,
   ACQ_SOURCE_TYPES,
   ACQ_STAGE_LABELS,
-  ACQ_ACTIVE_STAGES,
+  ACQ_STAGES,
   type AcqBuyer,
   type AcqSourceType,
 } from "@/lib/acquire/types";
 import { createAcquirePurchase } from "../actions";
 import { decodeVin, VinDecodeError } from "@/lib/vehicle";
 import { X, Loader2 } from "lucide-react";
+import AcquireVehicleFields, {
+  normalizeDrivetrain,
+  type VehicleCatalogMake,
+  type VehicleCatalogModel,
+} from "./AcquireVehicleFields";
 
 export default function AddPurchaseModal({
   stores,
   buyers,
+  vehicleMakes,
+  vehicleModels,
   defaultStoreId,
   onClose,
 }: {
   stores: { id: string; name: string }[];
   buyers: AcqBuyer[];
+  vehicleMakes: VehicleCatalogMake[];
+  vehicleModels: VehicleCatalogModel[];
   defaultStoreId: string;
   onClose: () => void;
 }) {
@@ -36,6 +45,8 @@ export default function AddPurchaseModal({
   const [model, setModel] = useState("");
   const [trim, setTrim] = useState("");
   const [color, setColor] = useState("");
+  const [bodyStyle, setBodyStyle] = useState("");
+  const [drivetrain, setDrivetrain] = useState("");
 
   async function handleDecode() {
     const v = vin.trim().toUpperCase();
@@ -51,6 +62,8 @@ export default function AddPurchaseModal({
       if (d.make) setMake(d.make);
       if (d.model) setModel(d.model);
       if (d.trim) setTrim(d.trim);
+      if (d.bodyStyle) setBodyStyle(d.bodyStyle);
+      if (d.drivetrain) setDrivetrain(normalizeDrivetrain(d.drivetrain));
     } catch (e) {
       setError(e instanceof VinDecodeError ? e.message : "VIN decode failed");
     } finally {
@@ -67,6 +80,8 @@ export default function AddPurchaseModal({
     fd.set("vehicle_model", model);
     fd.set("vehicle_trim", trim);
     fd.set("color", color);
+    fd.set("body_style", bodyStyle);
+    fd.set("drivetrain", drivetrain);
     setError(null);
     startTransition(async () => {
       const res = await createAcquirePurchase(fd);
@@ -100,7 +115,8 @@ export default function AddPurchaseModal({
           </button>
         </div>
         <p className="mb-4 text-xs" style={{ color: IC.muted }}>
-          All fields optional except dealership. Decode a VIN to fill year/make/model — override anytime.
+          All fields optional except dealership. Make/model/color/body/drivetrain use the same lists as Sales
+          Registry.
         </p>
         <form onSubmit={onSubmit} className="space-y-3">
           <label className="block text-xs">
@@ -163,41 +179,26 @@ export default function AddPurchaseModal({
             </label>
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
-            <label className="block text-xs">
-              <span style={{ color: IC.muted }}>Year</span>
-              <input
-                name="vehicle_year"
-                type="number"
-                value={year}
-                onChange={(e) => setYear(e.target.value)}
-                className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm"
-                style={inputStyle}
-              />
-            </label>
-            <label className="block text-xs">
-              <span style={{ color: IC.muted }}>Make</span>
-              <input
-                name="vehicle_make"
-                value={make}
-                onChange={(e) => setMake(e.target.value)}
-                className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm"
-                style={inputStyle}
-              />
-            </label>
-            <label className="block text-xs">
-              <span style={{ color: IC.muted }}>Model</span>
-              <input
-                name="vehicle_model"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm"
-                style={inputStyle}
-              />
-            </label>
-          </div>
-          <input type="hidden" name="vehicle_trim" value={trim} />
-          <input type="hidden" name="color" value={color} />
+          <AcquireVehicleFields
+            vehicleMakes={vehicleMakes}
+            vehicleModels={vehicleModels}
+            canEdit
+            compact
+            year={year}
+            make={make}
+            model={model}
+            trim={trim}
+            color={color}
+            bodyStyle={bodyStyle}
+            drivetrain={drivetrain}
+            onYearChange={setYear}
+            onMakeChange={setMake}
+            onModelChange={setModel}
+            onTrimChange={setTrim}
+            onColorChange={setColor}
+            onBodyStyleChange={setBodyStyle}
+            onDrivetrainChange={setDrivetrain}
+          />
 
           <label className="block text-xs">
             <span style={{ color: IC.muted }}>Purchase source</span>
@@ -226,9 +227,9 @@ export default function AddPurchaseModal({
               <input name="purchase_date" type="date" className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm" style={inputStyle} />
             </label>
             <label className="block text-xs">
-              <span style={{ color: IC.muted }}>Stage</span>
+              <span style={{ color: IC.muted }}>Status</span>
               <select name="stage" defaultValue="need_to_stock_in" className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm" style={inputStyle}>
-                {ACQ_ACTIVE_STAGES.map((s) => (
+                {ACQ_STAGES.map((s) => (
                   <option key={s} value={s}>
                     {ACQ_STAGE_LABELS[s]}
                   </option>

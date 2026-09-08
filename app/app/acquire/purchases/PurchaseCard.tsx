@@ -7,6 +7,7 @@ import {
   ACQ_EXIT_STRATEGY_LABELS,
   ACQ_SOURCE_COLORS,
   ACQ_STAGE_LABELS,
+  ACQ_STAGES,
   isCompletedStage,
   type AcqExitStrategy,
   type AcqPurchase,
@@ -121,6 +122,11 @@ export function PurchaseCardFace({
             vehicle_model: purchase.vehicle_model,
           })}
         </p>
+        {(purchase.body_style || purchase.drivetrain) ? (
+          <p className="mt-1 text-[11px]" style={{ color: IC.muted }}>
+            {[purchase.body_style, purchase.drivetrain].filter(Boolean).join(" · ")}
+          </p>
+        ) : null}
 
         <div className="mt-auto space-y-2 pt-4">
           <div className="flex flex-wrap items-center gap-2 text-[11px]" style={{ color: IC.muted }}>
@@ -153,7 +159,7 @@ export function PurchaseCardFace({
                 }}
                 aria-label="Purchase stage"
               >
-                {(Object.keys(ACQ_STAGE_LABELS) as AcqPurchaseStage[]).map((s) => (
+                {ACQ_STAGES.map((s) => (
                   <option key={s} value={s}>
                     {ACQ_STAGE_LABELS[s]}
                   </option>

@@ -1,6 +1,7 @@
 /** Acquire purchase pipeline — types and stage/source constants. */
 
-export const ACQ_ACTIVE_STAGES = [
+/** Core pipeline statuses (before sold / exit). */
+export const ACQ_PIPELINE_STAGES = [
   "need_to_stock_in",
   "in_transit",
   "recon",
@@ -12,7 +13,15 @@ export const ACQ_ACTIVE_STAGES = [
 
 export const ACQ_COMPLETED_STAGES = ["sold", "arbitration_complete"] as const;
 
-export const ACQ_STAGES = [...ACQ_ACTIVE_STAGES, ...ACQ_COMPLETED_STAGES] as const;
+/** Active queue includes Demo (not a completed exit). */
+export const ACQ_ACTIVE_STAGES = [...ACQ_PIPELINE_STAGES, "demo"] as const;
+
+/** Display / dropdown order: pipeline → sold exits → Demo last. */
+export const ACQ_STAGES = [
+  ...ACQ_PIPELINE_STAGES,
+  ...ACQ_COMPLETED_STAGES,
+  "demo",
+] as const;
 
 export type AcqPurchaseStage = (typeof ACQ_STAGES)[number];
 
@@ -48,6 +57,7 @@ export const ACQ_STAGE_LABELS: Record<AcqPurchaseStage, string> = {
   arbitration: "Arbitration",
   sold: "Sold",
   arbitration_complete: "Arbitration Complete",
+  demo: "Demo",
 };
 
 export const ACQ_EXIT_STRATEGY_LABELS: Record<AcqExitStrategy, string> = {
@@ -99,6 +109,8 @@ export type AcqPurchase = {
   vehicle_model: string | null;
   vehicle_trim: string | null;
   color: string | null;
+  body_style: string | null;
+  drivetrain: string | null;
   odometer: number | null;
   source_type: AcqSourceType;
   auction_house: string | null;

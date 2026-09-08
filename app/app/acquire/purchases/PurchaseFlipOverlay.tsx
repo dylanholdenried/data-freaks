@@ -5,6 +5,7 @@ import type { AcqBuyer, AcqPurchase } from "@/lib/acquire/types";
 import { cn } from "@/lib/utils";
 import { PurchaseCardFace, type CardOriginRect } from "./PurchaseCard";
 import PurchaseDetail from "./PurchaseDetail";
+import type { VehicleCatalogMake, VehicleCatalogModel } from "./AcquireVehicleFields";
 
 const FLIP_MS = 560;
 
@@ -25,6 +26,8 @@ export default function PurchaseFlipOverlay({
   purchase,
   storeName,
   buyers,
+  vehicleMakes,
+  vehicleModels,
   canEdit,
   origin,
   onClose,
@@ -32,6 +35,8 @@ export default function PurchaseFlipOverlay({
   purchase: AcqPurchase;
   storeName: string;
   buyers: AcqBuyer[];
+  vehicleMakes: VehicleCatalogMake[];
+  vehicleModels: VehicleCatalogModel[];
   canEdit: boolean;
   origin: CardOriginRect;
   onClose: () => void;
@@ -126,6 +131,8 @@ export default function PurchaseFlipOverlay({
               purchase={purchase}
               storeName={storeName}
               buyers={buyers}
+              vehicleMakes={vehicleMakes}
+              vehicleModels={vehicleModels}
               canEdit={canEdit}
               onClose={requestClose}
             />

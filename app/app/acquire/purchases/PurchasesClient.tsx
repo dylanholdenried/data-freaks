@@ -11,9 +11,8 @@ import {
 } from "@/app/app/inventory-command/ui/primitives";
 import { IC } from "@/lib/inventory-command/midmo";
 import {
-  ACQ_ACTIVE_STAGES,
-  ACQ_COMPLETED_STAGES,
   ACQ_STAGE_LABELS,
+  ACQ_STAGES,
   isCompletedStage,
   type AcqBuyer,
   type AcqPurchase,
@@ -26,16 +25,21 @@ import PurchaseCard, { type CardOriginRect } from "./PurchaseCard";
 import PurchaseFlipOverlay from "./PurchaseFlipOverlay";
 import AddPurchaseModal from "./AddPurchaseModal";
 import BulkUploadModal from "./BulkUploadModal";
+import type { VehicleCatalogMake, VehicleCatalogModel } from "./AcquireVehicleFields";
 
 export default function PurchasesClient({
   stores,
   buyers,
+  vehicleMakes,
+  vehicleModels,
   initialStoreIds,
   purchases,
   canEdit,
 }: {
   stores: { id: string; name: string }[];
   buyers: AcqBuyer[];
+  vehicleMakes: VehicleCatalogMake[];
+  vehicleModels: VehicleCatalogModel[];
   initialStoreIds: string[];
   purchases: AcqPurchase[];
   canEdit: boolean;
@@ -99,15 +103,10 @@ export default function PurchasesClient({
     ? storePurchases.find((p) => p.id === selectedId) ?? null
     : null;
 
-  const pipelineCounts = ACQ_ACTIVE_STAGES.map((stage) => ({
+  const stageCounts = ACQ_STAGES.map((stage) => ({
     stage,
     count: storePurchases.filter((p) => p.stage === stage).length,
   }));
-  const completedCounts = ACQ_COMPLETED_STAGES.map((stage) => ({
-    stage,
-    count: storePurchases.filter((p) => p.stage === stage).length,
-  }));
-  const stageCounts = [...pipelineCounts, ...completedCounts];
 
   const now = new Date();
   const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -211,38 +210,24 @@ export default function PurchasesClient({
           >
             Active
           </button>
-          {ACQ_ACTIVE_STAGES.map((stage) => (
-            <button
-              key={stage}
-              type="button"
-              onClick={() => setStageFilter(stage)}
-              className="rounded-full px-3 py-1 text-[11px] font-semibold"
-              style={{
-                background: stageFilter === stage ? IC.blue : IC.rowAlt,
-                color: stageFilter === stage ? "#fff" : IC.muted,
-              }}
-            >
-              {ACQ_STAGE_LABELS[stage]}
-            </button>
-          ))}
-          {ACQ_COMPLETED_STAGES.map((stage) => (
+          {ACQ_STAGES.map((stage) => (
             <button
               key={stage}
               type="button"
               onClick={() => {
-                setShowCompleted(true);
+                if (isCompletedStage(stage)) setShowCompleted(true);
                 setStageFilter(stage);
               }}
               className="rounded-full px-3 py-1 text-[11px] font-semibold"
               style={{
                 background: stageFilter === stage ? IC.blue : IC.rowAlt,
                 color: stageFilter === stage ? "#fff" : IC.muted,
-                border: `1px solid ${IC.border}`,
+                border: isCompletedStage(stage) ? `1px solid ${IC.border}` : undefined,
               }}
             >
               {ACQ_STAGE_LABELS[stage]}
-              {completedCounts.find((c) => c.stage === stage)?.count
-                ? ` (${completedCounts.find((c) => c.stage === stage)!.count})`
+              {isCompletedStage(stage) && stageCounts.find((c) => c.stage === stage)?.count
+                ? ` (${stageCounts.find((c) => c.stage === stage)!.count})`
                 : ""}
             </button>
           ))}
@@ -296,6 +281,8 @@ export default function PurchasesClient({
           purchase={selected}
           storeName={storeNameById[selected.store_id] ?? "Store"}
           buyers={buyers}
+          vehicleMakes={vehicleMakes}
+          vehicleModels={vehicleModels}
           canEdit={canEdit}
           origin={flipOrigin}
           onClose={() => {
@@ -309,6 +296,8 @@ export default function PurchasesClient({
         <AddPurchaseModal
           stores={stores}
           buyers={buyers}
+          vehicleMakes={vehicleMakes}
+          vehicleModels={vehicleModels}
           defaultStoreId={defaultCreateStoreId}
           onClose={() => setAdding(false)}
         />
