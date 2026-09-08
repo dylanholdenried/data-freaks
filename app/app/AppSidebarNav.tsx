@@ -123,19 +123,27 @@ export default function AppSidebarNav({
   plan = "log",
   acquireEnabled = false,
   viewOnly = false,
+  isPlatformAdmin = false,
 }: {
   plan?: PlanTier | string | null;
   acquireEnabled?: boolean;
   viewOnly?: boolean;
+  /** Performance is unfinished — only platform admins see the nav link. */
+  isPlatformAdmin?: boolean;
 }) {
   const pathname = usePathname();
 
   return (
     <nav className="space-y-5 px-3 py-4 text-xs">
       {SECTIONS.map(({ title, links }) => {
-        const visibleLinks = viewOnly
+        let visibleLinks = viewOnly
           ? links.filter((link) => isViewerNavHref(link.href))
           : links;
+        if (!isPlatformAdmin) {
+          visibleLinks = visibleLinks.filter(
+            (link) => link.href !== "/app/acquire/performance"
+          );
+        }
         if (visibleLinks.length === 0) return null;
         return (
           <div key={title} className="space-y-1.5">

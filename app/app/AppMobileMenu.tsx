@@ -140,9 +140,14 @@ export default function AppMobileMenu({
             ) : null}
             <nav className="flex-1 space-y-5 overflow-y-auto p-3">
               {SECTIONS.map(({ title, links }) => {
-                const visibleLinks = viewOnly
+                let visibleLinks = viewOnly
                   ? links.filter((link) => isViewerNavHref(link.href))
                   : links;
+                if (!isPlatformAdmin) {
+                  visibleLinks = visibleLinks.filter(
+                    (link) => link.href !== "/app/acquire/performance"
+                  );
+                }
                 if (visibleLinks.length === 0) return null;
                 return (
                   <div key={title} className="space-y-1">

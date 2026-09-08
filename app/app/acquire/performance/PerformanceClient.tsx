@@ -35,7 +35,7 @@ export default function PerformanceClient({
 
   const scoped = useMemo(() => {
     const allowed = new Set(selectedStoreIds);
-    let list = purchases.filter((p) => allowed.has(p.store_id));
+    let list = purchases.filter((p) => p.store_id == null || allowed.has(p.store_id));
     if (sourceFilter !== "all") {
       list = list.filter((p) => p.source_type === sourceFilter);
     }

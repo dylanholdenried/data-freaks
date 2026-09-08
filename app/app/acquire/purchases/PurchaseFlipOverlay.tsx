@@ -25,6 +25,7 @@ function targetRect(): CardOriginRect {
 export default function PurchaseFlipOverlay({
   purchase,
   storeName,
+  stores,
   buyers,
   vehicleMakes,
   vehicleModels,
@@ -35,6 +36,7 @@ export default function PurchaseFlipOverlay({
 }: {
   purchase: AcqPurchase;
   storeName: string;
+  stores: { id: string; name: string }[];
   buyers: AcqBuyer[];
   vehicleMakes: VehicleCatalogMake[];
   vehicleModels: VehicleCatalogModel[];
@@ -142,6 +144,7 @@ export default function PurchaseFlipOverlay({
               key={purchase.id}
               purchase={purchase}
               storeName={storeName}
+              stores={stores}
               buyers={buyers}
               vehicleMakes={vehicleMakes}
               vehicleModels={vehicleModels}

@@ -81,7 +81,8 @@ export default function PurchasesClient({
 
   const storePurchases = useMemo(() => {
     const allowed = new Set(selectedStoreIds);
-    return localPurchases.filter((p) => allowed.has(p.store_id));
+    // Unassigned cars stay visible until a destination store is set.
+    return localPurchases.filter((p) => p.store_id == null || allowed.has(p.store_id));
   }, [localPurchases, selectedStoreIds]);
 
   function applyPurchaseUpdate(updated: AcqPurchase, opts?: { switchBucketNow?: boolean }) {
@@ -369,7 +370,7 @@ export default function PurchasesClient({
               <PurchaseCard
                 key={p.id}
                 purchase={p}
-                storeName={storeNameById[p.store_id] ?? "Store"}
+                storeName={p.store_id ? storeNameById[p.store_id] ?? "Store" : "Unassigned"}
                 canEdit={canEdit}
                 hidden={selectedId === p.id}
                 onOpen={(origin) => {
@@ -390,7 +391,12 @@ export default function PurchasesClient({
         <PurchaseFlipOverlay
           key={selected.id}
           purchase={selected}
-          storeName={storeNameById[selected.store_id] ?? "Store"}
+          storeName={
+            selected.store_id
+              ? storeNameById[selected.store_id] ?? "Store"
+              : "Unassigned"
+          }
+          stores={stores}
           buyers={buyers}
           vehicleMakes={vehicleMakes}
           vehicleModels={vehicleModels}

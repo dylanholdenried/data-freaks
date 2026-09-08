@@ -63,7 +63,8 @@ export default async function AcquirePurchasesPage({
   }
 
   const [
-    { data: rows, error },
+    { data: assignedRows, error },
+    { data: unassignedRows, error: unassignedError },
     { data: buyerRows, error: buyersError },
     { data: makeRows },
     { data: modelRows },
@@ -72,6 +73,12 @@ export default async function AcquirePurchasesPage({
       .from("acq_purchases")
       .select("*")
       .in("store_id", storeIds)
+      .order("updated_at", { ascending: false }),
+    supabase
+      .from("acq_purchases")
+      .select("*")
+      .is("store_id", null)
+      .eq("dealer_group_id", dealerGroupId)
       .order("updated_at", { ascending: false }),
     supabase
       .from("acq_buyers")
@@ -85,11 +92,23 @@ export default async function AcquirePurchasesPage({
   if (error) {
     console.error("acq_purchases load", error);
   }
+  if (unassignedError) {
+    console.error("acq_purchases unassigned load", unassignedError);
+  }
   if (buyersError) {
     console.error("acq_buyers load (purchases)", buyersError);
   }
 
-  const basePurchases = (rows ?? []) as AcqPurchase[];
+  const seen = new Set<string>();
+  const rows: AcqPurchase[] = [];
+  for (const row of [...(assignedRows ?? []), ...(unassignedRows ?? [])] as AcqPurchase[]) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    rows.push(row);
+  }
+  rows.sort((a, b) => String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? "")));
+
+  const basePurchases = rows;
   let purchases = basePurchases;
   if (basePurchases.length) {
     const { data: eventRows, error: eventsError } = await supabase

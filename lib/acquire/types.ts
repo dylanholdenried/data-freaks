@@ -127,7 +127,7 @@ export type AcqBuyer = {
 
 export type AcqPurchase = {
   id: string;
-  store_id: string;
+  store_id: string | null;
   dealer_group_id: string;
   stage: AcqPurchaseStage;
   /** Title/office hold — not a pipeline stage. */

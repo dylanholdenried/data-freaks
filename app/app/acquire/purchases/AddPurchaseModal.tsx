@@ -115,19 +115,19 @@ export default function AddPurchaseModal({
           </button>
         </div>
         <p className="mb-4 text-xs" style={{ color: IC.muted }}>
-          All fields optional except dealership. Make/model/color/body/drivetrain use the same lists as Sales
-          Registry.
+          All fields optional. Leave dealership blank if the destination store is still TBD.
+          Make/model/color/body/drivetrain use the same lists as Sales Registry.
         </p>
         <form onSubmit={onSubmit} className="space-y-3">
           <label className="block text-xs">
             <span style={{ color: IC.muted }}>Dealership</span>
             <select
               name="store_id"
-              required
-              defaultValue={defaultStoreId}
+              defaultValue=""
               className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm"
               style={inputStyle}
             >
+              <option value="">— Unassigned —</option>
               {stores.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}

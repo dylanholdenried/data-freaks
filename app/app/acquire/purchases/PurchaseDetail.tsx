@@ -179,6 +179,7 @@ function CheckField({
 export default function PurchaseDetail({
   purchase,
   storeName,
+  stores,
   buyers,
   vehicleMakes,
   vehicleModels,
@@ -188,6 +189,7 @@ export default function PurchaseDetail({
 }: {
   purchase: AcqPurchase;
   storeName: string;
+  stores: { id: string; name: string }[];
   buyers: AcqBuyer[];
   vehicleMakes: VehicleCatalogMake[];
   vehicleModels: VehicleCatalogModel[];
@@ -200,6 +202,7 @@ export default function PurchaseDetail({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [decoding, setDecoding] = useState(false);
+  const [storeId, setStoreId] = useState(purchase.store_id ?? "");
   const [vin, setVin] = useState(purchase.vin ?? "");
   const [year, setYear] = useState(purchase.vehicle_year != null ? String(purchase.vehicle_year) : "");
   const [make, setMake] = useState(purchase.vehicle_make ?? "");
@@ -216,6 +219,9 @@ export default function PurchaseDetail({
   const [tradeYear, setTradeYear] = useState(purchase.trade_year != null ? String(purchase.trade_year) : "");
   const [tradeMake, setTradeMake] = useState(purchase.trade_make ?? "");
   const [tradeModel, setTradeModel] = useState(purchase.trade_model ?? "");
+
+  const headerStoreName =
+    (storeId && stores.find((s) => s.id === storeId)?.name) || storeName || "Unassigned";
 
   const age = headerAgeDays(purchase);
   const soldAge = daysBetween(purchase.purchase_date, purchase.sold_date);
@@ -327,6 +333,7 @@ export default function PurchaseDetail({
     e.preventDefault();
     if (!canEdit) return;
     const fd = new FormData(e.currentTarget);
+    fd.set("store_id", storeId);
     fd.set("vin", vin.trim().toUpperCase());
     fd.set("vehicle_year", year);
     fd.set("vehicle_make", make);
@@ -376,7 +383,7 @@ export default function PurchaseDetail({
         >
           <div className="min-w-0 flex-1">
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: IC.muted }}>
-              {storeName}
+              {headerStoreName}
             </p>
             <h2
               className="mt-1 truncate text-2xl font-bold leading-tight"
@@ -388,6 +395,24 @@ export default function PurchaseDetail({
             <p className="mt-1 text-xs" style={{ color: IC.muted }}>
               {isCompletedStage(stage) ? "Sold age" : "Age"} {age != null ? `${age}d` : "—"}
             </p>
+            <label className="mt-2 block max-w-xs text-[10px] font-semibold uppercase tracking-wide">
+              <span style={{ color: IC.muted }}>Dealership</span>
+              <select
+                name="store_id"
+                value={storeId}
+                disabled={!canEdit}
+                onChange={(e) => setStoreId(e.target.value)}
+                className="mt-1 block w-full rounded-md border px-2 py-1.5 text-left text-sm font-medium normal-case tracking-normal"
+                style={{ background: "#0f141c", borderColor: IC.border, color: IC.text }}
+              >
+                <option value="">— Unassigned —</option>
+                {stores.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
           <div className="flex shrink-0 items-start gap-2">
             <label

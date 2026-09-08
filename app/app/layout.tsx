@@ -89,6 +89,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
             plan={groupPlan}
             acquireEnabled={acquireEnabled}
             viewOnly={navViewOnly}
+            isPlatformAdmin={isPlatformAdmin}
           />
           <div className="mt-auto space-y-3 p-3">
             {isPlatformAdmin ? (
