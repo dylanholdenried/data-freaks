@@ -8,7 +8,9 @@ import { getAccessibleStores } from "@/lib/store-access";
 import { canAccessAcquire } from "@/lib/plan-access";
 import { canMutateAcquire } from "@/lib/roles";
 import { parseStoreIdsParam } from "@/lib/acquire/store-labels";
+import { syncAcquireOverlaysForStoresLatest } from "@/lib/acquire/sync-inventory";
 import type { AcqBuyer, AcqPurchase } from "@/lib/acquire/types";
+import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import SelectAutoGroupEmptyState from "../../SelectAutoGroupEmptyState";
 import AcquireNoAccessState from "../../AcquireNoAccessState";
 import PurchasesClient from "./PurchasesClient";
@@ -49,6 +51,15 @@ export default async function AcquirePurchasesPage({
 
   const storeIds = stores.map((s) => s.id);
   const initialStoreIds = parseStoreIdsParam(searchParams, storeIds);
+
+  // Pull latest IC cost/books onto purchases (runs even if no new inventory upload
+  // happened after the purchase was logged). Service client bypasses write RLS.
+  try {
+    const service = createSupabaseServiceClient();
+    await syncAcquireOverlaysForStoresLatest(service, storeIds);
+  } catch (e) {
+    console.error("Acquire overlay refresh on purchases page", e);
+  }
 
   const [{ data: rows, error }, { data: buyerRows, error: buyersError }] = await Promise.all([
     supabase

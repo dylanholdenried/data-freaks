@@ -1,6 +1,6 @@
 /**
- * Sync Acquire live inventory overlays after an inventory upload.
- * Never touches manual purchase fields (purchase_*, notes, stage, exit econ).
+ * Sync Acquire live inventory overlays from Inventory Command snapshots.
+ * Never touches manual purchase fields (purchase_*, stage, exit econ).
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -81,6 +81,10 @@ export async function syncAcquireOverlaysForStore(
           live_photo_count: unit.ph,
           live_age: unit.age,
           live_synced_at: now,
+          // Rematch clears a prior freeze so books go live again
+          frozen_mmr: null,
+          frozen_jd: null,
+          frozen_at: null,
           updated_at: now,
         })
         .eq("id", p.id);
@@ -113,6 +117,41 @@ export async function syncAcquireOverlaysForStore(
         .eq("id", p.id)
         .eq("live_matched", true);
     }
+  }
+
+  return { matched, frozen };
+}
+
+/** Sync each store from its latest inventory snapshot (by snapshot_date, then created_at). */
+export async function syncAcquireOverlaysForStoresLatest(
+  supabase: SupabaseClient,
+  storeIds: string[]
+): Promise<{ matched: number; frozen: number }> {
+  const unique = Array.from(new Set(storeIds.filter(Boolean)));
+  if (!unique.length) return { matched: 0, frozen: 0 };
+
+  let matched = 0;
+  let frozen = 0;
+
+  for (const storeId of unique) {
+    const { data: snap, error } = await supabase
+      .from("inv_snapshots")
+      .select("id")
+      .eq("store_id", storeId)
+      .order("snapshot_date", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Acquire overlay: latest snapshot lookup failed", storeId, error);
+      continue;
+    }
+    if (!snap?.id) continue;
+
+    const result = await syncAcquireOverlaysForStore(supabase, storeId, snap.id);
+    matched += result.matched;
+    frozen += result.frozen;
   }
 
   return { matched, frozen };

@@ -187,6 +187,18 @@ export async function createAcquirePurchase(
       note: "Created",
     });
 
+    if (payload.stock_number) {
+      try {
+        const service = createSupabaseServiceClient();
+        const { syncAcquireOverlaysForStoresLatest } = await import(
+          "@/lib/acquire/sync-inventory"
+        );
+        await syncAcquireOverlaysForStoresLatest(service, [payload.store_id]);
+      } catch (syncErr) {
+        console.error("Acquire overlay sync after create", syncErr);
+      }
+    }
+
     revalidateAcquire();
     return { ok: true, id: data.id };
   } catch (e) {
@@ -294,6 +306,18 @@ export async function updateAcquirePurchase(
         to_stage: nextStage,
         actor_profile_id: ctx.profile.id,
       });
+    }
+
+    if (patch.stock_number) {
+      try {
+        const service = createSupabaseServiceClient();
+        const { syncAcquireOverlaysForStoresLatest } = await import(
+          "@/lib/acquire/sync-inventory"
+        );
+        await syncAcquireOverlaysForStoresLatest(service, [existing.store_id]);
+      } catch (syncErr) {
+        console.error("Acquire overlay sync after update", syncErr);
+      }
     }
 
     revalidateAcquire();
