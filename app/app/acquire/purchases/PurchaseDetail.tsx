@@ -196,6 +196,7 @@ export default function PurchaseDetail({
   const [bodyStyle, setBodyStyle] = useState(purchase.body_style ?? "");
   const [drivetrain, setDrivetrain] = useState(purchase.drivetrain ?? "");
   const [hasTrade, setHasTrade] = useState(Boolean(purchase.has_trade));
+  const [onHold, setOnHold] = useState(Boolean(purchase.on_hold));
   const [stage, setStage] = useState(purchase.stage);
   const [exitStrategy, setExitStrategy] = useState(purchase.exit_strategy ?? "");
   const [tradeVin, setTradeVin] = useState(purchase.trade_vin ?? "");
@@ -274,6 +275,7 @@ export default function PurchaseDetail({
     fd.set("body_style", bodyStyle);
     fd.set("drivetrain", drivetrain);
     fd.set("has_trade", hasTrade ? "true" : "false");
+    fd.set("on_hold", onHold ? "true" : "false");
     fd.set("exit_strategy", exitStrategy);
     if (hasTrade) {
       fd.set("trade_vin", tradeVin.trim().toUpperCase());
@@ -318,6 +320,24 @@ export default function PurchaseDetail({
             </p>
           </div>
           <div className="flex shrink-0 items-start gap-2">
+            <label
+              className="mt-4 flex max-w-[7.5rem] cursor-pointer flex-col items-start gap-1 text-[10px] font-semibold uppercase tracking-wide"
+              style={{ color: IC.muted }}
+            >
+              <span className="inline-flex items-center gap-1.5 normal-case tracking-normal">
+                <input
+                  type="checkbox"
+                  checked={onHold}
+                  disabled={!canEdit}
+                  onChange={(e) => setOnHold(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border"
+                />
+                <span style={{ color: onHold ? IC.orange : IC.text }}>On Hold</span>
+              </span>
+              <span className="font-normal leading-tight" style={{ color: IC.muted }}>
+                Title / office
+              </span>
+            </label>
             <label className="block text-right text-[10px] font-semibold uppercase tracking-wide">
               <span style={{ color: IC.muted }}>Status</span>
               <select

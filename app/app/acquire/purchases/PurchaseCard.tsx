@@ -127,6 +127,14 @@ export function PurchaseCardFace({
             {[purchase.body_style, purchase.drivetrain].filter(Boolean).join(" · ")}
           </p>
         ) : null}
+        {purchase.on_hold ? (
+          <span
+            className="mt-2 inline-flex w-fit rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+            style={{ background: `${IC.orange}33`, color: IC.orange }}
+          >
+            On Hold
+          </span>
+        ) : null}
 
         <div className="mt-auto space-y-2 pt-4">
           <div className="flex flex-wrap items-center gap-2 text-[11px]" style={{ color: IC.muted }}>

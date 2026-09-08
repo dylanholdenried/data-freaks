@@ -148,6 +148,7 @@ export async function createAcquirePurchase(
       store_id: storeId,
       dealer_group_id: store.dealer_group_id,
       stage: parseStage(formData.get("stage")),
+      on_hold: parseBool(formData.get("on_hold")),
       buyer_id: emptyToNull(formData.get("buyer_id")),
       stock_number: emptyToNull(formData.get("stock_number")),
       vin: emptyToNull(formData.get("vin")),
@@ -240,9 +241,13 @@ export async function updateAcquirePurchase(
 
     const seller = emptyToNull(formData.get("seller_name"));
     const hasTrade = parseBool(formData.get("has_trade"));
+    const onHold = formData.has("on_hold")
+      ? parseBool(formData.get("on_hold"))
+      : undefined;
 
     const patch = {
       stage: nextStage,
+      ...(onHold !== undefined ? { on_hold: onHold } : {}),
       buyer_id: emptyToNull(formData.get("buyer_id")),
       stock_number: emptyToNull(formData.get("stock_number")),
       vin: emptyToNull(formData.get("vin")),

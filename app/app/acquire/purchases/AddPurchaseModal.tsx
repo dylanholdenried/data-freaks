@@ -238,6 +238,14 @@ export default function AddPurchaseModal({
             </label>
           </div>
 
+          <label className="flex items-center gap-2 text-sm" style={{ color: IC.text }}>
+            <input type="checkbox" name="on_hold" value="true" className="h-4 w-4 rounded border" />
+            On Hold
+            <span className="text-xs" style={{ color: IC.muted }}>
+              (title / office — not a status)
+            </span>
+          </label>
+
           {error ? (
             <p className="text-xs" style={{ color: IC.red }}>
               {error}

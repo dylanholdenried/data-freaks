@@ -50,6 +50,7 @@ export default function PurchasesClient({
     initialStoreIds.length ? initialStoreIds : allIds
   );
   const [stageFilter, setStageFilter] = useState<AcqPurchaseStage | "active" | "all">("active");
+  const [onHoldOnly, setOnHoldOnly] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -71,6 +72,8 @@ export default function PurchasesClient({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return storePurchases.filter((p) => {
+      if (onHoldOnly && !p.on_hold) return false;
+
       const completed = isCompletedStage(p.stage);
       if (stageFilter === "active") {
         if (completed) return false;
@@ -97,7 +100,7 @@ export default function PurchasesClient({
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [storePurchases, stageFilter, showCompleted, query, storeNameById]);
+  }, [storePurchases, stageFilter, showCompleted, onHoldOnly, query, storeNameById]);
 
   const selected = selectedId
     ? storePurchases.find((p) => p.id === selectedId) ?? null
@@ -107,6 +110,7 @@ export default function PurchasesClient({
     stage,
     count: storePurchases.filter((p) => p.stage === stage).length,
   }));
+  const onHoldCount = storePurchases.filter((p) => p.on_hold).length;
 
   const now = new Date();
   const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -192,6 +196,11 @@ export default function PurchasesClient({
         ))}
         <IcKpi label="Sold this month" value={soldMonth.length} status="ok" />
         <IcKpi
+          label="On Hold"
+          value={onHoldCount}
+          status={onHoldCount > 0 ? "warn" : undefined}
+        />
+        <IcKpi
           label="Avg gross (mo)"
           value={avgGross != null && Number.isFinite(avgGross) ? formatMoney(avgGross) : "—"}
         />
@@ -231,6 +240,18 @@ export default function PurchasesClient({
                 : ""}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => setOnHoldOnly((v) => !v)}
+            className="rounded-full px-3 py-1 text-[11px] font-semibold"
+            style={{
+              background: onHoldOnly ? IC.orange : IC.rowAlt,
+              color: onHoldOnly ? "#fff" : IC.muted,
+              border: `1px solid ${onHoldOnly ? IC.orange : IC.border}`,
+            }}
+          >
+            On Hold{onHoldCount ? ` (${onHoldCount})` : ""}
+          </button>
           <label className="ml-auto flex items-center gap-2 text-[11px]" style={{ color: IC.muted }}>
             <input
               type="checkbox"
