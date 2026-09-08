@@ -14,13 +14,14 @@ import {
   ACQ_STAGES,
   normalizeSourceType,
   type AcqExitStrategy,
+  type AcqPurchase,
   type AcqPurchaseStage,
   type AcqSourceType,
 } from "@/lib/acquire/types";
 import { nudgePurchasesToPendingSale } from "@/lib/acquire/pending-sale";
 
 export type AcqActionResult =
-  | { ok: true; id?: string }
+  | { ok: true; id?: string; purchase?: AcqPurchase }
   | { ok: false; error: string };
 
 type AcquireMutatorOk = {
@@ -297,10 +298,12 @@ export async function updateAcquirePurchase(
 
     const is_incoming = computeIsIncoming(patch);
 
-    const { error } = await ctx.supabase
+    const { data: updated, error } = await ctx.supabase
       .from("acq_purchases")
       .update({ ...patch, is_incoming })
-      .eq("id", purchaseId);
+      .eq("id", purchaseId)
+      .select("*")
+      .single();
 
     if (error) {
       console.error("updateAcquirePurchase", error);
@@ -329,7 +332,7 @@ export async function updateAcquirePurchase(
     }
 
     revalidateAcquire();
-    return { ok: true, id: purchaseId };
+    return { ok: true, id: purchaseId, purchase: updated as AcqPurchase };
   } catch (e) {
     return {
       ok: false,
@@ -362,14 +365,16 @@ export async function updateAcquirePurchaseStage(
 
     if (existing.stage === stage) return { ok: true, id: purchaseId };
 
-    const { error } = await ctx.supabase
+    const { data: updated, error } = await ctx.supabase
       .from("acq_purchases")
       .update({
         stage,
         updated_by: ctx.profile.id,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", purchaseId);
+      .eq("id", purchaseId)
+      .select("*")
+      .single();
 
     if (error) return { ok: false, error: error.message };
 
@@ -381,7 +386,7 @@ export async function updateAcquirePurchaseStage(
     });
 
     revalidateAcquire();
-    return { ok: true, id: purchaseId };
+    return { ok: true, id: purchaseId, purchase: updated as AcqPurchase };
   } catch (e) {
     return {
       ok: false,

@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { IC } from "@/lib/inventory-command/midmo";
 import {
   ACQ_EXIT_STRATEGIES,
@@ -185,6 +184,7 @@ export default function PurchaseDetail({
   vehicleModels,
   canEdit,
   onClose,
+  onSaved,
 }: {
   purchase: AcqPurchase;
   storeName: string;
@@ -193,8 +193,9 @@ export default function PurchaseDetail({
   vehicleModels: VehicleCatalogModel[];
   canEdit: boolean;
   onClose: () => void;
+  /** Called after a successful save, before the flip-close animation. */
+  onSaved?: (updated: AcqPurchase) => void;
 }) {
-  const router = useRouter();
   const [tab, setTab] = useState<Tab>("Overview");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -348,7 +349,16 @@ export default function PurchaseDetail({
       const res = await updateAcquirePurchase(purchase.id, fd);
       if (!res.ok) setError(res.error);
       else {
-        router.refresh();
+        const saved: AcqPurchase = {
+          ...purchase,
+          ...(res.purchase ?? {}),
+          // Stage change resets dwell time until server refresh recalculates.
+          days_in_step:
+            (res.purchase?.stage ?? stage) !== purchase.stage
+              ? 0
+              : (res.purchase?.days_in_step ?? purchase.days_in_step ?? 0),
+        };
+        onSaved?.(saved);
         onClose();
       }
     });

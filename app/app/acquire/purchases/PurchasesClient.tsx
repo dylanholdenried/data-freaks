@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   IcKpi,
@@ -13,12 +13,20 @@ import { IC } from "@/lib/inventory-command/midmo";
 import {
   ACQ_STAGE_LABELS,
   ACQ_STAGES,
+  isActiveStage,
   isCompletedStage,
   type AcqBuyer,
   type AcqPurchase,
   type AcqPurchaseStage,
 } from "@/lib/acquire/types";
-import { effectiveGross, formatMoney } from "@/lib/acquire/cost";
+import {
+  allInCost,
+  effectiveGross,
+  formatMoney,
+  headerAgeDays,
+  num,
+} from "@/lib/acquire/cost";
+import { countAcquireActionItems } from "@/lib/acquire/action-items";
 import { storesQueryString } from "@/lib/acquire/store-labels";
 import AcquireStorePills from "../AcquireStorePills";
 import PurchaseCard, { type CardOriginRect } from "./PurchaseCard";
@@ -56,6 +64,14 @@ export default function PurchasesClient({
   const [flipOrigin, setFlipOrigin] = useState<CardOriginRect | null>(null);
   const [adding, setAdding] = useState(false);
   const [bulkUploading, setBulkUploading] = useState(false);
+  /** Optimistic + post-save list until server props catch up. */
+  const [localPurchases, setLocalPurchases] = useState(purchases);
+  const refreshAfterCloseRef = useRef(false);
+  const pendingBucketRef = useRef<AcqPurchaseStage | null>(null);
+
+  useEffect(() => {
+    setLocalPurchases(purchases);
+  }, [purchases]);
 
   const storeNameById = useMemo(() => {
     const m: Record<string, string> = {};
@@ -65,8 +81,37 @@ export default function PurchasesClient({
 
   const storePurchases = useMemo(() => {
     const allowed = new Set(selectedStoreIds);
-    return purchases.filter((p) => allowed.has(p.store_id));
-  }, [purchases, selectedStoreIds]);
+    return localPurchases.filter((p) => allowed.has(p.store_id));
+  }, [localPurchases, selectedStoreIds]);
+
+  function applyPurchaseUpdate(updated: AcqPurchase, opts?: { switchBucketNow?: boolean }) {
+    setLocalPurchases((prev) =>
+      prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p))
+    );
+    if (opts?.switchBucketNow !== false) {
+      setPill(updated.stage);
+    }
+  }
+
+  function handleDetailSaved(updated: AcqPurchase) {
+    // Keep current bucket until flip closes, then jump to the new stage.
+    applyPurchaseUpdate(updated, { switchBucketNow: false });
+    pendingBucketRef.current = updated.stage;
+    refreshAfterCloseRef.current = true;
+  }
+
+  function handleOverlayClose() {
+    setSelectedId(null);
+    setFlipOrigin(null);
+    if (pendingBucketRef.current) {
+      setPill(pendingBucketRef.current);
+      pendingBucketRef.current = null;
+    }
+    if (refreshAfterCloseRef.current) {
+      refreshAfterCloseRef.current = false;
+      router.refresh();
+    }
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -108,16 +153,42 @@ export default function PurchasesClient({
 
   const now = new Date();
   const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const activePurchases = storePurchases.filter((p) => isActiveStage(p.stage));
+
+  function capitalOf(p: AcqPurchase): number | null {
+    const allIn = allInCost(p);
+    if (allIn != null) return allIn;
+    if (p.purchase_price == null) return null;
+    return num(p.purchase_price);
+  }
+
+  const activeCapital = activePurchases.reduce((sum, p) => sum + (capitalOf(p) ?? 0), 0);
+  const hasActiveCapital = activePurchases.some((p) => capitalOf(p) != null);
+
+  const AGING_DAYS = 45;
+  const agingCars = activePurchases.filter((p) => {
+    const age = headerAgeDays(p, now);
+    return age != null && age >= AGING_DAYS;
+  });
+  const agingCapital = agingCars.reduce((sum, p) => sum + (capitalOf(p) ?? 0), 0);
+
   const soldMonth = storePurchases.filter(
     (p) => p.stage === "sold" && (p.sold_date ?? "").startsWith(monthPrefix)
   );
-  const monthGrosses = soldMonth
-    .map((p) => effectiveGross(p))
-    .filter((g): g is number => g != null);
-  const avgGross =
-    monthGrosses.length === 0
-      ? null
-      : monthGrosses.reduce((sum, g) => sum + g, 0) / monthGrosses.length;
+  const monthTotalGross = soldMonth.reduce((sum, p) => {
+    const g = effectiveGross(p);
+    return g != null ? sum + g : sum;
+  }, 0);
+  const hasMonthGross = soldMonth.some((p) => effectiveGross(p) != null);
+
+  const openActionItems = activePurchases.reduce(
+    (sum, p) => sum + countAcquireActionItems(p),
+    0
+  );
+
+  const onHoldCars = storePurchases.filter((p) => p.on_hold);
+  const onHoldCapital = onHoldCars.reduce((sum, p) => sum + (capitalOf(p) ?? 0), 0);
+  const hasOnHoldCapital = onHoldCars.some((p) => capitalOf(p) != null);
 
   function onStoresChange(next: string[]) {
     setSelectedStoreIds(next);
@@ -184,19 +255,35 @@ export default function PurchasesClient({
         />
       </div>
 
-      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
-        {stageCounts.map(({ stage, count }) => (
-          <IcKpi key={stage} label={ACQ_STAGE_LABELS[stage]} value={count} />
-        ))}
-        <IcKpi label="Sold this month" value={soldMonth.length} status="ok" />
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <IcKpi
-          label="On Hold"
-          value={onHoldCount}
-          status={onHoldCount > 0 ? "warn" : undefined}
+          label="Active capital"
+          value={hasActiveCapital ? formatMoney(activeCapital) : "—"}
+          sub={`${activePurchases.length} active`}
         />
         <IcKpi
-          label="Avg gross (mo)"
-          value={avgGross != null && Number.isFinite(avgGross) ? formatMoney(avgGross) : "—"}
+          label={`Aging ${AGING_DAYS}+d`}
+          value={agingCars.length}
+          sub={agingCars.length ? formatMoney(agingCapital) : "No aged units"}
+          status={agingCars.length > 0 ? "bad" : "ok"}
+        />
+        <IcKpi
+          label="Month total gross"
+          value={hasMonthGross ? formatMoney(monthTotalGross) : "—"}
+          sub={`${soldMonth.length} sold`}
+          status="ok"
+        />
+        <IcKpi
+          label="Open action items"
+          value={openActionItems}
+          sub="Active pipeline"
+          status={openActionItems > 0 ? "warn" : "ok"}
+        />
+        <IcKpi
+          label="On Hold $"
+          value={hasOnHoldCapital || onHoldCount > 0 ? formatMoney(onHoldCapital) : "—"}
+          sub={`${onHoldCount} unit${onHoldCount === 1 ? "" : "s"}`}
+          status={onHoldCount > 0 ? "warn" : undefined}
         />
       </div>
 
@@ -289,6 +376,10 @@ export default function PurchasesClient({
                   setFlipOrigin(origin);
                   setSelectedId(p.id);
                 }}
+                onPurchaseUpdated={(updated) => {
+                  applyPurchaseUpdate(updated);
+                  router.refresh();
+                }}
               />
             ))}
           </div>
@@ -305,10 +396,8 @@ export default function PurchasesClient({
           vehicleModels={vehicleModels}
           canEdit={canEdit}
           origin={flipOrigin}
-          onClose={() => {
-            setSelectedId(null);
-            setFlipOrigin(null);
-          }}
+          onClose={handleOverlayClose}
+          onSaved={handleDetailSaved}
         />
       ) : null}
 

@@ -31,6 +31,7 @@ export default function PurchaseFlipOverlay({
   canEdit,
   origin,
   onClose,
+  onSaved,
 }: {
   purchase: AcqPurchase;
   storeName: string;
@@ -40,10 +41,16 @@ export default function PurchaseFlipOverlay({
   canEdit: boolean;
   origin: CardOriginRect;
   onClose: () => void;
+  onSaved?: (updated: AcqPurchase) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [displayPurchase, setDisplayPurchase] = useState(purchase);
   const dest = useMemo(() => targetRect(), []);
+
+  useEffect(() => {
+    setDisplayPurchase(purchase);
+  }, [purchase]);
 
   useEffect(() => {
     const reduce =
@@ -78,6 +85,11 @@ export default function PurchaseFlipOverlay({
     setClosing(true);
     setOpen(false);
     window.setTimeout(() => onClose(), FLIP_MS);
+  }
+
+  function handleSaved(updated: AcqPurchase) {
+    setDisplayPurchase(updated);
+    onSaved?.(updated);
   }
 
   const box = open && !closing ? dest : origin;
@@ -118,7 +130,7 @@ export default function PurchaseFlipOverlay({
         >
           <div className="acq-flip-face acq-flip-front pointer-events-none">
             <PurchaseCardFace
-              purchase={purchase}
+              purchase={displayPurchase}
               storeName={storeName}
               canEdit={canEdit}
               interactive={false}
@@ -135,6 +147,7 @@ export default function PurchaseFlipOverlay({
               vehicleModels={vehicleModels}
               canEdit={canEdit}
               onClose={requestClose}
+              onSaved={handleSaved}
             />
           </div>
         </div>

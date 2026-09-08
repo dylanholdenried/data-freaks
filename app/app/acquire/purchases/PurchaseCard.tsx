@@ -59,6 +59,7 @@ export function PurchaseCardFace({
   canEdit,
   interactive = true,
   className,
+  onPurchaseUpdated,
 }: {
   purchase: AcqPurchase;
   storeName: string;
@@ -66,6 +67,7 @@ export function PurchaseCardFace({
   /** When false, stage dropdown is display-only (used on flying overlay front). */
   interactive?: boolean;
   className?: string;
+  onPurchaseUpdated?: (updated: AcqPurchase) => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -79,8 +81,8 @@ export function PurchaseCardFace({
   });
   const vin = purchase.vin?.trim() || "—";
   const completed = isCompletedStage(purchase.stage);
-  const ageLabel = completed ? "Sold Age" : "Days in step";
-  const ageDays = completed ? headerAgeDays(purchase) : purchase.days_in_step;
+  const vehicleAge = headerAgeDays(purchase);
+  const daysInStep = purchase.days_in_step;
   const actionItemLabels = missingAcquireActionItems(purchase).map((i) => i.label);
   const actionItems = actionItemLabels.length;
   const cost = merchCost(purchase);
@@ -105,7 +107,15 @@ export function PurchaseCardFace({
     startTransition(async () => {
       const res = await updateAcquirePurchaseStage(purchase.id, stage);
       if (!res.ok) setStageError(res.error);
-      else router.refresh();
+      else if (res.purchase) {
+        onPurchaseUpdated?.({
+          ...purchase,
+          ...res.purchase,
+          days_in_step: 0,
+        });
+      } else {
+        router.refresh();
+      }
     });
   }
 
@@ -130,16 +140,43 @@ export function PurchaseCardFace({
 
       <div className="flex w-full min-w-0 flex-col gap-1.5 px-2.5 pb-2.5 pt-3">
         <div className="flex min-w-0 items-start justify-between gap-2">
-          <div
-            className="flex min-h-9 max-w-[55%] shrink items-center justify-center break-all rounded-md px-1.5 py-1 text-center text-sm font-bold leading-tight tracking-wide"
-            style={{
-              background: colors.badge,
-              color: IC.text,
-              fontFamily: "var(--ic-font-display), Barlow Condensed, sans-serif",
-            }}
-            title={stock}
-          >
-            {stock}
+          <div className="flex min-w-0 max-w-[55%] flex-col items-start gap-1">
+            <div
+              className="flex min-h-9 max-w-full items-center justify-center break-all rounded-md px-1.5 py-1 text-center text-sm font-bold leading-tight tracking-wide"
+              style={{
+                background: colors.badge,
+                color: IC.text,
+                fontFamily: "var(--ic-font-display), Barlow Condensed, sans-serif",
+              }}
+              title={stock}
+            >
+              {stock}
+            </div>
+            <p
+              className="text-[10px] font-semibold uppercase tracking-[0.08em]"
+              style={{ color: IC.muted }}
+            >
+              Age
+            </p>
+            <div
+              className="inline-flex items-center justify-center rounded-md px-2 py-0.5"
+              style={{ background: colors.badge, boxShadow: `inset 0 0 0 1px ${colors.stripe}55` }}
+              title={
+                completed
+                  ? "Days from purchase to sold"
+                  : "Days since purchase"
+              }
+            >
+              <span
+                className="text-base font-bold leading-none tabular-nums"
+                style={{
+                  fontFamily: "var(--ic-font-display), Barlow Condensed, sans-serif",
+                  color: IC.text,
+                }}
+              >
+                {vehicleAge != null ? `${vehicleAge}d` : "—"}
+              </span>
+            </div>
           </div>
           <div className="min-w-0 max-w-[45%] shrink-0 text-right">
             <p
@@ -153,7 +190,7 @@ export function PurchaseCardFace({
               className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]"
               style={{ color: IC.muted }}
             >
-              {ageLabel}
+              Days in step
             </p>
             <div
               className="mt-0.5 inline-flex items-center justify-center rounded-md px-2 py-0.5"
@@ -166,7 +203,7 @@ export function PurchaseCardFace({
                   color: IC.text,
                 }}
               >
-                {ageDays != null ? `${ageDays}d` : "—"}
+                {daysInStep != null ? `${daysInStep}d` : "—"}
               </span>
             </div>
             <p
@@ -290,6 +327,7 @@ export default function PurchaseCard({
   canEdit,
   hidden,
   onOpen,
+  onPurchaseUpdated,
 }: {
   purchase: AcqPurchase;
   storeName: string;
@@ -297,6 +335,7 @@ export default function PurchaseCard({
   /** Keep layout space but hide while the flying card is open. */
   hidden?: boolean;
   onOpen: (origin: CardOriginRect) => void;
+  onPurchaseUpdated?: (updated: AcqPurchase) => void;
 }) {
   return (
     <article
@@ -324,7 +363,12 @@ export default function PurchaseCard({
         hidden && "invisible pointer-events-none"
       )}
     >
-      <PurchaseCardFace purchase={purchase} storeName={storeName} canEdit={canEdit} />
+      <PurchaseCardFace
+        purchase={purchase}
+        storeName={storeName}
+        canEdit={canEdit}
+        onPurchaseUpdated={onPurchaseUpdated}
+      />
     </article>
   );
 }
