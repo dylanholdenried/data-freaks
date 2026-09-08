@@ -25,6 +25,7 @@ import AcquireStorePills from "../AcquireStorePills";
 import PurchaseCard, { type CardOriginRect } from "./PurchaseCard";
 import PurchaseFlipOverlay from "./PurchaseFlipOverlay";
 import AddPurchaseModal from "./AddPurchaseModal";
+import BulkUploadModal from "./BulkUploadModal";
 
 export default function PurchasesClient({
   stores,
@@ -50,6 +51,7 @@ export default function PurchasesClient({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [flipOrigin, setFlipOrigin] = useState<CardOriginRect | null>(null);
   const [adding, setAdding] = useState(false);
+  const [bulkUploading, setBulkUploading] = useState(false);
 
   const storeNameById = useMemo(() => {
     const m: Record<string, string> = {};
@@ -153,14 +155,24 @@ export default function PurchasesClient({
           </p>
         </div>
         {canEdit ? (
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className="rounded-md px-3 py-2 text-xs font-semibold text-white"
-            style={{ background: IC.blue }}
-          >
-            + Log purchase
-          </button>
+          <div className="flex flex-col items-stretch gap-2 sm:items-end">
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className="rounded-md px-3 py-2 text-xs font-semibold text-white"
+              style={{ background: IC.blue }}
+            >
+              + Log purchase
+            </button>
+            <button
+              type="button"
+              onClick={() => setBulkUploading(true)}
+              className="rounded-md border px-3 py-2 text-xs font-semibold"
+              style={{ borderColor: IC.border, color: IC.text, background: IC.rowAlt }}
+            >
+              Bulk Upload
+            </button>
+          </div>
         ) : null}
       </div>
 
@@ -299,6 +311,13 @@ export default function PurchasesClient({
           buyers={buyers}
           defaultStoreId={defaultCreateStoreId}
           onClose={() => setAdding(false)}
+        />
+      ) : null}
+
+      {bulkUploading ? (
+        <BulkUploadModal
+          storeNames={stores.map((s) => s.name)}
+          onClose={() => setBulkUploading(false)}
         />
       ) : null}
     </IcRoot>

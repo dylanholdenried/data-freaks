@@ -136,11 +136,9 @@ export function parseVehMakeModel(veh: string | null | undefined): {
 }
 
 export function storeShortLabel(name: string): string {
-  const n = name.toLowerCase();
-  if (n.includes("linn")) return "LINN";
-  if (n.includes("centralia")) return "CENTRALIA";
-  const first = name.split(/\s+/)[0] ?? name;
-  return first.toUpperCase().slice(0, 12);
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const last = parts[parts.length - 1] ?? name;
+  return last.toUpperCase().slice(0, 12);
 }
 
 export function storeAccent(name: string): string {

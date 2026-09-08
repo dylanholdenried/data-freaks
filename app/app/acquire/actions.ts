@@ -395,3 +395,197 @@ export async function maybeNudgeAcquirePendingSale(opts: {
     console.error("maybeNudgeAcquirePendingSale", e);
   }
 }
+
+export async function getAcquirePurchasesTemplateCsvAction(): Promise<string> {
+  const ctx = await requireAcquireMutator();
+  if (!ctx.ok) throw new Error(ctx.error);
+  const { buildAcquirePurchasesCsvTemplate } = await import("@/lib/acquire/bulk-upload");
+  return buildAcquirePurchasesCsvTemplate();
+}
+
+export type AcqBulkUploadResult =
+  | {
+      ok: true;
+      inserted: number;
+      skipped: number;
+      warnings: string[];
+    }
+  | { ok: false; error: string; warnings?: string[] };
+
+export async function bulkUploadAcquirePurchasesAction(
+  formData: FormData
+): Promise<AcqBulkUploadResult> {
+  try {
+    const ctx = await requireAcquireMutator();
+    if (!ctx.ok) return { ok: false, error: ctx.error };
+
+    const file = formData.get("file");
+    if (!(file instanceof File) || file.size === 0) {
+      return { ok: false, error: "Choose a CSV file." };
+    }
+
+    const text = await file.text();
+    const {
+      parseAcquirePurchasesCsv,
+      matchStoreId,
+      matchBuyerId,
+    } = await import("@/lib/acquire/bulk-upload");
+    const { computeIsIncoming } = await import("@/lib/acquire/incoming");
+
+    const parsed = parseAcquirePurchasesCsv(text);
+    if (!parsed.ok) {
+      return { ok: false, error: parsed.error, warnings: parsed.warnings };
+    }
+
+    const warnings = [...parsed.warnings];
+
+    const [{ data: storeRows }, { data: buyerRows }] = await Promise.all([
+      ctx.supabase
+        .from("stores")
+        .select("id, name, dealer_group_id")
+        .eq("dealer_group_id", ctx.dealerGroupId),
+      ctx.supabase
+        .from("acq_buyers")
+        .select("id, name, active")
+        .eq("dealer_group_id", ctx.dealerGroupId),
+    ]);
+
+    const stores = (storeRows ?? []).map((s) => ({ id: s.id, name: s.name }));
+    const buyers = (buyerRows ?? []) as { id: string; name: string; active: boolean }[];
+
+    const inserts: Record<string, unknown>[] = [];
+    let skipped = 0;
+    const storeIdsToSync = new Set<string>();
+
+    for (const row of parsed.rows) {
+      const storeId = matchStoreId(row.dealership, stores);
+      if (!storeId) {
+        warnings.push(`Row ${row.rowNumber}: unknown dealership "${row.dealership}" — skipped.`);
+        skipped += 1;
+        continue;
+      }
+      if (!(await assertStoreAccess(ctx.supabase, ctx.profile, storeId))) {
+        warnings.push(`Row ${row.rowNumber}: no access to "${row.dealership}" — skipped.`);
+        skipped += 1;
+        continue;
+      }
+
+      let buyerId = matchBuyerId(row.buyerName, buyers);
+      if (row.buyerName && !buyerId) {
+        warnings.push(
+          `Row ${row.rowNumber}: buyer "${row.buyerName}" not found in Setup — purchase will save without buyer.`
+        );
+      }
+
+      const hasTrade = row.has_trade;
+      const payload = {
+        store_id: storeId,
+        dealer_group_id: ctx.dealerGroupId,
+        stage: row.status,
+        buyer_id: buyerId,
+        stock_number: row.stock_number,
+        vin: row.vin,
+        vehicle_year: row.vehicle_year,
+        vehicle_make: row.vehicle_make,
+        vehicle_model: row.vehicle_model,
+        vehicle_trim: row.vehicle_trim,
+        color: row.color,
+        odometer: row.odometer,
+        source_type: row.source_type,
+        seller_name: row.seller_name,
+        auction_house: row.seller_name,
+        purchase_date: row.purchase_date,
+        cr_grade: row.cr_grade,
+        purchase_price: row.purchase_price,
+        auction_fees: row.auction_fees,
+        transport_cost: row.transport_cost,
+        recon_estimate: row.recon_estimate,
+        purchase_mmr: row.purchase_mmr,
+        purchase_jd: row.purchase_jd,
+        delivery_date: row.delivery_date,
+        frontline_date: row.frontline_date,
+        recon_cost: row.recon_cost,
+        recon_description_done: row.recon_description_done,
+        recon_merchandising_done: row.recon_merchandising_done,
+        recon_frontline_done: row.recon_frontline_done,
+        sold_date: row.sold_date,
+        sold_price: row.sold_price,
+        exit_strategy: row.exit_strategy,
+        front_gross: row.front_gross,
+        back_gross: row.back_gross,
+        total_gross: row.total_gross,
+        next_store_profit:
+          row.exit_strategy === "internal_transfer" ? row.next_store_profit : null,
+        has_trade: hasTrade,
+        trade_stock_number: hasTrade ? row.trade_stock_number : null,
+        trade_vin: hasTrade ? row.trade_vin : null,
+        trade_year: hasTrade ? row.trade_year : null,
+        trade_make: hasTrade ? row.trade_make : null,
+        trade_model: hasTrade ? row.trade_model : null,
+        trade_acv: hasTrade ? row.trade_acv : null,
+        trade_allowance: hasTrade ? row.trade_allowance : null,
+        created_by: ctx.profile.id,
+        updated_by: ctx.profile.id,
+      };
+
+      const is_incoming = computeIsIncoming(payload);
+      inserts.push({ ...payload, is_incoming });
+      storeIdsToSync.add(storeId);
+    }
+
+    if (!inserts.length) {
+      return {
+        ok: false,
+        error: "No rows could be imported. Check dealership names against your stores.",
+        warnings,
+      };
+    }
+
+    const { data: inserted, error } = await ctx.supabase
+      .from("acq_purchases")
+      .insert(inserts)
+      .select("id, stage");
+
+    if (error) {
+      console.error("bulkUploadAcquirePurchases", error);
+      return { ok: false, error: error.message, warnings };
+    }
+
+    const created = inserted ?? [];
+    if (created.length) {
+      await ctx.supabase.from("acq_stage_events").insert(
+        created.map((r) => ({
+          purchase_id: r.id,
+          from_stage: null,
+          to_stage: r.stage,
+          actor_profile_id: ctx.profile.id,
+          note: "Bulk upload",
+        }))
+      );
+    }
+
+    try {
+      const service = createSupabaseServiceClient();
+      const { syncAcquireOverlaysForStoresLatest } = await import(
+        "@/lib/acquire/sync-inventory"
+      );
+      await syncAcquireOverlaysForStoresLatest(service, Array.from(storeIdsToSync));
+    } catch (syncErr) {
+      console.error("Acquire overlay sync after bulk upload", syncErr);
+    }
+
+    revalidateAcquire();
+    return {
+      ok: true,
+      inserted: created.length,
+      skipped,
+      warnings,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Bulk upload failed",
+    };
+  }
+}
+
