@@ -51,6 +51,7 @@ export async function listDealerGroupsForAdmin(): Promise<DealerGroupOption[]> {
 export type DealerGroupPlanInfo = {
   plan: string | null;
   name: string | null;
+  acquire_enabled: boolean;
 };
 
 export async function getDealerGroupPlanInfo(
@@ -61,7 +62,7 @@ export async function getDealerGroupPlanInfo(
   const service = createSupabaseServiceClient();
   const { data, error } = await service
     .from("dealer_groups")
-    .select("plan, name")
+    .select("plan, name, acquire_enabled")
     .eq("id", groupId)
     .maybeSingle();
 
@@ -72,7 +73,11 @@ export async function getDealerGroupPlanInfo(
 
   if (!data) return null;
 
-  return { plan: data.plan ?? null, name: data.name ?? null };
+  return {
+    plan: data.plan ?? null,
+    name: data.name ?? null,
+    acquire_enabled: Boolean(data.acquire_enabled),
+  };
 }
 
 export async function getDealerGroupPlan(
@@ -80,4 +85,11 @@ export async function getDealerGroupPlan(
 ): Promise<string | null> {
   const info = await getDealerGroupPlanInfo(groupId);
   return info?.plan ?? null;
+}
+
+export async function getDealerGroupAcquireEnabled(
+  groupId: string | null | undefined
+): Promise<boolean> {
+  const info = await getDealerGroupPlanInfo(groupId);
+  return Boolean(info?.acquire_enabled);
 }

@@ -14,6 +14,8 @@ import {
   Trophy,
   Lock,
   Crosshair,
+  ShoppingBag,
+  BarChart3,
 } from "lucide-react";
 import { navAccessState, type PlanTier } from "@/lib/plan-access";
 import { isViewerNavHref } from "@/lib/roles";
@@ -95,17 +97,35 @@ const ADVISE_LINKS: NavItem[] = [
   },
 ];
 
+const ACQUIRE_LINKS: NavItem[] = [
+  {
+    href: "/app/acquire/purchases",
+    label: "Purchases",
+    icon: ShoppingBag,
+    match: (p) => p.startsWith("/app/acquire/purchases"),
+  },
+  {
+    href: "/app/acquire/performance",
+    label: "Performance",
+    icon: BarChart3,
+    match: (p) => p.startsWith("/app/acquire/performance"),
+  },
+];
+
 const SECTIONS: { title: string; links: NavItem[] }[] = [
   { title: "Log", links: LOG_LINKS },
   { title: "Analyze", links: ANALYZE_LINKS },
   { title: "Advise", links: ADVISE_LINKS },
+  { title: "Acquire", links: ACQUIRE_LINKS },
 ];
 
 export default function AppSidebarNav({
   plan = "log",
+  acquireEnabled = false,
   viewOnly = false,
 }: {
   plan?: PlanTier | string | null;
+  acquireEnabled?: boolean;
   viewOnly?: boolean;
 }) {
   const pathname = usePathname();
@@ -124,7 +144,8 @@ export default function AppSidebarNav({
             </p>
             <div className="space-y-1">
               {visibleLinks.map(({ href, label, icon: Icon, match }) => {
-                const locked = navAccessState(plan, href) === "locked";
+                const locked =
+                  navAccessState(plan, href, { acquireEnabled }) === "locked";
                 const active = !locked && match(pathname);
                 return (
                   <Link
@@ -133,7 +154,13 @@ export default function AppSidebarNav({
                     prefetch
                     className={cn(locked ? navLinkLocked : active ? navLinkActive : navLink)}
                     aria-current={active ? "page" : undefined}
-                    title={locked ? `Requires ${title} plan` : undefined}
+                    title={
+                      locked
+                        ? title === "Acquire"
+                          ? "Requires Acquire addon"
+                          : `Requires ${title} plan`
+                        : undefined
+                    }
                   >
                     <Icon className="h-3.5 w-3.5 shrink-0" />
                     <span className="min-w-0 flex-1 truncate">{label}</span>

@@ -231,6 +231,7 @@ create table public.dealer_groups (
   number_of_stores integer,
   is_demo boolean not null default false,
   is_active boolean not null default true,
+  acquire_enabled boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

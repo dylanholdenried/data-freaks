@@ -268,6 +268,18 @@ export async function createDeal(formData: FormData) {
     await supabase.from("deal_notes").insert({ deal_id: deal.id, author_id: profile.id, body: note });
   }
 
+  try {
+    const { maybeNudgeAcquirePendingSale } = await import("@/app/app/acquire/actions");
+    await maybeNudgeAcquirePendingSale({
+      storeId,
+      stockNumber: payload.stock_number,
+      vin: payload.vin,
+      actorProfileId: profile.id,
+    });
+  } catch (e) {
+    console.error("Acquire pending_sale nudge after createDeal", e);
+  }
+
   revalidatePath("/app/deals");
   revalidatePath("/app/dashboard");
   redirect("/app/deals");

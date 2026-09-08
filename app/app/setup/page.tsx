@@ -83,6 +83,8 @@ export default async function SetupPage({
         acquisitionSources={[]}
         acquisitionSourceDepartments={[]}
         financeManagers={[]}
+        acquireBuyers={[]}
+        dealerGroupId={dealerGroupId}
         initialGoals={[]}
         initialYear={initialYear}
         initialMonth={initialMonth}
@@ -93,8 +95,8 @@ export default async function SetupPage({
     );
   }
 
-  // Parallel: departments, salespeople, acquisition sources, finance managers
-  const [deptRes, spRes, srcRes, fmRes] = await Promise.all([
+  // Parallel: departments, salespeople, acquisition sources, finance managers, acquire buyers
+  const [deptRes, spRes, srcRes, fmRes, buyersRes] = await Promise.all([
     supabase
       .from("departments")
       .select("id,name,store_id,rolls_up_to_department_id")
@@ -115,6 +117,11 @@ export default async function SetupPage({
       .select("id,name,store_id,active")
       .in("store_id", storeIds)
       .order("name"),
+    supabase
+      .from("acq_buyers")
+      .select("id,name,active")
+      .eq("dealer_group_id", dealerGroupId)
+      .order("name"),
   ]);
 
   const departments = (deptRes.data ?? []) as unknown as DeptRow[];
@@ -125,6 +132,7 @@ export default async function SetupPage({
   const acquisitionSources = rawSources.map(({ acquisition_source_departments: _d, ...source }) => source);
   const acquisitionSourceDepartments = flattenAcquisitionSourceDepartmentLinks(rawSources);
   const financeManagers = (fmRes.data ?? []) as unknown as PersonRow[];
+  const acquireBuyers = (buyersRes.data ?? []) as { id: string; name: string; active: boolean }[];
 
   // Goals: sequential after departments — for the requested year/month
   const deptIds = departments.map((d) => d.id);
@@ -147,6 +155,8 @@ export default async function SetupPage({
       acquisitionSources={acquisitionSources}
       acquisitionSourceDepartments={acquisitionSourceDepartments}
       financeManagers={financeManagers}
+      acquireBuyers={acquireBuyers}
+      dealerGroupId={dealerGroupId}
       initialGoals={initialGoals}
       initialYear={initialYear}
       initialMonth={initialMonth}

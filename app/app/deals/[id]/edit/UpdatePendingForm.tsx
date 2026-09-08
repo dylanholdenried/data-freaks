@@ -814,6 +814,17 @@ export default function UpdatePendingForm({
         );
       }
 
+      try {
+        const { maybeNudgeAcquirePendingSale } = await import("@/app/app/acquire/actions");
+        await maybeNudgeAcquirePendingSale({
+          storeId,
+          stockNumber,
+          vin: vin.trim() || null,
+        });
+      } catch {
+        /* best-effort */
+      }
+
       setSaved(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err: unknown) {

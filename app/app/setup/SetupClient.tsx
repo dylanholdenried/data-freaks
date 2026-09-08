@@ -33,6 +33,8 @@ interface Props {
   acquisitionSources: SourceRow[];
   acquisitionSourceDepartments: SourceDepartmentLink[];
   financeManagers: PersonRow[];
+  acquireBuyers: { id: string; name: string; active: boolean }[];
+  dealerGroupId: string;
   initialGoals: GoalRow[];
   initialYear: number;
   initialMonth: number;
@@ -853,6 +855,103 @@ function RosterSection({
   );
 }
 
+// ── Acquire buyers (group-scoped) ─────────────────────────────────────────────
+
+function AcquireBuyersSection({
+  dealerGroupId,
+  initialBuyers,
+  readOnly = false,
+}: {
+  dealerGroupId: string;
+  initialBuyers: { id: string; name: string; active: boolean }[];
+  readOnly?: boolean;
+}) {
+  const [items, setItems] = useState(initialBuyers);
+  const [name, setName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [banner, setBanner] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
+
+  async function handleAdd() {
+    if (readOnly) return;
+    const n = name.trim();
+    if (!n || !dealerGroupId) return;
+    setSaving(true);
+    setBanner(null);
+    const supabase = createSupabaseBrowserClient();
+    const { data, error } = await supabase
+      .from("acq_buyers")
+      .insert({ name: n, dealer_group_id: dealerGroupId, active: true })
+      .select("id,name,active")
+      .single();
+    setSaving(false);
+    if (error || !data) {
+      setBanner({ kind: "err", msg: error?.message ?? "Failed to add buyer" });
+      return;
+    }
+    setItems((prev) => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+    setName("");
+    setBanner({ kind: "ok", msg: "Buyer added" });
+  }
+
+  async function handleToggle(id: string, active: boolean) {
+    if (readOnly) return;
+    const supabase = createSupabaseBrowserClient();
+    const { error } = await supabase.from("acq_buyers").update({ active: !active }).eq("id", id);
+    if (error) {
+      setBanner({ kind: "err", msg: error.message });
+      return;
+    }
+    setItems((prev) => prev.map((b) => (b.id === id ? { ...b, active: !active } : b)));
+  }
+
+  return (
+    <Card className="app-panel border-border shadow-none">
+      <CardHeader className="border-border">
+        <CardTitle className="text-lg">Acquire Buyers</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4 pt-4">
+        <p className="text-sm text-muted-foreground">
+          Names shown on Acquire purchase cards (who bought the car). Group-wide list.
+        </p>
+        {!readOnly ? (
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="min-w-[200px] flex-1">
+              <span className={LBL}>Buyer name</span>
+              <Input className="mt-1" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Dylan" />
+            </label>
+            <Button type="button" size="sm" disabled={saving || !name.trim()} onClick={() => void handleAdd()}>
+              <PlusCircle className="mr-1 h-3.5 w-3.5" />
+              Add
+            </Button>
+          </div>
+        ) : null}
+        {banner ? (
+          <p className={`text-xs ${banner.kind === "ok" ? "text-emerald-600" : "text-destructive"}`}>{banner.msg}</p>
+        ) : null}
+        {items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No buyers yet. Add buyers to use the Buyer dropdown in Acquire.</p>
+        ) : (
+          <div className="divide-y divide-border rounded-xl border border-border">
+            {items.map((b) => (
+              <div key={b.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                <span className={`text-sm font-medium ${b.active ? "text-foreground" : "text-muted-foreground line-through"}`}>
+                  {b.name}
+                </span>
+                {!readOnly ? (
+                  <Button type="button" size="sm" variant="outline" onClick={() => void handleToggle(b.id, b.active)}>
+                    {b.active ? <UserMinus className="mr-1 h-3.5 w-3.5" /> : <UserCheck className="mr-1 h-3.5 w-3.5" />}
+                    {b.active ? "Deactivate" : "Activate"}
+                  </Button>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Main SetupClient ──────────────────────────────────────────────────────────
 
 export default function SetupClient({
@@ -862,6 +961,8 @@ export default function SetupClient({
   acquisitionSources,
   acquisitionSourceDepartments,
   financeManagers,
+  acquireBuyers,
+  dealerGroupId,
   initialGoals,
   initialYear,
   initialMonth,
@@ -1008,6 +1109,13 @@ export default function SetupClient({
         initialItems={financeManagers}
         emptyMessage="No finance managers yet. Add one above to enable F&I tracking on deals."
         hasActive
+        readOnly={readOnly}
+      />
+
+      {/* Section 6: Acquire Buyers */}
+      <AcquireBuyersSection
+        dealerGroupId={dealerGroupId}
+        initialBuyers={acquireBuyers}
         readOnly={readOnly}
       />
     </div>

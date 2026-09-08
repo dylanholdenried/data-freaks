@@ -41,6 +41,13 @@ const SECTIONS: { title: string; links: NavItem[] }[] = [
       { href: "/app/buy-box", label: "Buy-Box" },
     ],
   },
+  {
+    title: "Acquire",
+    links: [
+      { href: "/app/acquire/purchases", label: "Purchases" },
+      { href: "/app/acquire/performance", label: "Performance" },
+    ],
+  },
 ];
 
 export default function AppMobileMenu({
@@ -48,12 +55,14 @@ export default function AppMobileMenu({
   groups = [],
   selectedGroupId = null,
   plan = "log",
+  acquireEnabled = false,
   viewOnly = false,
 }: {
   isPlatformAdmin?: boolean;
   groups?: AutoGroupOption[];
   selectedGroupId?: string | null;
   plan?: PlanTier | string | null;
+  acquireEnabled?: boolean;
   viewOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -141,7 +150,8 @@ export default function AppMobileMenu({
                       {title}
                     </p>
                     {visibleLinks.map(({ href, label }) => {
-                      const locked = navAccessState(plan, href) === "locked";
+                      const locked =
+                        navAccessState(plan, href, { acquireEnabled }) === "locked";
                       return (
                         <Link
                           key={href}

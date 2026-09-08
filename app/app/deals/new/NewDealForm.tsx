@@ -560,6 +560,16 @@ export default function NewDealForm({
 
       // Show success, reset for next entry
       setSavedDeal({ id: dealId, stockNumber: savedStock, customerLastName: savedCustomer });
+      try {
+        const { maybeNudgeAcquirePendingSale } = await import("@/app/app/acquire/actions");
+        await maybeNudgeAcquirePendingSale({
+          storeId,
+          stockNumber: savedStock,
+          vin: vin.trim() || null,
+        });
+      } catch {
+        /* best-effort */
+      }
       resetForm();
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err: unknown) {

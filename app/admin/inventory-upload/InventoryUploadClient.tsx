@@ -1,11 +1,13 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Download, Loader2, Upload } from "lucide-react";
+import { Download, Loader2, Undo2, Upload } from "lucide-react";
 import {
   getInventoryTemplateCsvAction,
+  undoInventoryUploadAction,
   uploadInventoryExportAction,
   type InventoryUploadResult,
 } from "./actions";
@@ -26,11 +28,14 @@ export default function InventoryUploadClient({
   groups,
   stores,
   recent,
+  latestIdByStore,
 }: {
   groups: Group[];
   stores: Store[];
   recent: Recent[];
+  latestIdByStore: Record<string, string>;
 }) {
+  const router = useRouter();
   const [groupId, setGroupId] = useState("");
   const [storeId, setStoreId] = useState("");
   const [snapshotDate, setSnapshotDate] = useState(() =>
@@ -39,7 +44,9 @@ export default function InventoryUploadClient({
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<InventoryUploadResult | null>(null);
+  const [undoMsg, setUndoMsg] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [undoingId, setUndoingId] = useState<string | null>(null);
 
   const groupStores = useMemo(
     () => stores.filter((s) => s.dealer_group_id === groupId),
@@ -50,6 +57,9 @@ export default function InventoryUploadClient({
     const m = new Map(stores.map((s) => [s.id, s.name]));
     return m;
   }, [stores]);
+
+  /** Latest snapshot_date id per store — only these may be undone. */
+  const latestIds = latestIdByStore;
 
   async function downloadTemplate() {
     setError(null);
@@ -71,6 +81,7 @@ export default function InventoryUploadClient({
     e.preventDefault();
     setError(null);
     setResult(null);
+    setUndoMsg(null);
     if (!file) {
       setError("Choose a file");
       return;
@@ -89,6 +100,36 @@ export default function InventoryUploadClient({
       }
       setResult(res);
       setFile(null);
+      router.refresh();
+    });
+  }
+
+  function onUndo(r: Recent) {
+    const storeLabel = storeNameById.get(r.store_id) ?? r.store_id;
+    const ok = window.confirm(
+      `Undo snapshot ${r.snapshot_date} for ${storeLabel}?\n\nThis permanently deletes that day's units, metrics, movements, and price actions. Inventory Command will fall back to the previous day${r.source_filename ? `.\n\nFile: ${r.source_filename}` : "."}`
+    );
+    if (!ok) return;
+
+    setError(null);
+    setResult(null);
+    setUndoMsg(null);
+    setUndoingId(r.id);
+
+    startTransition(async () => {
+      const res = await undoInventoryUploadAction(r.id);
+      setUndoingId(null);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      const next = res.previousLatestDate
+        ? `Inventory Command now shows ${res.previousLatestDate}.`
+        : "No snapshots left for this store.";
+      setUndoMsg(
+        `Removed ${res.snapshotDate}${res.sourceFilename ? ` (${res.sourceFilename})` : ""}. ${next}`
+      );
+      router.refresh();
     });
   }
 
@@ -184,9 +225,14 @@ export default function InventoryUploadClient({
                 {result.priceActions} price actions.
               </p>
             ) : null}
+            {undoMsg ? (
+              <p className="rounded-md border border-[color-mix(in_srgb,var(--da-green)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-green)_12%,transparent)] px-3 py-2 text-sm text-[var(--da-green)]">
+                {undoMsg}
+              </p>
+            ) : null}
 
             <Button type="submit" disabled={pending || !groupId || !storeId || !file}>
-              {pending ? (
+              {pending && !undoingId ? (
                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
               ) : (
                 <Upload className="mr-1.5 h-3.5 w-3.5" />
@@ -200,6 +246,10 @@ export default function InventoryUploadClient({
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Recent snapshots</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Undo is available only for each store&apos;s latest snapshot day (so Inventory Command
+            deltas stay consistent). Undo newer days first to roll back further.
+          </p>
         </CardHeader>
         <CardContent>
           {recent.length === 0 ? (
@@ -213,26 +263,54 @@ export default function InventoryUploadClient({
                     <th className="py-2 pr-3 font-medium">Store</th>
                     <th className="py-2 pr-3 font-medium">File</th>
                     <th className="py-2 pr-3 font-medium">Rows</th>
-                    <th className="py-2 font-medium">Uploaded</th>
+                    <th className="py-2 pr-3 font-medium">Uploaded</th>
+                    <th className="py-2 font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {recent.map((r) => (
-                    <tr key={r.id} className="border-t border-border">
-                      <td className="py-2 pr-3">{r.snapshot_date}</td>
-                      <td className="py-2 pr-3">{storeNameById.get(r.store_id) ?? r.store_id}</td>
-                      <td className="py-2 pr-3">{r.source_filename ?? "—"}</td>
-                      <td className="py-2 pr-3">{r.row_count ?? "—"}</td>
-                      <td className="py-2">
-                        {new Date(r.created_at).toLocaleString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          hour: "numeric",
-                          minute: "2-digit",
-                        })}
-                      </td>
-                    </tr>
-                  ))}
+                  {recent.map((r) => {
+                    const canUndo = latestIds[r.store_id] === r.id;
+                    const busy = undoingId === r.id;
+                    return (
+                      <tr key={r.id} className="border-t border-border">
+                        <td className="py-2 pr-3">{r.snapshot_date}</td>
+                        <td className="py-2 pr-3">
+                          {storeNameById.get(r.store_id) ?? r.store_id}
+                        </td>
+                        <td className="py-2 pr-3">{r.source_filename ?? "—"}</td>
+                        <td className="py-2 pr-3">{r.row_count ?? "—"}</td>
+                        <td className="py-2 pr-3">
+                          {new Date(r.created_at).toLocaleString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}
+                        </td>
+                        <td className="py-2">
+                          {canUndo ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 px-2 text-xs"
+                              disabled={pending}
+                              onClick={() => onUndo(r)}
+                            >
+                              {busy ? (
+                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                              ) : (
+                                <Undo2 className="mr-1 h-3 w-3" />
+                              )}
+                              Undo
+                            </Button>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

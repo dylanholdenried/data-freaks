@@ -251,6 +251,54 @@ main:has(.da-app) + footer {
   }
 }
 
+/* Acquire continuous trading-card flip (same element: grid → centered back) */
+.acq-flip-inner {
+  position: relative;
+  transform-style: preserve-3d;
+  transform: rotateY(0deg);
+}
+
+.acq-flip-inner.is-flipped {
+  transform: rotateY(180deg);
+}
+
+.acq-flip-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  border-radius: 1rem;
+  overflow: hidden;
+}
+
+.acq-flip-front {
+  transform: rotateY(0deg);
+}
+
+.acq-flip-back {
+  transform: rotateY(180deg);
+}
+
+@keyframes acq-card-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.acq-card-backdrop {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .acq-flip-inner,
+  .acq-flip-scene {
+    transition: none !important;
+  }
+}
+
 /* nav */
 .da-nav {
   position: sticky;

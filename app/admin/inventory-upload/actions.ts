@@ -5,6 +5,7 @@ import { requireAdminContext } from "@/app/admin/admin-data";
 import { ingestInventoryExport } from "@/lib/inventory-command/ingest";
 import { seedInventoryHistory, type HistorySeedPayload } from "@/lib/inventory-command/seed-history";
 import { buildInventoryCsvTemplate } from "@/lib/inventory-command/template";
+import { undoInventorySnapshot } from "@/lib/inventory-command/undo";
 
 export async function getInventoryUploadBootstrap() {
   const { supabase } = await requireAdminContext();
@@ -21,6 +22,19 @@ export async function getInventoryUploadBootstrap() {
     .order("created_at", { ascending: false })
     .limit(30);
 
+  // True latest snapshot id per store (for undo affordance)
+  const { data: allLatest } = await supabase
+    .from("inv_snapshots")
+    .select("id,store_id,snapshot_date")
+    .order("snapshot_date", { ascending: false });
+
+  const latestIdByStore: Record<string, string> = {};
+  for (const row of allLatest ?? []) {
+    if (!latestIdByStore[row.store_id]) {
+      latestIdByStore[row.store_id] = row.id;
+    }
+  }
+
   return {
     groups: (groups ?? []) as { id: string; name: string; plan: string }[],
     stores: (stores ?? []) as { id: string; name: string; dealer_group_id: string }[],
@@ -32,6 +46,7 @@ export async function getInventoryUploadBootstrap() {
       row_count: number | null;
       created_at: string;
     }[],
+    latestIdByStore,
   };
 }
 
@@ -59,8 +74,8 @@ export async function uploadInventoryExportAction(
     const { supabase } = await requireAdminContext();
     const authClient = (await import("@/lib/supabase/server")).createSupabaseServerClient();
     const {
-      data: { session },
-    } = await authClient.auth.getSession();
+      data: { user },
+    } = await authClient.auth.getUser();
 
     const dealerGroupId = String(formData.get("dealerGroupId") || "").trim();
     const storeId = String(formData.get("storeId") || "").trim();
@@ -99,17 +114,64 @@ export async function uploadInventoryExportAction(
       snapshotDate,
       fileBuffer: buf,
       filename: file.name,
-      uploadedBy: session?.user.id ?? null,
+      uploadedBy: user?.id ?? null,
     });
+
+    try {
+      const { syncAcquireOverlaysForStore } = await import(
+        "@/lib/acquire/sync-inventory"
+      );
+      await syncAcquireOverlaysForStore(supabase, storeId, result.snapshotId);
+    } catch (syncErr) {
+      console.error("Acquire overlay sync after inventory upload", syncErr);
+    }
 
     revalidatePath("/admin/inventory-upload");
     revalidatePath("/app/inventory-command");
+    revalidatePath("/app/acquire/purchases");
+    revalidatePath("/app/acquire/performance");
 
     return { ok: true, ...result };
   } catch (e) {
     return {
       ok: false,
       error: e instanceof Error ? e.message : "Upload failed",
+    };
+  }
+}
+
+export type UndoInventoryResult = {
+  ok: true;
+  snapshotDate: string;
+  storeId: string;
+  sourceFilename: string | null;
+  previousLatestDate: string | null;
+};
+
+export async function undoInventoryUploadAction(
+  snapshotId: string
+): Promise<UndoInventoryResult | { ok: false; error: string }> {
+  try {
+    const { supabase } = await requireAdminContext();
+    const id = String(snapshotId || "").trim();
+    if (!id) return { ok: false, error: "Missing snapshot id" };
+
+    const result = await undoInventorySnapshot(supabase, id);
+
+    revalidatePath("/admin/inventory-upload");
+    revalidatePath("/app/inventory-command");
+
+    return {
+      ok: true,
+      snapshotDate: result.snapshotDate,
+      storeId: result.storeId,
+      sourceFilename: result.sourceFilename,
+      previousLatestDate: result.previousLatestDate,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Undo failed",
     };
   }
 }

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import {
+  getDealerGroupAcquireEnabled,
   getDealerGroupPlan,
   getEffectiveDealerGroupId,
   listDealerGroupsForAdmin,
@@ -65,6 +66,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const roleLabel = formatRoleLabel(profile.role);
 
   const groupPlan = await getDealerGroupPlan(selectedGroupId);
+  const acquireEnabled = await getDealerGroupAcquireEnabled(selectedGroupId);
 
   return (
     <DaAppThemeProvider>
@@ -83,7 +85,11 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               <AutoGroupSwitcher groups={groups} selectedGroupId={selectedGroupId} />
             </div>
           ) : null}
-          <AppSidebarNav plan={groupPlan} viewOnly={navViewOnly} />
+          <AppSidebarNav
+            plan={groupPlan}
+            acquireEnabled={acquireEnabled}
+            viewOnly={navViewOnly}
+          />
           <div className="mt-auto space-y-3 p-3">
             {isPlatformAdmin ? (
               <Link
@@ -135,6 +141,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
                   groups={groups}
                   selectedGroupId={selectedGroupId}
                   plan={groupPlan}
+                  acquireEnabled={acquireEnabled}
                   viewOnly={navViewOnly}
                 />
               </div>
