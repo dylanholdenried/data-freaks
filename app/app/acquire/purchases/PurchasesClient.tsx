@@ -11,10 +11,11 @@ import {
 } from "@/app/app/inventory-command/ui/primitives";
 import { IC } from "@/lib/inventory-command/midmo";
 import {
+  ACQ_ACTIVE_STAGES,
+  ACQ_COMPLETED_STAGES,
   ACQ_STAGE_LABELS,
   ACQ_STAGES,
   isActiveStage,
-  isCompletedStage,
   type AcqBuyer,
   type AcqPurchase,
   type AcqPurchaseStage,
@@ -58,7 +59,7 @@ export default function PurchasesClient({
   const [selectedStoreIds, setSelectedStoreIds] = useState<string[]>(
     initialStoreIds.length ? initialStoreIds : allIds
   );
-  const [pill, setPill] = useState<AcqPurchaseStage | "on_hold">("frontline");
+  const [pill, setPill] = useState<AcqPurchaseStage | "on_hold" | "action_items">("frontline");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [flipOrigin, setFlipOrigin] = useState<CardOriginRect | null>(null);
@@ -117,13 +118,19 @@ export default function PurchasesClient({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = storePurchases.filter((p) => {
-      if (pill === "on_hold") {
-        if (!p.on_hold) return false;
-      } else if (p.stage !== pill) {
-        return false;
+      // Active search spans all stages / On Hold — pill filter only applies when empty.
+      if (!q) {
+        if (pill === "action_items") {
+          return countAcquireActionItems(p) > 0;
+        }
+        if (pill === "on_hold") {
+          if (!p.on_hold) return false;
+        } else if (p.stage !== pill) {
+          return false;
+        }
+        return true;
       }
 
-      if (!q) return true;
       const hay = [
         p.stock_number,
         p.vin,
@@ -138,9 +145,23 @@ export default function PurchasesClient({
       return hay.includes(q);
     });
 
+    if (pill === "action_items" && !q) {
+      // Daily audit: oldest vehicles with missing data first
+      return list.sort((a, b) => {
+        const ageA = headerAgeDays(a) ?? -1;
+        const ageB = headerAgeDays(b) ?? -1;
+        return ageB - ageA;
+      });
+    }
+
     // Default: longest time in current step first
     return list.sort((a, b) => (b.days_in_step ?? -1) - (a.days_in_step ?? -1));
   }, [storePurchases, pill, query]);
+
+  const actionItemVehicleCount = useMemo(
+    () => storePurchases.filter((p) => countAcquireActionItems(p) > 0).length,
+    [storePurchases]
+  );
 
   const selected = selectedId
     ? storePurchases.find((p) => p.id === selectedId) ?? null
@@ -274,12 +295,64 @@ export default function PurchasesClient({
           sub={`${soldMonth.length} sold`}
           status="ok"
         />
-        <IcKpi
-          label="Open action items"
-          value={openActionItems}
-          sub="Active pipeline"
-          status={openActionItems > 0 ? "warn" : "ok"}
-        />
+        <div
+          style={{
+            background: IC.panel,
+            border: `1px solid ${IC.border}`,
+            borderRadius: 10,
+            padding: "12px 16px",
+            flex: 1,
+            minWidth: 130,
+          }}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div
+                style={{
+                  color: IC.muted,
+                  fontSize: 11,
+                  textTransform: "uppercase",
+                  letterSpacing: 1,
+                }}
+              >
+                Open action items
+              </div>
+              <div
+                style={{
+                  fontFamily: "var(--ic-font-display), 'Barlow Condensed', sans-serif",
+                  fontSize: 34,
+                  fontWeight: 700,
+                  lineHeight: 1.15,
+                  color: openActionItems > 0 ? IC.yellow : IC.green,
+                }}
+              >
+                {openActionItems}
+              </div>
+              <div style={{ color: IC.muted, fontSize: 12, marginTop: 2 }}>
+                {actionItemVehicleCount} vehicle{actionItemVehicleCount === 1 ? "" : "s"}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setQuery("");
+                setPill("action_items");
+                document.getElementById("acq-collection")?.scrollIntoView({
+                  behavior: "smooth",
+                  block: "start",
+                });
+              }}
+              className="shrink-0 rounded border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide"
+              style={{
+                borderColor: pill === "action_items" ? IC.orange : IC.border,
+                background: pill === "action_items" ? `${IC.orange}33` : IC.rowAlt,
+                color: pill === "action_items" ? IC.orange : IC.text,
+              }}
+            >
+              View all
+            </button>
+          </div>
+        </div>
         <IcKpi
           label="On Hold $"
           value={hasOnHoldCapital || onHoldCount > 0 ? formatMoney(onHoldCapital) : "—"}
@@ -288,38 +361,109 @@ export default function PurchasesClient({
         />
       </div>
 
-      <IcPanel title="Collection" note={`${filtered.length} cards`}>
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          {ACQ_STAGES.map((stage) => (
-            <button
-              key={stage}
-              type="button"
-              onClick={() => setPill(stage)}
-              className="rounded-full px-3 py-1 text-[11px] font-semibold"
-              style={{
-                background: pill === stage ? IC.blue : IC.rowAlt,
-                color: pill === stage ? "#fff" : IC.muted,
-                border: isCompletedStage(stage) ? `1px solid ${IC.border}` : undefined,
-              }}
+      <IcPanel
+        title="Collection"
+        note={
+          pill === "action_items" && !query.trim()
+            ? `${filtered.length} with open action items · oldest first`
+            : `${filtered.length} cards`
+        }
+      >
+        <div id="acq-collection" className="mb-4 space-y-3">
+          <div>
+            <p
+              className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em]"
+              style={{ color: IC.muted }}
             >
-              {ACQ_STAGE_LABELS[stage]}
-              {stageCounts.find((c) => c.stage === stage)?.count
-                ? ` (${stageCounts.find((c) => c.stage === stage)!.count})`
-                : ""}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => setPill("on_hold")}
-            className="rounded-full px-3 py-1 text-[11px] font-semibold"
-            style={{
-              background: pill === "on_hold" ? IC.orange : IC.rowAlt,
-              color: pill === "on_hold" ? "#fff" : IC.muted,
-              border: `1px solid ${pill === "on_hold" ? IC.orange : IC.border}`,
-            }}
-          >
-            On Hold{onHoldCount ? ` (${onHoldCount})` : ""}
-          </button>
+              Active inventory
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              {ACQ_ACTIVE_STAGES.map((stage) => (
+                <button
+                  key={stage}
+                  type="button"
+                  onClick={() => setPill(stage)}
+                  className="rounded-full px-3 py-1 text-[11px] font-semibold"
+                  style={{
+                    background: pill === stage ? IC.blue : IC.rowAlt,
+                    color: pill === stage ? "#fff" : IC.muted,
+                  }}
+                >
+                  {ACQ_STAGE_LABELS[stage]}
+                  {stageCounts.find((c) => c.stage === stage)?.count
+                    ? ` (${stageCounts.find((c) => c.stage === stage)!.count})`
+                    : ""}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p
+              className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em]"
+              style={{ color: IC.muted }}
+            >
+              Needs attention
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPill("on_hold")}
+                className="rounded-full px-3 py-1 text-[11px] font-semibold"
+                style={{
+                  background: pill === "on_hold" ? IC.orange : IC.rowAlt,
+                  color: pill === "on_hold" ? "#fff" : IC.muted,
+                  border: `1px solid ${pill === "on_hold" ? IC.orange : IC.border}`,
+                }}
+              >
+                On Hold{onHoldCount ? ` (${onHoldCount})` : ""}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery("");
+                  setPill("action_items");
+                }}
+                className="rounded-full px-3 py-1 text-[11px] font-semibold"
+                style={{
+                  background: pill === "action_items" ? IC.orange : IC.rowAlt,
+                  color: pill === "action_items" ? "#fff" : IC.muted,
+                  border: `1px solid ${pill === "action_items" ? IC.orange : IC.border}`,
+                }}
+              >
+                Action items{actionItemVehicleCount ? ` (${actionItemVehicleCount})` : ""}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <p
+              className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em]"
+              style={{ color: IC.muted }}
+            >
+              Exited inventory
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              {ACQ_COMPLETED_STAGES.map((stage) => (
+                <button
+                  key={stage}
+                  type="button"
+                  onClick={() => setPill(stage)}
+                  className="rounded-full px-3 py-1 text-[11px] font-semibold"
+                  style={{
+                    background: pill === stage ? IC.blue : IC.rowAlt,
+                    color: pill === stage ? "#fff" : IC.muted,
+                    border: `1px solid ${IC.border}`,
+                  }}
+                >
+                  {ACQ_STAGE_LABELS[stage]}
+                  {stageCounts.find((c) => c.stage === stage)?.count
+                    ? ` (${stageCounts.find((c) => c.stage === stage)!.count})`
+                    : ""}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="mb-4">
@@ -333,7 +477,7 @@ export default function PurchasesClient({
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search stock, VIN, year, make, model…"
+              placeholder="Search all stages — stock, VIN, year, make, model…"
               autoComplete="off"
               className="w-full rounded-lg border py-2.5 pl-10 pr-10 text-sm"
               style={{ background: "#0f141c", borderColor: IC.border, color: IC.text }}
@@ -359,10 +503,12 @@ export default function PurchasesClient({
         {filtered.length === 0 ? (
           <p className="py-10 text-center text-sm" style={{ color: IC.muted }}>
             {query.trim()
-              ? "No cars match that search in this view."
-              : canEdit
-                ? "No purchase cars in this view. Log a purchase to start the collection."
-                : "No purchase cars in this view."}
+              ? "No cars match that search."
+              : pill === "action_items"
+                ? "No vehicles with open action items — you're caught up."
+                : canEdit
+                  ? "No purchase cars in this view. Log a purchase to start the collection."
+                  : "No purchase cars in this view."}
           </p>
         ) : (
           <div className="grid grid-cols-1 items-start gap-2 min-[420px]:grid-cols-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 xl:grid-cols-5">
