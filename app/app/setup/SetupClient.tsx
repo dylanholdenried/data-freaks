@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CheckCircle2, PlusCircle, Building2, UserMinus, UserCheck } from "lucide-react";
 import { updateOnboardingChecklist } from "@/app/app/onboarding-actions";
+import { createAcquireBuyer, toggleAcquireBuyer } from "./acquire-buyer-actions";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -874,31 +875,34 @@ function AcquireBuyersSection({
   async function handleAdd() {
     if (readOnly) return;
     const n = name.trim();
-    if (!n || !dealerGroupId) return;
-    setSaving(true);
-    setBanner(null);
-    const supabase = createSupabaseBrowserClient();
-    const { data, error } = await supabase
-      .from("acq_buyers")
-      .insert({ name: n, dealer_group_id: dealerGroupId, active: true })
-      .select("id,name,active")
-      .single();
-    setSaving(false);
-    if (error || !data) {
-      setBanner({ kind: "err", msg: error?.message ?? "Failed to add buyer" });
+    if (!n || !dealerGroupId) {
+      setBanner({
+        kind: "err",
+        msg: !dealerGroupId ? "Select an auto group before adding buyers." : "Enter a buyer name.",
+      });
       return;
     }
-    setItems((prev) => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+    setSaving(true);
+    setBanner(null);
+    const res = await createAcquireBuyer(n);
+    setSaving(false);
+    if (!res.ok) {
+      setBanner({ kind: "err", msg: res.error });
+      return;
+    }
+    setItems((prev) => {
+      if (prev.some((b) => b.id === res.buyer.id)) return prev;
+      return [...prev, res.buyer].sort((a, b) => a.name.localeCompare(b.name));
+    });
     setName("");
-    setBanner({ kind: "ok", msg: "Buyer added" });
+    setBanner({ kind: "ok", msg: "Buyer added — it will show in Acquire → Log purchase." });
   }
 
   async function handleToggle(id: string, active: boolean) {
     if (readOnly) return;
-    const supabase = createSupabaseBrowserClient();
-    const { error } = await supabase.from("acq_buyers").update({ active: !active }).eq("id", id);
-    if (error) {
-      setBanner({ kind: "err", msg: error.message });
+    const res = await toggleAcquireBuyer(id, active);
+    if (!res.ok) {
+      setBanner({ kind: "err", msg: res.error });
       return;
     }
     setItems((prev) => prev.map((b) => (b.id === id ? { ...b, active: !active } : b)));
@@ -921,12 +925,14 @@ function AcquireBuyersSection({
             </label>
             <Button type="button" size="sm" disabled={saving || !name.trim()} onClick={() => void handleAdd()}>
               <PlusCircle className="mr-1 h-3.5 w-3.5" />
-              Add
+              {saving ? "Saving…" : "Add"}
             </Button>
           </div>
         ) : null}
         {banner ? (
-          <p className={`text-xs ${banner.kind === "ok" ? "text-emerald-600" : "text-destructive"}`}>{banner.msg}</p>
+          <p className={`text-sm font-medium ${banner.kind === "ok" ? "text-emerald-600" : "text-destructive"}`}>
+            {banner.msg}
+          </p>
         ) : null}
         {items.length === 0 ? (
           <p className="text-sm text-muted-foreground">No buyers yet. Add buyers to use the Buyer dropdown in Acquire.</p>

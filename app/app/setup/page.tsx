@@ -132,6 +132,9 @@ export default async function SetupPage({
   const acquisitionSources = rawSources.map(({ acquisition_source_departments: _d, ...source }) => source);
   const acquisitionSourceDepartments = flattenAcquisitionSourceDepartmentLinks(rawSources);
   const financeManagers = (fmRes.data ?? []) as unknown as PersonRow[];
+  if (buyersRes.error) {
+    console.error("acq_buyers load (setup)", buyersRes.error);
+  }
   const acquireBuyers = (buyersRes.data ?? []) as { id: string; name: string; active: boolean }[];
 
   // Goals: sequential after departments — for the requested year/month

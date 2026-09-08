@@ -50,7 +50,7 @@ export default async function AcquirePurchasesPage({
   const storeIds = stores.map((s) => s.id);
   const initialStoreIds = parseStoreIdsParam(searchParams, storeIds);
 
-  const [{ data: rows, error }, { data: buyerRows }] = await Promise.all([
+  const [{ data: rows, error }, { data: buyerRows, error: buyersError }] = await Promise.all([
     supabase
       .from("acq_purchases")
       .select("*")
@@ -65,6 +65,9 @@ export default async function AcquirePurchasesPage({
 
   if (error) {
     console.error("acq_purchases load", error);
+  }
+  if (buyersError) {
+    console.error("acq_buyers load (purchases)", buyersError);
   }
 
   return (
