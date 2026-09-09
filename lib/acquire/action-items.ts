@@ -102,6 +102,9 @@ function push(
  * Order is stable for tooltips / debugging.
  */
 export function missingAcquireActionItems(p: AcqPurchase): AcqActionItem[] {
+  // Arbitration complete has no required fields — exit audit does not apply.
+  if (p.stage === "arbitration_complete") return [];
+
   const rank = STAGE_RANK[p.stage] ?? 0;
   const missing: AcqActionItem[] = [];
 
