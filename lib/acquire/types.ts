@@ -215,6 +215,7 @@ export type AcqPurchase = {
   trade_model: string | null;
   trade_acv: number | null;
   trade_allowance: number | null;
+  notes: string | null;
   created_by: string | null;
   updated_by: string | null;
   created_at: string;

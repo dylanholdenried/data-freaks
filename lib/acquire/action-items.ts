@@ -128,17 +128,21 @@ export function missingAcquireActionItems(p: AcqPurchase): AcqActionItem[] {
   if (isBlank(p.purchase_price)) push(missing, "purchase_price", "Purchase price", "Acquisition");
   if (isBlank(p.auction_fees)) push(missing, "auction_fees", "Auction fees", "Acquisition");
   if (isBlank(p.transport_cost)) push(missing, "transport_cost", "Transport cost", "Acquisition");
-  if (isBlank(p.recon_estimate)) push(missing, "recon_estimate", "Estimate recon", "Acquisition");
+  // Recon estimate / Recon-tab fields are not required for Wholesale or Arbitration.
+  const skipsRecon = p.stage === "wholesale" || p.stage === "arbitration";
+  if (!skipsRecon && isBlank(p.recon_estimate)) {
+    push(missing, "recon_estimate", "Estimate recon", "Acquisition");
+  }
   if (isBlank(p.purchase_mmr)) push(missing, "purchase_mmr", "MMR", "Acquisition");
   if (isBlank(p.purchase_jd)) push(missing, "purchase_jd", "JD Power", "Acquisition");
 
-  // ── Recon+ (not required for Wholesale — blanks are OK) ───────────────────
-  if (rank >= STAGE_RANK.recon && p.stage !== "wholesale") {
+  // ── Recon+ (not required for Wholesale / Arbitration — blanks are OK) ─────
+  if (rank >= STAGE_RANK.recon && !skipsRecon) {
     if (isBlank(p.delivery_date)) push(missing, "delivery_date", "Delivery date", "Recon");
   }
 
-  // ── Frontline+ (incl. demo / pending / arbitration; not Wholesale) ────────
-  if (rank >= STAGE_RANK.frontline && p.stage !== "wholesale") {
+  // ── Frontline+ (incl. demo / pending; not Wholesale / Arbitration) ────────
+  if (rank >= STAGE_RANK.frontline && !skipsRecon) {
     if (isBlank(p.recon_cost)) push(missing, "recon_cost", "Actual recon cost", "Recon");
     if (isBlank(p.frontline_date)) push(missing, "frontline_date", "Frontline date", "Recon");
     if (isUnchecked(p.recon_description_done)) {
@@ -159,7 +163,7 @@ export function missingAcquireActionItems(p: AcqPurchase): AcqActionItem[] {
     if (isBlank(p.exit_strategy)) push(missing, "exit_strategy", "Exit strategy", "Exit");
     if (isBlank(p.front_gross)) push(missing, "front_gross", "Front profit", "Exit");
     if (isBlank(p.back_gross)) push(missing, "back_gross", "Back profit", "Exit");
-    if (isBlank(p.total_gross)) push(missing, "total_gross", "Total profit", "Exit");
+    // Total profit is derived from front + back — not a separate action item.
     if (p.exit_strategy === "internal_transfer" && isBlank(p.next_store_profit)) {
       push(missing, "next_store_profit", "Next store profit", "Exit");
     }

@@ -116,24 +116,31 @@ function SelectField({
   label,
   name,
   defaultValue,
+  value,
+  onChange,
   disabled,
   options,
   alert,
 }: {
   label: string;
   name: string;
-  defaultValue: string;
+  defaultValue?: string;
+  value?: string;
+  onChange?: (v: string) => void;
   disabled?: boolean;
   options: { value: string; label: string }[];
   alert?: boolean;
 }) {
+  const controlled = value !== undefined;
   return (
     <label className="block text-xs">
       <span style={{ color: alert ? IC.red : IC.muted }}>{label}</span>
       <select
         name={name}
-        defaultValue={defaultValue}
         disabled={disabled}
+        {...(controlled
+          ? { value, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => onChange?.(e.target.value) }
+          : { defaultValue: defaultValue ?? "" })}
         className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm"
         style={{ background: "#0f141c", borderColor: alert ? IC.red : IC.border, color: IC.text }}
       >
@@ -151,23 +158,30 @@ function CheckField({
   label,
   name,
   defaultChecked,
+  checked,
+  onChange,
   disabled,
   alert,
 }: {
   label: string;
   name: string;
   defaultChecked?: boolean;
+  checked?: boolean;
+  onChange?: (v: boolean) => void;
   disabled?: boolean;
   alert?: boolean;
 }) {
+  const controlled = checked !== undefined;
   return (
     <label className="flex items-center gap-2 text-sm" style={{ color: alert ? IC.red : IC.text }}>
       <input
         type="checkbox"
         name={name}
         value="true"
-        defaultChecked={defaultChecked}
         disabled={disabled}
+        {...(controlled
+          ? { checked, onChange: (e: React.ChangeEvent<HTMLInputElement>) => onChange?.(e.target.checked) }
+          : { defaultChecked })}
         className="h-4 w-4 rounded border"
         style={alert ? { outline: `1px solid ${IC.red}` } : undefined}
       />
@@ -219,9 +233,79 @@ export default function PurchaseDetail({
   const [tradeYear, setTradeYear] = useState(purchase.trade_year != null ? String(purchase.trade_year) : "");
   const [tradeMake, setTradeMake] = useState(purchase.trade_make ?? "");
   const [tradeModel, setTradeModel] = useState(purchase.trade_model ?? "");
+  const [notes, setNotes] = useState(purchase.notes ?? "");
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [stockNumber, setStockNumber] = useState(purchase.stock_number ?? "");
+  const [odometer, setOdometer] = useState(purchase.odometer != null ? String(purchase.odometer) : "");
+  const [buyerId, setBuyerId] = useState(purchase.buyer_id ?? "");
+  const [sellerName, setSellerName] = useState(purchase.seller_name ?? "");
+  const [purchaseDate, setPurchaseDate] = useState(purchase.purchase_date ?? "");
+  const [crGrade, setCrGrade] = useState(purchase.cr_grade ?? "");
+  const [purchasePrice, setPurchasePrice] = useState(
+    purchase.purchase_price != null ? String(purchase.purchase_price) : ""
+  );
+  const [auctionFees, setAuctionFees] = useState(
+    purchase.auction_fees != null ? String(purchase.auction_fees) : ""
+  );
+  const [transportCost, setTransportCost] = useState(
+    purchase.transport_cost != null ? String(purchase.transport_cost) : ""
+  );
+  const [reconEstimate, setReconEstimate] = useState(
+    purchase.recon_estimate != null ? String(purchase.recon_estimate) : ""
+  );
+  const [purchaseMmr, setPurchaseMmr] = useState(
+    purchase.purchase_mmr != null ? String(purchase.purchase_mmr) : ""
+  );
+  const [purchaseJd, setPurchaseJd] = useState(
+    purchase.purchase_jd != null ? String(purchase.purchase_jd) : ""
+  );
+  const [deliveryDate, setDeliveryDate] = useState(purchase.delivery_date ?? "");
+  const [frontlineDate, setFrontlineDate] = useState(purchase.frontline_date ?? "");
+  const [reconCost, setReconCost] = useState(
+    purchase.recon_cost != null ? String(purchase.recon_cost) : ""
+  );
+  const [reconDescDone, setReconDescDone] = useState(Boolean(purchase.recon_description_done));
+  const [reconMerchDone, setReconMerchDone] = useState(Boolean(purchase.recon_merchandising_done));
+  const [reconFrontlineDone, setReconFrontlineDone] = useState(Boolean(purchase.recon_frontline_done));
+  const [soldDate, setSoldDate] = useState(purchase.sold_date ?? "");
+  const [soldPrice, setSoldPrice] = useState(
+    purchase.sold_price != null ? String(purchase.sold_price) : ""
+  );
+  const [frontGross, setFrontGross] = useState(
+    purchase.front_gross != null ? String(purchase.front_gross) : ""
+  );
+  const [backGross, setBackGross] = useState(
+    purchase.back_gross != null ? String(purchase.back_gross) : ""
+  );
+  const [nextStoreProfit, setNextStoreProfit] = useState(
+    purchase.next_store_profit != null ? String(purchase.next_store_profit) : ""
+  );
+  const [tradeStock, setTradeStock] = useState(purchase.trade_stock_number ?? "");
+  const [tradeAcv, setTradeAcv] = useState(
+    purchase.trade_acv != null ? String(purchase.trade_acv) : ""
+  );
+  const [tradeAllowance, setTradeAllowance] = useState(
+    purchase.trade_allowance != null ? String(purchase.trade_allowance) : ""
+  );
 
   const headerStoreName =
     (storeId && stores.find((s) => s.id === storeId)?.name) || storeName || "Unassigned";
+
+  function parseDraftNum(v: string): number | null {
+    const s = v.trim().replace(/[$,]/g, "");
+    if (!s) return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  const draftFrontGross = parseDraftNum(frontGross);
+  const draftBackGross = parseDraftNum(backGross);
+  const computedTotalGross =
+    draftFrontGross != null || draftBackGross != null
+      ? num(draftFrontGross) + num(draftBackGross)
+      : null;
+  const totalGrossValue =
+    computedTotalGross != null ? String(computedTotalGross) : "";
 
   const age = headerAgeDays(purchase);
   const soldAge = daysBetween(purchase.purchase_date, purchase.sold_date);
@@ -243,12 +327,6 @@ export default function PurchaseDetail({
     purchase.sold_price != null && mmrNow != null ? num(purchase.sold_price) - mmrNow : null;
   const saleOverJd =
     purchase.sold_price != null && jdNow != null ? num(purchase.sold_price) - jdNow : null;
-  const totalProfit =
-    purchase.total_gross != null
-      ? num(purchase.total_gross)
-      : purchase.front_gross != null || purchase.back_gross != null
-        ? num(purchase.front_gross) + num(purchase.back_gross)
-        : null;
 
   const activeBuyers = useMemo(() => buyers.filter((b) => b.active || b.id === purchase.buyer_id), [buyers, purchase.buyer_id]);
 
@@ -257,6 +335,35 @@ export default function PurchaseDetail({
     const tradeYearNum = tradeYear.trim() ? Number(tradeYear) : null;
     return {
       ...purchase,
+      notes: notes.trim() || null,
+      stock_number: stockNumber.trim() || null,
+      odometer: parseDraftNum(odometer),
+      buyer_id: buyerId.trim() || null,
+      seller_name: sellerName.trim() || null,
+      auction_house: sellerName.trim() || null,
+      purchase_date: purchaseDate.trim() || null,
+      cr_grade: crGrade.trim() || null,
+      purchase_price: parseDraftNum(purchasePrice),
+      auction_fees: parseDraftNum(auctionFees),
+      transport_cost: parseDraftNum(transportCost),
+      recon_estimate: parseDraftNum(reconEstimate),
+      purchase_mmr: parseDraftNum(purchaseMmr),
+      purchase_jd: parseDraftNum(purchaseJd),
+      delivery_date: deliveryDate.trim() || null,
+      frontline_date: frontlineDate.trim() || null,
+      recon_cost: parseDraftNum(reconCost),
+      recon_description_done: reconDescDone,
+      recon_merchandising_done: reconMerchDone,
+      recon_frontline_done: reconFrontlineDone,
+      sold_date: soldDate.trim() || null,
+      sold_price: parseDraftNum(soldPrice),
+      front_gross: draftFrontGross,
+      back_gross: draftBackGross,
+      total_gross: computedTotalGross,
+      next_store_profit: parseDraftNum(nextStoreProfit),
+      trade_stock_number: tradeStock.trim() || null,
+      trade_acv: parseDraftNum(tradeAcv),
+      trade_allowance: parseDraftNum(tradeAllowance),
       vin: vin.trim() || null,
       vehicle_year: yearNum != null && Number.isFinite(yearNum) ? yearNum : null,
       vehicle_make: make.trim() || null,
@@ -275,6 +382,34 @@ export default function PurchaseDetail({
     };
   }, [
     purchase,
+    notes,
+    stockNumber,
+    odometer,
+    buyerId,
+    sellerName,
+    purchaseDate,
+    crGrade,
+    purchasePrice,
+    auctionFees,
+    transportCost,
+    reconEstimate,
+    purchaseMmr,
+    purchaseJd,
+    deliveryDate,
+    frontlineDate,
+    reconCost,
+    reconDescDone,
+    reconMerchDone,
+    reconFrontlineDone,
+    soldDate,
+    soldPrice,
+    draftFrontGross,
+    draftBackGross,
+    computedTotalGross,
+    nextStoreProfit,
+    tradeStock,
+    tradeAcv,
+    tradeAllowance,
     vin,
     year,
     make,
@@ -334,6 +469,7 @@ export default function PurchaseDetail({
     if (!canEdit) return;
     const fd = new FormData(e.currentTarget);
     fd.set("store_id", storeId);
+    fd.set("notes", notes);
     fd.set("vin", vin.trim().toUpperCase());
     fd.set("vehicle_year", year);
     fd.set("vehicle_make", make);
@@ -373,7 +509,7 @@ export default function PurchaseDetail({
 
   return (
     <div
-      className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-2xl border shadow-2xl"
+      className="relative flex h-full min-h-0 w-full flex-col overflow-hidden rounded-2xl border shadow-2xl"
       style={{ background: IC.bg, borderColor: IC.border, color: IC.text }}
     >
       <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
@@ -414,47 +550,120 @@ export default function PurchaseDetail({
               </select>
             </label>
           </div>
-          <div className="flex shrink-0 items-start gap-2">
-            <label
-              className="mt-4 flex max-w-[7.5rem] cursor-pointer flex-col items-start gap-1 text-[10px] font-semibold uppercase tracking-wide"
-              style={{ color: IC.muted }}
-            >
-              <span className="inline-flex items-center gap-1.5 normal-case tracking-normal">
-                <input
-                  type="checkbox"
-                  checked={onHold}
-                  disabled={!canEdit}
-                  onChange={(e) => setOnHold(e.target.checked)}
-                  className="h-3.5 w-3.5 rounded border"
-                />
-                <span style={{ color: onHold ? IC.orange : IC.text }}>On Hold</span>
-              </span>
-              <span className="font-normal leading-tight" style={{ color: IC.muted }}>
-                Title / office
-              </span>
-            </label>
-            <label className="block text-right text-[10px] font-semibold uppercase tracking-wide">
-              <span style={{ color: IC.muted }}>Status</span>
-              <select
-                name="stage"
-                value={stage}
-                disabled={!canEdit}
-                onChange={(e) => setStage(e.target.value as typeof stage)}
-                className="mt-1 block min-w-[10.5rem] rounded-md border px-2 py-1.5 text-left text-sm font-medium normal-case tracking-normal"
-                style={{ background: "#0f141c", borderColor: IC.border, color: IC.text }}
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            <div className="flex items-start gap-2">
+              <label
+                className="mt-4 flex max-w-[7.5rem] cursor-pointer flex-col items-start gap-1 text-[10px] font-semibold uppercase tracking-wide"
+                style={{ color: IC.muted }}
               >
-                {ACQ_STAGES.map((s) => (
-                  <option key={s} value={s}>
-                    {ACQ_STAGE_LABELS[s]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button type="button" onClick={onClose} className="rounded-md p-1.5 hover:bg-white/5" aria-label="Close">
-              <X className="h-4 w-4" />
+                <span className="inline-flex items-center gap-1.5 normal-case tracking-normal">
+                  <input
+                    type="checkbox"
+                    checked={onHold}
+                    disabled={!canEdit}
+                    onChange={(e) => setOnHold(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border"
+                  />
+                  <span style={{ color: onHold ? IC.orange : IC.text }}>On Hold</span>
+                </span>
+                <span className="font-normal leading-tight" style={{ color: IC.muted }}>
+                  Title / office
+                </span>
+              </label>
+              <label className="block text-right text-[10px] font-semibold uppercase tracking-wide">
+                <span style={{ color: IC.muted }}>Status</span>
+                <select
+                  name="stage"
+                  value={stage}
+                  disabled={!canEdit}
+                  onChange={(e) => setStage(e.target.value as typeof stage)}
+                  className="mt-1 block min-w-[10.5rem] rounded-md border px-2 py-1.5 text-left text-sm font-medium normal-case tracking-normal"
+                  style={{ background: "#0f141c", borderColor: IC.border, color: IC.text }}
+                >
+                  {ACQ_STAGES.map((s) => (
+                    <option key={s} value={s}>
+                      {ACQ_STAGE_LABELS[s]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" onClick={onClose} className="rounded-md p-1.5 hover:bg-white/5" aria-label="Close">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setNotesOpen(true)}
+              className="w-[13.5rem] rounded-md border px-2 py-1.5 text-left"
+              style={{ background: "#0f141c", borderColor: IC.border }}
+              title="Open notes"
+            >
+              <span
+                className="block text-[10px] font-semibold uppercase tracking-wide"
+                style={{ color: IC.muted }}
+              >
+                Notes
+              </span>
+              <span
+                className="mt-0.5 line-clamp-2 text-xs leading-snug"
+                style={{ color: notes.trim() ? IC.text : IC.muted }}
+              >
+                {notes.trim() || (canEdit ? "Add a note…" : "No notes")}
+              </span>
             </button>
+            <input type="hidden" name="notes" value={notes} />
           </div>
         </header>
+
+        {notesOpen ? (
+          <div className="absolute inset-0 z-20 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+            <button
+              type="button"
+              className="absolute inset-0 bg-black/55"
+              aria-label="Close notes"
+              onClick={() => setNotesOpen(false)}
+            />
+            <div
+              className="relative z-10 flex max-h-[80%] w-full max-w-lg flex-col rounded-xl border p-4 shadow-2xl"
+              style={{ background: IC.panel, borderColor: IC.border }}
+            >
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h3 className="text-sm font-bold uppercase tracking-wide">Notes</h3>
+                <button
+                  type="button"
+                  onClick={() => setNotesOpen(false)}
+                  className="rounded p-1 hover:bg-white/5"
+                  aria-label="Close notes"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <textarea
+                value={notes}
+                readOnly={!canEdit}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={12}
+                placeholder="Purchase notes, title issues, buyer context…"
+                className="min-h-[12rem] w-full flex-1 resize-y rounded-md border px-3 py-2 text-sm leading-relaxed"
+                style={{
+                  background: canEdit ? "#0f141c" : IC.rowAlt,
+                  borderColor: IC.border,
+                  color: IC.text,
+                }}
+              />
+              <div className="mt-3 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setNotesOpen(false)}
+                  className="rounded-md px-3 py-1.5 text-xs font-semibold text-white"
+                  style={{ background: IC.blue }}
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <div className="flex shrink-0 gap-1 overflow-x-auto border-b px-2 py-2" style={{ borderColor: IC.border }}>
           {TABS.map((t) => {
@@ -486,7 +695,7 @@ export default function PurchaseDetail({
         <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
           <div className={tab === "Overview" ? "space-y-3" : "hidden"}>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Stock #" name="stock_number" defaultValue={purchase.stock_number} readOnly={!canEdit} alert={isAlert("stock_number")} />
+              <Field label="Stock #" name="stock_number" value={stockNumber} onChange={setStockNumber} readOnly={!canEdit} alert={isAlert("stock_number")} />
               <label className="block text-xs">
                 <span style={{ color: isAlert("vin") ? IC.red : IC.muted }}>VIN</span>
                 <div className="mt-1 flex gap-1">
@@ -534,11 +743,12 @@ export default function PurchaseDetail({
               alertKeys={alertKeys}
             />
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Odometer" name="odometer" type="number" defaultValue={purchase.odometer} readOnly={!canEdit} alert={isAlert("odometer")} />
+              <Field label="Odometer" name="odometer" type="number" value={odometer} onChange={setOdometer} readOnly={!canEdit} alert={isAlert("odometer")} />
               <SelectField
                 label="Buyer"
                 name="buyer_id"
-                defaultValue={purchase.buyer_id ?? ""}
+                value={buyerId}
+                onChange={setBuyerId}
                 disabled={!canEdit}
                 alert={isAlert("buyer_id")}
                 options={[
@@ -559,15 +769,15 @@ export default function PurchaseDetail({
                 options={ACQ_SOURCE_TYPES.map((s) => ({ value: s, label: ACQ_SOURCE_LABELS[s] }))}
               />
             </div>
-            <Field label="Auction house / seller" name="seller_name" defaultValue={purchase.seller_name} readOnly={!canEdit} alert={isAlert("seller_name")} />
-            <Field label="Purchase date" name="purchase_date" type="date" defaultValue={purchase.purchase_date} readOnly={!canEdit} alert={isAlert("purchase_date")} />
-            <Field label="CR grade" name="cr_grade" defaultValue={purchase.cr_grade} readOnly={!canEdit} alert={isAlert("cr_grade")} />
-            <Field label="Purchase price" name="purchase_price" type="number" step="0.01" defaultValue={purchase.purchase_price} readOnly={!canEdit} alert={isAlert("purchase_price")} />
-            <Field label="Auction fees" name="auction_fees" type="number" step="0.01" defaultValue={purchase.auction_fees} readOnly={!canEdit} alert={isAlert("auction_fees")} />
-            <Field label="Transport cost" name="transport_cost" type="number" step="0.01" defaultValue={purchase.transport_cost} readOnly={!canEdit} alert={isAlert("transport_cost")} />
-            <Field label="Estimate recon" name="recon_estimate" type="number" step="0.01" defaultValue={purchase.recon_estimate} readOnly={!canEdit} alert={isAlert("recon_estimate")} />
-            <Field label="MMR" name="purchase_mmr" type="number" step="0.01" defaultValue={purchase.purchase_mmr} readOnly={!canEdit} alert={isAlert("purchase_mmr")} />
-            <Field label="JD Power Clean Trade" name="purchase_jd" type="number" step="0.01" defaultValue={purchase.purchase_jd} readOnly={!canEdit} alert={isAlert("purchase_jd")} />
+            <Field label="Auction house / seller" name="seller_name" value={sellerName} onChange={setSellerName} readOnly={!canEdit} alert={isAlert("seller_name")} />
+            <Field label="Purchase date" name="purchase_date" type="date" value={purchaseDate} onChange={setPurchaseDate} readOnly={!canEdit} alert={isAlert("purchase_date")} />
+            <Field label="CR grade" name="cr_grade" value={crGrade} onChange={setCrGrade} readOnly={!canEdit} alert={isAlert("cr_grade")} />
+            <Field label="Purchase price" name="purchase_price" type="number" step="0.01" value={purchasePrice} onChange={setPurchasePrice} readOnly={!canEdit} alert={isAlert("purchase_price")} />
+            <Field label="Auction fees" name="auction_fees" type="number" step="0.01" value={auctionFees} onChange={setAuctionFees} readOnly={!canEdit} alert={isAlert("auction_fees")} />
+            <Field label="Transport cost" name="transport_cost" type="number" step="0.01" value={transportCost} onChange={setTransportCost} readOnly={!canEdit} alert={isAlert("transport_cost")} />
+            <Field label="Estimate recon" name="recon_estimate" type="number" step="0.01" value={reconEstimate} onChange={setReconEstimate} readOnly={!canEdit} alert={isAlert("recon_estimate")} />
+            <Field label="MMR" name="purchase_mmr" type="number" step="0.01" value={purchaseMmr} onChange={setPurchaseMmr} readOnly={!canEdit} alert={isAlert("purchase_mmr")} />
+            <Field label="JD Power Clean Trade" name="purchase_jd" type="number" step="0.01" value={purchaseJd} onChange={setPurchaseJd} readOnly={!canEdit} alert={isAlert("purchase_jd")} />
           </div>
 
           <div className={tab === "Books" ? "space-y-1" : "hidden"}>
@@ -586,20 +796,20 @@ export default function PurchaseDetail({
               tone={jdDelta == null ? IC.muted : jdDelta >= 0 ? IC.green : IC.red}
             />
             {/* Keep purchase books in form for save when other tabs active */}
-            <input type="hidden" name="purchase_mmr" value={purchase.purchase_mmr ?? ""} />
-            <input type="hidden" name="purchase_jd" value={purchase.purchase_jd ?? ""} />
+            <input type="hidden" name="purchase_mmr" value={purchaseMmr} />
+            <input type="hidden" name="purchase_jd" value={purchaseJd} />
           </div>
 
           <div className={tab === "Recon" ? "space-y-3" : "hidden"}>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Delivery date" name="delivery_date" type="date" defaultValue={purchase.delivery_date} readOnly={!canEdit} alert={isAlert("delivery_date")} />
-              <Field label="Frontline date" name="frontline_date" type="date" defaultValue={purchase.frontline_date} readOnly={!canEdit} alert={isAlert("frontline_date")} />
-              <Field label="Actual reconditioning cost" name="recon_cost" type="number" step="0.01" defaultValue={purchase.recon_cost} readOnly={!canEdit} alert={isAlert("recon_cost")} />
+              <Field label="Delivery date" name="delivery_date" type="date" value={deliveryDate} onChange={setDeliveryDate} readOnly={!canEdit} alert={isAlert("delivery_date")} />
+              <Field label="Frontline date" name="frontline_date" type="date" value={frontlineDate} onChange={setFrontlineDate} readOnly={!canEdit} alert={isAlert("frontline_date")} />
+              <Field label="Actual reconditioning cost" name="recon_cost" type="number" step="0.01" value={reconCost} onChange={setReconCost} readOnly={!canEdit} alert={isAlert("recon_cost")} />
             </div>
             <div className="space-y-2">
-              <CheckField label="Description" name="recon_description_done" defaultChecked={purchase.recon_description_done} disabled={!canEdit} alert={isAlert("recon_description_done")} />
-              <CheckField label="Merchandising" name="recon_merchandising_done" defaultChecked={purchase.recon_merchandising_done} disabled={!canEdit} alert={isAlert("recon_merchandising_done")} />
-              <CheckField label="Frontline" name="recon_frontline_done" defaultChecked={purchase.recon_frontline_done} disabled={!canEdit} alert={isAlert("recon_frontline_done")} />
+              <CheckField label="Description" name="recon_description_done" checked={reconDescDone} onChange={setReconDescDone} disabled={!canEdit} alert={isAlert("recon_description_done")} />
+              <CheckField label="Merchandising" name="recon_merchandising_done" checked={reconMerchDone} onChange={setReconMerchDone} disabled={!canEdit} alert={isAlert("recon_merchandising_done")} />
+              <CheckField label="Frontline" name="recon_frontline_done" checked={reconFrontlineDone} onChange={setReconFrontlineDone} disabled={!canEdit} alert={isAlert("recon_frontline_done")} />
             </div>
             <ReadRow label="Transport time (delivery − purchase)" value={transportDays != null ? `${transportDays}d` : "—"} />
             <ReadRow
@@ -624,8 +834,8 @@ export default function PurchaseDetail({
 
           <div className={tab === "Exit" ? "space-y-3" : "hidden"}>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Sold date" name="sold_date" type="date" defaultValue={purchase.sold_date} readOnly={!canEdit} alert={isAlert("sold_date")} />
-              <Field label="Sale price" name="sold_price" type="number" step="0.01" defaultValue={purchase.sold_price} readOnly={!canEdit} alert={isAlert("sold_price")} />
+              <Field label="Sold date" name="sold_date" type="date" value={soldDate} onChange={setSoldDate} readOnly={!canEdit} alert={isAlert("sold_date")} />
+              <Field label="Sale price" name="sold_price" type="number" step="0.01" value={soldPrice} onChange={setSoldPrice} readOnly={!canEdit} alert={isAlert("sold_price")} />
               <label className="col-span-2 block text-xs">
                 <span style={{ color: isAlert("exit_strategy") ? IC.red : IC.muted }}>Exit strategy</span>
                 <select
@@ -644,21 +854,29 @@ export default function PurchaseDetail({
                   ))}
                 </select>
               </label>
-              <Field label="Front profit" name="front_gross" type="number" step="0.01" defaultValue={purchase.front_gross} readOnly={!canEdit} alert={isAlert("front_gross")} />
-              <Field label="Back profit" name="back_gross" type="number" step="0.01" defaultValue={purchase.back_gross} readOnly={!canEdit} alert={isAlert("back_gross")} />
-              <Field label="Total profit" name="total_gross" type="number" step="0.01" defaultValue={purchase.total_gross ?? totalProfit} readOnly={!canEdit} alert={isAlert("total_gross")} />
+              <Field label="Front profit" name="front_gross" type="number" step="0.01" value={frontGross} onChange={setFrontGross} readOnly={!canEdit} alert={isAlert("front_gross")} />
+              <Field label="Back profit" name="back_gross" type="number" step="0.01" value={backGross} onChange={setBackGross} readOnly={!canEdit} alert={isAlert("back_gross")} />
+              <div className="col-span-2">
+                <ReadRow
+                  label="Total profit"
+                  value={formatMoneyExact(computedTotalGross)}
+                  tone={computedTotalGross == null ? IC.muted : computedTotalGross >= 0 ? IC.green : IC.red}
+                />
+                <input type="hidden" name="total_gross" value={totalGrossValue} />
+              </div>
               {exitStrategy === "internal_transfer" ? (
                 <Field
                   label="Next store profit"
                   name="next_store_profit"
                   type="number"
                   step="0.01"
-                  defaultValue={purchase.next_store_profit}
+                  value={nextStoreProfit}
+                  onChange={setNextStoreProfit}
                   readOnly={!canEdit}
                   alert={isAlert("next_store_profit")}
                 />
               ) : (
-                <input type="hidden" name="next_store_profit" value={purchase.next_store_profit ?? ""} />
+                <input type="hidden" name="next_store_profit" value={nextStoreProfit} />
               )}
             </div>
             <ReadRow label="Sold age" value={soldAge != null ? `${soldAge}d` : "—"} />
@@ -687,7 +905,7 @@ export default function PurchaseDetail({
               <input type="hidden" name="has_trade" value={hasTrade ? "true" : "false"} />
               {hasTrade ? (
                 <div className="grid grid-cols-2 gap-3">
-                  <Field label="Trade stock" name="trade_stock_number" defaultValue={purchase.trade_stock_number} readOnly={!canEdit} alert={isAlert("trade_stock_number")} />
+                  <Field label="Trade stock" name="trade_stock_number" value={tradeStock} onChange={setTradeStock} readOnly={!canEdit} alert={isAlert("trade_stock_number")} />
                   <label className="block text-xs">
                     <span style={{ color: isAlert("trade_vin") ? IC.red : IC.muted }}>Trade VIN</span>
                     <div className="mt-1 flex gap-1">
@@ -716,8 +934,8 @@ export default function PurchaseDetail({
                   <Field label="Year" name="trade_year" value={tradeYear} onChange={setTradeYear} type="number" readOnly={!canEdit} alert={isAlert("trade_year")} />
                   <Field label="Make" name="trade_make" value={tradeMake} onChange={setTradeMake} readOnly={!canEdit} alert={isAlert("trade_make")} />
                   <Field label="Model" name="trade_model" value={tradeModel} onChange={setTradeModel} readOnly={!canEdit} alert={isAlert("trade_model")} />
-                  <Field label="ACV" name="trade_acv" type="number" step="0.01" defaultValue={purchase.trade_acv} readOnly={!canEdit} alert={isAlert("trade_acv")} />
-                  <Field label="Allowance" name="trade_allowance" type="number" step="0.01" defaultValue={purchase.trade_allowance} readOnly={!canEdit} alert={isAlert("trade_allowance")} />
+                  <Field label="ACV" name="trade_acv" type="number" step="0.01" value={tradeAcv} onChange={setTradeAcv} readOnly={!canEdit} alert={isAlert("trade_acv")} />
+                  <Field label="Allowance" name="trade_allowance" type="number" step="0.01" value={tradeAllowance} onChange={setTradeAllowance} readOnly={!canEdit} alert={isAlert("trade_allowance")} />
                 </div>
               ) : null}
             </div>
@@ -726,9 +944,9 @@ export default function PurchaseDetail({
           {/* Persist fields across tabs */}
           {tab !== "Overview" ? (
             <>
-              <input type="hidden" name="stock_number" value={purchase.stock_number ?? ""} />
-              <input type="hidden" name="buyer_id" value={purchase.buyer_id ?? ""} />
-              <input type="hidden" name="odometer" value={purchase.odometer ?? ""} />
+              <input type="hidden" name="stock_number" value={stockNumber} />
+              <input type="hidden" name="buyer_id" value={buyerId} />
+              <input type="hidden" name="odometer" value={odometer} />
               <input type="hidden" name="vehicle_year" value={year} />
               <input type="hidden" name="vehicle_make" value={make} />
               <input type="hidden" name="vehicle_model" value={model} />
@@ -741,48 +959,48 @@ export default function PurchaseDetail({
           {tab !== "Acquisition" ? (
             <>
               <input type="hidden" name="source_type" value={purchase.source_type} />
-              <input type="hidden" name="seller_name" value={purchase.seller_name ?? ""} />
-              <input type="hidden" name="purchase_date" value={purchase.purchase_date ?? ""} />
-              <input type="hidden" name="cr_grade" value={purchase.cr_grade ?? ""} />
-              <input type="hidden" name="purchase_price" value={purchase.purchase_price ?? ""} />
-              <input type="hidden" name="auction_fees" value={purchase.auction_fees ?? ""} />
-              <input type="hidden" name="transport_cost" value={purchase.transport_cost ?? ""} />
-              <input type="hidden" name="recon_estimate" value={purchase.recon_estimate ?? ""} />
+              <input type="hidden" name="seller_name" value={sellerName} />
+              <input type="hidden" name="purchase_date" value={purchaseDate} />
+              <input type="hidden" name="cr_grade" value={crGrade} />
+              <input type="hidden" name="purchase_price" value={purchasePrice} />
+              <input type="hidden" name="auction_fees" value={auctionFees} />
+              <input type="hidden" name="transport_cost" value={transportCost} />
+              <input type="hidden" name="recon_estimate" value={reconEstimate} />
               {tab !== "Books" ? (
                 <>
-                  <input type="hidden" name="purchase_mmr" value={purchase.purchase_mmr ?? ""} />
-                  <input type="hidden" name="purchase_jd" value={purchase.purchase_jd ?? ""} />
+                  <input type="hidden" name="purchase_mmr" value={purchaseMmr} />
+                  <input type="hidden" name="purchase_jd" value={purchaseJd} />
                 </>
               ) : null}
             </>
           ) : null}
           {tab !== "Recon" ? (
             <>
-              <input type="hidden" name="recon_cost" value={purchase.recon_cost ?? ""} />
-              <input type="hidden" name="delivery_date" value={purchase.delivery_date ?? ""} />
-              <input type="hidden" name="frontline_date" value={purchase.frontline_date ?? ""} />
-              {purchase.recon_description_done ? <input type="hidden" name="recon_description_done" value="true" /> : null}
-              {purchase.recon_merchandising_done ? <input type="hidden" name="recon_merchandising_done" value="true" /> : null}
-              {purchase.recon_frontline_done ? <input type="hidden" name="recon_frontline_done" value="true" /> : null}
+              <input type="hidden" name="recon_cost" value={reconCost} />
+              <input type="hidden" name="delivery_date" value={deliveryDate} />
+              <input type="hidden" name="frontline_date" value={frontlineDate} />
+              {reconDescDone ? <input type="hidden" name="recon_description_done" value="true" /> : null}
+              {reconMerchDone ? <input type="hidden" name="recon_merchandising_done" value="true" /> : null}
+              {reconFrontlineDone ? <input type="hidden" name="recon_frontline_done" value="true" /> : null}
             </>
           ) : null}
           {tab !== "Exit" ? (
             <>
-              <input type="hidden" name="sold_date" value={purchase.sold_date ?? ""} />
-              <input type="hidden" name="sold_price" value={purchase.sold_price ?? ""} />
+              <input type="hidden" name="sold_date" value={soldDate} />
+              <input type="hidden" name="sold_price" value={soldPrice} />
               <input type="hidden" name="exit_strategy" value={exitStrategy} />
-              <input type="hidden" name="front_gross" value={purchase.front_gross ?? ""} />
-              <input type="hidden" name="back_gross" value={purchase.back_gross ?? ""} />
-              <input type="hidden" name="total_gross" value={purchase.total_gross ?? ""} />
-              <input type="hidden" name="next_store_profit" value={purchase.next_store_profit ?? ""} />
+              <input type="hidden" name="front_gross" value={frontGross} />
+              <input type="hidden" name="back_gross" value={backGross} />
+              <input type="hidden" name="total_gross" value={totalGrossValue} />
+              <input type="hidden" name="next_store_profit" value={nextStoreProfit} />
               <input type="hidden" name="has_trade" value={hasTrade ? "true" : "false"} />
-              <input type="hidden" name="trade_stock_number" value={purchase.trade_stock_number ?? ""} />
+              <input type="hidden" name="trade_stock_number" value={tradeStock} />
               <input type="hidden" name="trade_vin" value={tradeVin} />
               <input type="hidden" name="trade_year" value={tradeYear} />
               <input type="hidden" name="trade_make" value={tradeMake} />
               <input type="hidden" name="trade_model" value={tradeModel} />
-              <input type="hidden" name="trade_acv" value={purchase.trade_acv ?? ""} />
-              <input type="hidden" name="trade_allowance" value={purchase.trade_allowance ?? ""} />
+              <input type="hidden" name="trade_acv" value={tradeAcv} />
+              <input type="hidden" name="trade_allowance" value={tradeAllowance} />
             </>
           ) : null}
         </div>

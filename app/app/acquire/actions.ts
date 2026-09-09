@@ -308,7 +308,12 @@ export async function updateAcquirePurchase(
       sold_price: parseNum(formData.get("sold_price")),
       front_gross: parseNum(formData.get("front_gross")),
       back_gross: parseNum(formData.get("back_gross")),
-      total_gross: parseNum(formData.get("total_gross")),
+      total_gross: (() => {
+        const front = parseNum(formData.get("front_gross"));
+        const back = parseNum(formData.get("back_gross"));
+        if (front == null && back == null) return null;
+        return (front ?? 0) + (back ?? 0);
+      })(),
       next_store_profit: parseNum(formData.get("next_store_profit")),
       exit_strategy: parseExitStrategy(formData.get("exit_strategy")),
       has_trade: hasTrade,
@@ -319,6 +324,7 @@ export async function updateAcquirePurchase(
       trade_model: hasTrade ? emptyToNull(formData.get("trade_model")) : null,
       trade_acv: hasTrade ? parseNum(formData.get("trade_acv")) : null,
       trade_allowance: hasTrade ? parseNum(formData.get("trade_allowance")) : null,
+      notes: emptyToNull(formData.get("notes")),
       updated_by: ctx.profile.id,
       updated_at: new Date().toISOString(),
     };
@@ -628,7 +634,10 @@ export async function bulkUploadAcquirePurchasesAction(
         exit_strategy: row.exit_strategy,
         front_gross: row.front_gross,
         back_gross: row.back_gross,
-        total_gross: row.total_gross,
+        total_gross:
+          row.front_gross != null || row.back_gross != null
+            ? (row.front_gross ?? 0) + (row.back_gross ?? 0)
+            : row.total_gross,
         next_store_profit:
           row.exit_strategy === "internal_transfer" ? row.next_store_profit : null,
         has_trade: hasTrade,
