@@ -188,7 +188,7 @@ function toDate(v: string): string | null {
 }
 
 function parseStage(v: string): AcqPurchaseStage {
-  if (!v) return "need_to_stock_in";
+  if (!v) return "awaiting_bos";
   const lower = v.toLowerCase().replace(/\s+/g, "_");
   if ((ACQ_STAGES as readonly string[]).includes(lower)) {
     return lower as AcqPurchaseStage;
@@ -196,7 +196,7 @@ function parseStage(v: string): AcqPurchaseStage {
   for (const stage of ACQ_STAGES) {
     if (ACQ_STAGE_LABELS[stage].toLowerCase() === v.toLowerCase()) return stage;
   }
-  return "need_to_stock_in";
+  return "awaiting_bos";
 }
 
 function parseSource(v: string): AcqSourceType {

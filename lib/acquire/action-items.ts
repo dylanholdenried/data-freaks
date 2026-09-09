@@ -4,7 +4,7 @@
  * Inventory Command live overlays are never treated as missing.
  */
 
-import type { AcqPurchase, AcqPurchaseStage } from "./types";
+import { sellerSkipsCrGrade, type AcqPurchase, type AcqPurchaseStage } from "./types";
 
 /** Detail tabs that can own action items (Books / Merchandising have none). */
 export type AcqActionItemTab =
@@ -65,16 +65,17 @@ export type AcqActionItem = {
 
 /** Pipeline rank — higher means further along. Demo sits with Frontline (on-lot). */
 const STAGE_RANK: Record<AcqPurchaseStage, number> = {
-  need_to_stock_in: 0,
-  in_transit: 1,
-  recon: 2,
-  frontline: 3,
-  pending_sale: 4,
-  wholesale: 4,
-  arbitration: 4,
-  demo: 3,
-  sold: 5,
-  arbitration_complete: 5,
+  awaiting_bos: 0,
+  need_to_stock_in: 1,
+  in_transit: 2,
+  recon: 3,
+  frontline: 4,
+  pending_sale: 5,
+  wholesale: 5,
+  arbitration: 5,
+  demo: 4,
+  sold: 6,
+  arbitration_complete: 6,
 };
 
 function isBlank(v: string | number | null | undefined): boolean {
@@ -118,7 +119,9 @@ export function missingAcquireActionItems(p: AcqPurchase): AcqActionItem[] {
   if (isBlank(p.odometer)) push(missing, "odometer", "Odometer", "Overview");
   if (isBlank(p.seller_name)) push(missing, "seller_name", "Seller", "Acquisition");
   if (isBlank(p.purchase_date)) push(missing, "purchase_date", "Purchase date", "Acquisition");
-  if (isBlank(p.cr_grade)) push(missing, "cr_grade", "CR grade", "Acquisition");
+  if (isBlank(p.cr_grade) && !sellerSkipsCrGrade(p.seller_name ?? p.auction_house)) {
+    push(missing, "cr_grade", "CR grade", "Acquisition");
+  }
   if (isBlank(p.purchase_price)) push(missing, "purchase_price", "Purchase price", "Acquisition");
   if (isBlank(p.auction_fees)) push(missing, "auction_fees", "Auction fees", "Acquisition");
   if (isBlank(p.transport_cost)) push(missing, "transport_cost", "Transport cost", "Acquisition");

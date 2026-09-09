@@ -228,7 +228,7 @@ export default function AddPurchaseModal({
             </label>
             <label className="block text-xs">
               <span style={{ color: IC.muted }}>Status</span>
-              <select name="stage" defaultValue="need_to_stock_in" className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm" style={inputStyle}>
+              <select name="stage" defaultValue="awaiting_bos" className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm" style={inputStyle}>
                 {ACQ_STAGES.map((s) => (
                   <option key={s} value={s}>
                     {ACQ_STAGE_LABELS[s]}

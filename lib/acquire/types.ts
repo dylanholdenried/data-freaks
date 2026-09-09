@@ -2,6 +2,7 @@
 
 /** Core pipeline statuses (before sold / exit). */
 export const ACQ_PIPELINE_STAGES = [
+  "awaiting_bos",
   "need_to_stock_in",
   "in_transit",
   "recon",
@@ -48,6 +49,7 @@ export const ACQ_SOURCE_TYPES = [
 export type AcqSourceType = (typeof ACQ_SOURCE_TYPES)[number];
 
 export const ACQ_STAGE_LABELS: Record<AcqPurchaseStage, string> = {
+  awaiting_bos: "Awaiting BOS",
   need_to_stock_in: "Need to Stock In",
   in_transit: "In Transit",
   recon: "Recon",
@@ -77,6 +79,28 @@ export const ACQ_SOURCE_LABELS: Record<AcqSourceType, string> = {
   wholesaler: "Wholesaler",
 };
 
+/** Sellers that do not provide auction condition reports — CR should be "NA". */
+export const ACQ_SELLERS_WITHOUT_CR_GRADE = [
+  "enterprise",
+  "gateway car connection",
+] as const;
+
+export function sellerSkipsCrGrade(seller: string | null | undefined): boolean {
+  const s = (seller ?? "").trim().toLowerCase();
+  return (ACQ_SELLERS_WITHOUT_CR_GRADE as readonly string[]).includes(s);
+}
+
+/** Blank CR becomes "NA" for sellers that never supply a condition grade. */
+export function resolveCrGrade(
+  seller: string | null | undefined,
+  crGrade: string | null | undefined
+): string | null {
+  const grade = (crGrade ?? "").trim();
+  if (grade) return grade;
+  if (sellerSkipsCrGrade(seller)) return "NA";
+  return null;
+}
+
 export const ACQ_SOURCE_COLORS: Record<
   AcqSourceType,
   { stripe: string; glow: string; badge: string }
@@ -92,6 +116,7 @@ export const ACQ_SOURCE_COLORS: Record<
 export type AcqCardTheme = { stripe: string; glow: string; badge: string };
 
 export const ACQ_STAGE_COLORS: Record<AcqPurchaseStage, AcqCardTheme> = {
+  awaiting_bos: { stripe: "#D4A574", glow: "#2a2018", badge: "#6b4e2e" },
   need_to_stock_in: { stripe: "#E8C547", glow: "#2a2410", badge: "#6b5a1a" },
   in_transit: { stripe: "#7EC8E8", glow: "#152832", badge: "#2a5a6e" },
   recon: { stripe: "#4A90D9", glow: "#152036", badge: "#1e4a7a" },

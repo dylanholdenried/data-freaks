@@ -13,6 +13,7 @@ import {
   ACQ_EXIT_STRATEGIES,
   ACQ_STAGES,
   normalizeSourceType,
+  resolveCrGrade,
   type AcqExitStrategy,
   type AcqPurchase,
   type AcqPurchaseStage,
@@ -98,10 +99,10 @@ function parseSource(v: FormDataEntryValue | null): AcqSourceType {
 }
 
 function parseStage(v: FormDataEntryValue | null): AcqPurchaseStage {
-  const s = String(v ?? "need_to_stock_in");
+  const s = String(v ?? "awaiting_bos");
   return (ACQ_STAGES as readonly string[]).includes(s)
     ? (s as AcqPurchaseStage)
-    : "need_to_stock_in";
+    : "awaiting_bos";
 }
 
 function parseExitStrategy(v: FormDataEntryValue | null): AcqExitStrategy | null {
@@ -167,6 +168,7 @@ export async function createAcquirePurchase(
       source_type: parseSource(formData.get("source_type")),
       seller_name: seller,
       auction_house: seller,
+      cr_grade: resolveCrGrade(seller, emptyToNull(formData.get("cr_grade"))),
       purchase_date: emptyToNull(formData.get("purchase_date")),
       purchase_price: parseNum(formData.get("purchase_price")),
       created_by: ctx.profile.id,
@@ -288,7 +290,7 @@ export async function updateAcquirePurchase(
       source_type: parseSource(formData.get("source_type")),
       seller_name: seller,
       auction_house: seller,
-      cr_grade: emptyToNull(formData.get("cr_grade")),
+      cr_grade: resolveCrGrade(seller, emptyToNull(formData.get("cr_grade"))),
       purchase_date: emptyToNull(formData.get("purchase_date")),
       purchase_price: parseNum(formData.get("purchase_price")),
       auction_fees: parseNum(formData.get("auction_fees")),
@@ -608,7 +610,7 @@ export async function bulkUploadAcquirePurchasesAction(
         seller_name: row.seller_name,
         auction_house: row.seller_name,
         purchase_date: row.purchase_date,
-        cr_grade: row.cr_grade,
+        cr_grade: resolveCrGrade(row.seller_name, row.cr_grade),
         purchase_price: row.purchase_price,
         auction_fees: row.auction_fees,
         transport_cost: row.transport_cost,
