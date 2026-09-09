@@ -27,7 +27,7 @@ import {
   headerAgeDays,
   num,
 } from "@/lib/acquire/cost";
-import { countAcquireActionItems } from "@/lib/acquire/action-items";
+import { countAcquireActionItems, needsTransportScheduled } from "@/lib/acquire/action-items";
 import { storesQueryString } from "@/lib/acquire/store-labels";
 import AcquireStorePills from "../AcquireStorePills";
 import PurchaseCard, { type CardOriginRect } from "./PurchaseCard";
@@ -59,7 +59,9 @@ export default function PurchasesClient({
   const [selectedStoreIds, setSelectedStoreIds] = useState<string[]>(
     initialStoreIds.length ? initialStoreIds : allIds
   );
-  const [pill, setPill] = useState<AcqPurchaseStage | "on_hold" | "action_items">("frontline");
+  const [pill, setPill] = useState<
+    AcqPurchaseStage | "on_hold" | "needs_transport" | "action_items"
+  >("frontline");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [flipOrigin, setFlipOrigin] = useState<CardOriginRect | null>(null);
@@ -125,6 +127,8 @@ export default function PurchasesClient({
         }
         if (pill === "on_hold") {
           if (!p.on_hold) return false;
+        } else if (pill === "needs_transport") {
+          if (!needsTransportScheduled(p)) return false;
         } else if (p.stage !== pill) {
           return false;
         }
@@ -172,6 +176,7 @@ export default function PurchasesClient({
     count: storePurchases.filter((p) => p.stage === stage).length,
   }));
   const onHoldCount = storePurchases.filter((p) => p.on_hold).length;
+  const needsTransportCount = storePurchases.filter((p) => needsTransportScheduled(p)).length;
 
   const now = new Date();
   const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -420,6 +425,18 @@ export default function PurchasesClient({
               </button>
               <button
                 type="button"
+                onClick={() => setPill("needs_transport")}
+                className="rounded-full px-3 py-1 text-[11px] font-semibold"
+                style={{
+                  background: pill === "needs_transport" ? IC.orange : IC.rowAlt,
+                  color: pill === "needs_transport" ? "#fff" : IC.muted,
+                  border: `1px solid ${pill === "needs_transport" ? IC.orange : IC.border}`,
+                }}
+              >
+                Needs transport{needsTransportCount ? ` (${needsTransportCount})` : ""}
+              </button>
+              <button
+                type="button"
                 onClick={() => {
                   setQuery("");
                   setPill("action_items");
@@ -506,6 +523,8 @@ export default function PurchasesClient({
               ? "No cars match that search."
               : pill === "action_items"
                 ? "No vehicles with open action items — you're caught up."
+                : pill === "needs_transport"
+                  ? "All Need to Stock In+ cars have transport scheduled."
                 : canEdit
                   ? "No purchase cars in this view. Log a purchase to start the collection."
                   : "No purchase cars in this view."}

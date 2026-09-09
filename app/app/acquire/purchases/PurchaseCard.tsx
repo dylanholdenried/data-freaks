@@ -11,7 +11,7 @@ import {
   merchCost,
   websitePrice,
 } from "@/lib/acquire/cost";
-import { missingAcquireActionItems } from "@/lib/acquire/action-items";
+import { missingAcquireActionItems, needsTransportScheduled } from "@/lib/acquire/action-items";
 import {
   ACQ_EXIT_STRATEGY_LABELS,
   ACQ_STAGE_LABELS,
@@ -256,6 +256,14 @@ export function PurchaseCardFace({
             style={{ background: `${IC.orange}33`, color: IC.orange }}
           >
             On Hold
+          </span>
+        ) : null}
+        {needsTransportScheduled(purchase) ? (
+          <span
+            className="inline-flex w-fit rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+            style={{ background: `${IC.blue}22`, color: IC.blue }}
+          >
+            Needs transport
           </span>
         ) : null}
 

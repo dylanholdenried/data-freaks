@@ -4,6 +4,7 @@
 export const ACQ_PIPELINE_STAGES = [
   "awaiting_bos",
   "need_to_stock_in",
+  "sent_to_office",
   "in_transit",
   "recon",
   "frontline",
@@ -51,6 +52,7 @@ export type AcqSourceType = (typeof ACQ_SOURCE_TYPES)[number];
 export const ACQ_STAGE_LABELS: Record<AcqPurchaseStage, string> = {
   awaiting_bos: "Awaiting BOS",
   need_to_stock_in: "Need to Stock In",
+  sent_to_office: "Sent to Office",
   in_transit: "In Transit",
   recon: "Recon",
   frontline: "Frontline",
@@ -118,6 +120,7 @@ export type AcqCardTheme = { stripe: string; glow: string; badge: string };
 export const ACQ_STAGE_COLORS: Record<AcqPurchaseStage, AcqCardTheme> = {
   awaiting_bos: { stripe: "#D4A574", glow: "#2a2018", badge: "#6b4e2e" },
   need_to_stock_in: { stripe: "#E8C547", glow: "#2a2410", badge: "#6b5a1a" },
+  sent_to_office: { stripe: "#C4A484", glow: "#241c14", badge: "#5a4630" },
   in_transit: { stripe: "#7EC8E8", glow: "#152832", badge: "#2a5a6e" },
   recon: { stripe: "#4A90D9", glow: "#152036", badge: "#1e4a7a" },
   frontline: { stripe: "#7DCF9A", glow: "#15281f", badge: "#1f5a3a" },
@@ -157,6 +160,8 @@ export type AcqPurchase = {
   stage: AcqPurchaseStage;
   /** Title/office hold — not a pipeline stage. */
   on_hold: boolean;
+  /** Transport booked with broker/carrier — not a pipeline stage. */
+  transport_scheduled: boolean;
   is_incoming: boolean;
   buyer_id: string | null;
   stock_number: string | null;

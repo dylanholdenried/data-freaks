@@ -154,6 +154,7 @@ export async function createAcquirePurchase(
       dealer_group_id: dealerGroupId,
       stage: parseStage(formData.get("stage")),
       on_hold: parseBool(formData.get("on_hold")),
+      transport_scheduled: parseBool(formData.get("transport_scheduled")),
       buyer_id: emptyToNull(formData.get("buyer_id")),
       stock_number: emptyToNull(formData.get("stock_number")),
       vin: emptyToNull(formData.get("vin")),
@@ -271,11 +272,17 @@ export async function updateAcquirePurchase(
     const onHold = formData.has("on_hold")
       ? parseBool(formData.get("on_hold"))
       : undefined;
+    const transportScheduled = formData.has("transport_scheduled")
+      ? parseBool(formData.get("transport_scheduled"))
+      : undefined;
 
     const patch = {
       store_id: nextStoreId,
       stage: nextStage,
       ...(onHold !== undefined ? { on_hold: onHold } : {}),
+      ...(transportScheduled !== undefined
+        ? { transport_scheduled: transportScheduled }
+        : {}),
       buyer_id: emptyToNull(formData.get("buyer_id")),
       stock_number: emptyToNull(formData.get("stock_number")),
       vin: emptyToNull(formData.get("vin")),

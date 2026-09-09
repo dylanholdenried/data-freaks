@@ -227,6 +227,9 @@ export default function PurchaseDetail({
   const [drivetrain, setDrivetrain] = useState(purchase.drivetrain ?? "");
   const [hasTrade, setHasTrade] = useState(Boolean(purchase.has_trade));
   const [onHold, setOnHold] = useState(Boolean(purchase.on_hold));
+  const [transportScheduled, setTransportScheduled] = useState(
+    Boolean(purchase.transport_scheduled)
+  );
   const [stage, setStage] = useState(purchase.stage);
   const [exitStrategy, setExitStrategy] = useState(purchase.exit_strategy ?? "");
   const [tradeVin, setTradeVin] = useState(purchase.trade_vin ?? "");
@@ -336,6 +339,8 @@ export default function PurchaseDetail({
     return {
       ...purchase,
       notes: notes.trim() || null,
+      on_hold: onHold,
+      transport_scheduled: transportScheduled,
       stock_number: stockNumber.trim() || null,
       odometer: parseDraftNum(odometer),
       buyer_id: buyerId.trim() || null,
@@ -383,6 +388,8 @@ export default function PurchaseDetail({
   }, [
     purchase,
     notes,
+    onHold,
+    transportScheduled,
     stockNumber,
     odometer,
     buyerId,
@@ -480,6 +487,7 @@ export default function PurchaseDetail({
     fd.set("drivetrain", drivetrain);
     fd.set("has_trade", hasTrade ? "true" : "false");
     fd.set("on_hold", onHold ? "true" : "false");
+    fd.set("transport_scheduled", transportScheduled ? "true" : "false");
     fd.set("exit_strategy", exitStrategy);
     if (hasTrade) {
       fd.set("trade_vin", tradeVin.trim().toUpperCase());
@@ -568,6 +576,39 @@ export default function PurchaseDetail({
                 </span>
                 <span className="font-normal leading-tight" style={{ color: IC.muted }}>
                   Title / office
+                </span>
+              </label>
+              <label
+                className="mt-4 flex max-w-[7.5rem] cursor-pointer flex-col items-start gap-1 text-[10px] font-semibold uppercase tracking-wide"
+                style={{ color: isAlert("transport_scheduled") ? IC.red : IC.muted }}
+              >
+                <span className="inline-flex items-center gap-1.5 normal-case tracking-normal">
+                  <input
+                    type="checkbox"
+                    checked={transportScheduled}
+                    disabled={!canEdit}
+                    onChange={(e) => setTransportScheduled(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border"
+                    style={
+                      isAlert("transport_scheduled")
+                        ? { outline: `1px solid ${IC.red}` }
+                        : undefined
+                    }
+                  />
+                  <span
+                    style={{
+                      color: isAlert("transport_scheduled")
+                        ? IC.red
+                        : transportScheduled
+                          ? IC.blue
+                          : IC.text,
+                    }}
+                  >
+                    Transport
+                  </span>
+                </span>
+                <span className="font-normal leading-tight" style={{ color: IC.muted }}>
+                  Broker / carrier
                 </span>
               </label>
               <label className="block text-right text-[10px] font-semibold uppercase tracking-wide">

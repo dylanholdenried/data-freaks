@@ -4,7 +4,7 @@
  * Inventory Command live overlays are never treated as missing.
  */
 
-import { sellerSkipsCrGrade, type AcqPurchase, type AcqPurchaseStage } from "./types";
+import { sellerSkipsCrGrade, isCompletedStage, type AcqPurchase, type AcqPurchaseStage } from "./types";
 
 /** Detail tabs that can own action items (Books / Merchandising have none). */
 export type AcqActionItemTab =
@@ -33,6 +33,7 @@ export type AcqActionItemKey =
   | "purchase_price"
   | "auction_fees"
   | "transport_cost"
+  | "transport_scheduled"
   | "recon_estimate"
   | "purchase_mmr"
   | "purchase_jd"
@@ -64,18 +65,19 @@ export type AcqActionItem = {
 };
 
 /** Pipeline rank — higher means further along. Demo sits with Frontline (on-lot). */
-const STAGE_RANK: Record<AcqPurchaseStage, number> = {
+export const STAGE_RANK: Record<AcqPurchaseStage, number> = {
   awaiting_bos: 0,
   need_to_stock_in: 1,
-  in_transit: 2,
-  recon: 3,
-  frontline: 4,
-  pending_sale: 5,
-  wholesale: 5,
-  arbitration: 5,
-  demo: 4,
-  sold: 6,
-  arbitration_complete: 6,
+  sent_to_office: 2,
+  in_transit: 3,
+  recon: 4,
+  frontline: 5,
+  pending_sale: 6,
+  wholesale: 6,
+  arbitration: 6,
+  demo: 5,
+  sold: 7,
+  arbitration_complete: 7,
 };
 
 function isBlank(v: string | number | null | undefined): boolean {
@@ -110,7 +112,6 @@ export function missingAcquireActionItems(p: AcqPurchase): AcqActionItem[] {
 
   // ── Immediate (any stage) — vehicle + acquisition from bulk CSV ───────────
   if (isBlank(p.buyer_id)) push(missing, "buyer_id", "Buyer", "Overview");
-  if (isBlank(p.stock_number)) push(missing, "stock_number", "Stock #", "Overview");
   if (isBlank(p.vin)) push(missing, "vin", "VIN", "Overview");
   if (isBlank(p.vehicle_year)) push(missing, "vehicle_year", "Year", "Overview");
   if (isBlank(p.vehicle_make)) push(missing, "vehicle_make", "Make", "Overview");
@@ -127,7 +128,6 @@ export function missingAcquireActionItems(p: AcqPurchase): AcqActionItem[] {
   }
   if (isBlank(p.purchase_price)) push(missing, "purchase_price", "Purchase price", "Acquisition");
   if (isBlank(p.auction_fees)) push(missing, "auction_fees", "Auction fees", "Acquisition");
-  if (isBlank(p.transport_cost)) push(missing, "transport_cost", "Transport cost", "Acquisition");
   // Recon estimate / Recon-tab fields are not required for Wholesale or Arbitration.
   const skipsRecon = p.stage === "wholesale" || p.stage === "arbitration";
   if (!skipsRecon && isBlank(p.recon_estimate)) {
@@ -136,9 +136,28 @@ export function missingAcquireActionItems(p: AcqPurchase): AcqActionItem[] {
   if (isBlank(p.purchase_mmr)) push(missing, "purchase_mmr", "MMR", "Acquisition");
   if (isBlank(p.purchase_jd)) push(missing, "purchase_jd", "JD Power", "Acquisition");
 
-  // ── Recon+ (not required for Wholesale / Arbitration — blanks are OK) ─────
-  if (rank >= STAGE_RANK.recon && !skipsRecon) {
-    if (isBlank(p.delivery_date)) push(missing, "delivery_date", "Delivery date", "Recon");
+  // ── Need to Stock In+ — transport scheduled (not required at Awaiting BOS) ─
+  if (
+    rank >= STAGE_RANK.need_to_stock_in &&
+    !isCompletedStage(p.stage) &&
+    isUnchecked(p.transport_scheduled)
+  ) {
+    push(missing, "transport_scheduled", "Transport scheduled", "Overview");
+  }
+
+  // ── In Transit+ — stock number (Sent to Office can still lack a stock #) ───
+  if (rank >= STAGE_RANK.in_transit && isBlank(p.stock_number)) {
+    push(missing, "stock_number", "Stock #", "Overview");
+  }
+
+  // ── Recon+ — transport cost + delivery (not required for Wholesale / Arb) ─
+  if (rank >= STAGE_RANK.recon) {
+    if (isBlank(p.transport_cost)) {
+      push(missing, "transport_cost", "Transport cost", "Acquisition");
+    }
+    if (!skipsRecon && isBlank(p.delivery_date)) {
+      push(missing, "delivery_date", "Delivery date", "Recon");
+    }
   }
 
   // ── Frontline+ (incl. demo / pending; not Wholesale / Arbitration) ────────
@@ -202,4 +221,11 @@ export function actionItemCountsByTab(
   };
   for (const item of items) counts[item.tab] += 1;
   return counts;
+}
+
+/** Active cars past Awaiting BOS that still need transport scheduled. */
+export function needsTransportScheduled(p: AcqPurchase): boolean {
+  if (p.transport_scheduled) return false;
+  if (isCompletedStage(p.stage)) return false;
+  return (STAGE_RANK[p.stage] ?? 0) >= STAGE_RANK.need_to_stock_in;
 }
