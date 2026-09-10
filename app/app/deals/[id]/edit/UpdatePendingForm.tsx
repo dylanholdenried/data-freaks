@@ -852,9 +852,8 @@ export default function UpdatePendingForm({
     if (!displayMake.trim()) errs.push("Vehicle make is required");
     if (!displayModel.trim()) errs.push("Vehicle model is required");
 
-    // Step 2 — vehicle details (VIN owned by canClose)
+    // Step 2 — vehicle details (VIN owned by canClose; color optional)
     if (!trim.trim()) errs.push("Trim is required");
-    if (!color) errs.push("Color is required");
     if (!bodyStyle) errs.push("Body style is required");
     if (!drivetrain) errs.push("Drivetrain is required");
     if (!odometer.trim()) errs.push("Odometer is required");
@@ -1716,7 +1715,7 @@ export default function UpdatePendingForm({
                 value={color}
                 onChange={(e) => setColor(e.target.value)}
                 disabled={isLocked}
-                className={cn(SEL, emptyCls(color, isLocked))}
+                className={SEL}
               >
                 <option value="">Select color</option>
                 {COLORS.map((c) => (
