@@ -16,8 +16,9 @@ import {
   Crosshair,
   ShoppingBag,
   BarChart3,
+  CreditCard,
 } from "lucide-react";
-import { navAccessState, type PlanTier } from "@/lib/plan-access";
+import { navAccessState, requiredProductForHref, type PlanTier } from "@/lib/plan-access";
 import { isViewerNavHref } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 
@@ -48,26 +49,20 @@ const LOG_LINKS: NavItem[] = [
     match: (p) => p === "/app/deals" || p.startsWith("/app/deals/"),
   },
   {
-    href: "/app/setup",
-    label: "Setup & Config",
-    icon: Settings2,
-    match: (p) => p.startsWith("/app/setup"),
-  },
-  {
     href: "/app/calendar",
     label: "Calendar",
     icon: CalendarRange,
     match: (p) => p.startsWith("/app/calendar"),
   },
-];
-
-const ANALYZE_LINKS: NavItem[] = [
   {
     href: "/app/salesperson-leaderboard",
     label: "Salesperson Leaderboard",
     icon: Trophy,
     match: (p) => p.startsWith("/app/salesperson-leaderboard"),
   },
+];
+
+const ANALYZE_LINKS: NavItem[] = [
   {
     href: "/app/profit-center",
     label: "Profit Center",
@@ -80,20 +75,11 @@ const ANALYZE_LINKS: NavItem[] = [
     icon: ArrowLeftRight,
     match: (p) => p.startsWith("/app/trades"),
   },
-];
-
-const ADVISE_LINKS: NavItem[] = [
   {
     href: "/app/inventory-command",
     label: "Inventory Command",
     icon: Package,
     match: (p) => p.startsWith("/app/inventory-command"),
-  },
-  {
-    href: "/app/buy-box",
-    label: "Buy-Box",
-    icon: Crosshair,
-    match: (p) => p.startsWith("/app/buy-box"),
   },
 ];
 
@@ -105,6 +91,12 @@ const ACQUIRE_LINKS: NavItem[] = [
     match: (p) => p.startsWith("/app/acquire/purchases"),
   },
   {
+    href: "/app/buy-box",
+    label: "Buy-Box",
+    icon: Crosshair,
+    match: (p) => p.startsWith("/app/buy-box"),
+  },
+  {
     href: "/app/acquire/performance",
     label: "Performance",
     icon: BarChart3,
@@ -112,74 +104,129 @@ const ACQUIRE_LINKS: NavItem[] = [
   },
 ];
 
+const ACCOUNT_LINKS: NavItem[] = [
+  {
+    href: "/app/setup",
+    label: "Setup & Config",
+    icon: Settings2,
+    match: (p) => p.startsWith("/app/setup"),
+  },
+  {
+    href: "/app/billing",
+    label: "Billing",
+    icon: CreditCard,
+    match: (p) => p.startsWith("/app/billing"),
+  },
+];
+
 const SECTIONS: { title: string; links: NavItem[] }[] = [
   { title: "Log", links: LOG_LINKS },
   { title: "Analyze", links: ANALYZE_LINKS },
-  { title: "Advise", links: ADVISE_LINKS },
   { title: "Acquire", links: ACQUIRE_LINKS },
 ];
+
+function lockTitle(href: string): string {
+  const product = requiredProductForHref(href);
+  if (product === "acquire") return "Requires Acquire addon";
+  if (product === "analyze") return "Requires Analyze plan";
+  return "Locked";
+}
+
+function NavLinkRow({
+  href,
+  label,
+  icon: Icon,
+  match,
+  plan,
+  acquireEnabled,
+}: NavItem & {
+  plan?: PlanTier | string | null;
+  acquireEnabled?: boolean;
+}) {
+  const pathname = usePathname();
+  const locked = navAccessState(plan, href, { acquireEnabled }) === "locked";
+  const active = !locked && match(pathname);
+  return (
+    <Link
+      href={href}
+      prefetch
+      className={cn(locked ? navLinkLocked : active ? navLinkActive : navLink)}
+      aria-current={active ? "page" : undefined}
+      title={locked ? lockTitle(href) : undefined}
+    >
+      <Icon className="h-3.5 w-3.5 shrink-0" />
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {locked ? <Lock className="h-3 w-3 shrink-0 opacity-80" /> : null}
+    </Link>
+  );
+}
 
 export default function AppSidebarNav({
   plan = "log",
   acquireEnabled = false,
   viewOnly = false,
   isPlatformAdmin = false,
+  showBilling = false,
 }: {
   plan?: PlanTier | string | null;
   acquireEnabled?: boolean;
   viewOnly?: boolean;
   /** Performance is unfinished — only platform admins see the nav link. */
   isPlatformAdmin?: boolean;
+  showBilling?: boolean;
 }) {
-  const pathname = usePathname();
-
   return (
-    <nav className="space-y-5 px-3 py-4 text-xs">
-      {SECTIONS.map(({ title, links }) => {
-        let visibleLinks = viewOnly
-          ? links.filter((link) => isViewerNavHref(link.href))
-          : links;
-        if (!isPlatformAdmin) {
-          visibleLinks = visibleLinks.filter(
-            (link) => link.href !== "/app/acquire/performance"
-          );
-        }
-        if (visibleLinks.length === 0) return null;
-        return (
-          <div key={title} className="space-y-1.5">
-            <p className="px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--da-muted)]">
-              {title}
-            </p>
-            <div className="space-y-1">
-              {visibleLinks.map(({ href, label, icon: Icon, match }) => {
-                const locked =
-                  navAccessState(plan, href, { acquireEnabled }) === "locked";
-                const active = !locked && match(pathname);
-                return (
-                  <Link
-                    key={href}
-                    href={href}
-                    prefetch
-                    className={cn(locked ? navLinkLocked : active ? navLinkActive : navLink)}
-                    aria-current={active ? "page" : undefined}
-                    title={
-                      locked
-                        ? title === "Acquire"
-                          ? "Requires Acquire addon"
-                          : `Requires ${title} plan`
-                        : undefined
-                    }
-                  >
-                    <Icon className="h-3.5 w-3.5 shrink-0" />
-                    <span className="min-w-0 flex-1 truncate">{label}</span>
-                    {locked ? <Lock className="h-3 w-3 shrink-0 opacity-80" /> : null}
-                  </Link>
-                );
-              })}
+    <nav className="flex flex-1 flex-col px-3 py-4 text-xs">
+      <div className="space-y-5">
+        {SECTIONS.map(({ title, links }) => {
+          let visibleLinks = viewOnly
+            ? links.filter((link) => isViewerNavHref(link.href))
+            : links;
+          if (!isPlatformAdmin) {
+            visibleLinks = visibleLinks.filter(
+              (link) => link.href !== "/app/acquire/performance"
+            );
+          }
+          if (visibleLinks.length === 0) return null;
+          return (
+            <div key={title} className="space-y-1.5">
+              <p className="px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--da-muted)]">
+                {title}
+              </p>
+              <div className="space-y-1">
+                {visibleLinks.map((item) => (
+                  <NavLinkRow
+                    key={item.href}
+                    {...item}
+                    plan={plan}
+                    acquireEnabled={acquireEnabled}
+                  />
+                ))}
+              </div>
             </div>
+          );
+        })}
+      </div>
+
+      {!viewOnly ? (
+        <div className="mt-auto space-y-1.5 border-t border-[var(--da-line)] pt-4">
+          <p className="px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--da-muted)]">
+            Account
+          </p>
+          <div className="space-y-1">
+            {ACCOUNT_LINKS.filter(
+              (link) => link.href !== "/app/billing" || showBilling
+            ).map((item) => (
+              <NavLinkRow
+                key={item.href}
+                {...item}
+                plan={plan}
+                acquireEnabled={acquireEnabled}
+              />
+            ))}
           </div>
-        );
-      })}
+        </div>
+      ) : null}
     </nav>
   );
 }

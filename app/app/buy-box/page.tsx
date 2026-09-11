@@ -1,9 +1,9 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import {
-  getDealerGroupPlan,
   getEffectiveDealerGroupId,
 } from "@/lib/dealer-group-context";
+import { getEffectiveEntitlements } from "@/lib/entitlements";
 import { canAccessBuyBox } from "@/lib/plan-access";
 import { isStoreViewer } from "@/lib/roles";
 import { redirect } from "next/navigation";
@@ -32,14 +32,15 @@ export default async function BuyBoxPage() {
     return <SelectAutoGroupEmptyState />;
   }
 
-  const groupPlan = await getDealerGroupPlan(dealerGroupId);
+  const entitlements = await getEffectiveEntitlements(supabase, profile);
 
-  if (!canAccessBuyBox(groupPlan)) {
+  if (!canAccessBuyBox(entitlements.acquire_enabled)) {
     return (
       <PlanNoAccessState
         title="Buy-Box"
-        description="A full buy-box and red-light list — built from your store’s closed deals — is available on the Advise plan."
-        requiredPlan="Advise"
+        description="A full buy-box and red-light list — built from your store’s closed deals — is available with the Acquire addon."
+        requiredPlan="Acquire"
+        viewerRole={profile.role}
       />
     );
   }
@@ -47,7 +48,7 @@ export default async function BuyBoxPage() {
   return (
     <div className="space-y-5">
       <section className="app-panel p-5">
-        <p className="app-kicker">Advise</p>
+        <p className="app-kicker">Acquire</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">Buy-Box</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Define what to buy — and what to never buy again — from your own deal outcomes.

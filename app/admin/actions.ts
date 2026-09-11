@@ -9,13 +9,28 @@ import { sendInviteEmail, sendPasswordResetEmail } from "@/lib/email/resend";
 import { isPlatformStaff, isStoreScopedRole, type AutoGroupUserRole } from "@/lib/roles";
 import { generatePasswordSetupLink } from "@/lib/auth/password-setup-link";
 
-type PlanTier = "log" | "analyze" | "advise";
+type PlanTier = "log" | "analyze";
 type AppRole = AutoGroupUserRole;
 type UserStatus = "invited" | "requested" | "active" | "disabled";
+type BillingInterval = "monthly" | "annual" | "";
+type BillingStatus = "none" | "trialing" | "active" | "past_due" | "canceled";
+
+async function syncGroupPlanCache(
+  supabase: Awaited<ReturnType<typeof requireAdminServiceClient>>,
+  groupId: string
+) {
+  const { error } = await supabase.rpc("sync_dealer_group_plan_cache", {
+    p_group_id: groupId,
+  });
+  if (error) {
+    console.error("sync_dealer_group_plan_cache failed", error);
+  }
+}
 
 function revalidateGroup(groupId?: string) {
   revalidatePath("/admin/groups");
   revalidatePath("/admin/users");
+  revalidatePath("/app/billing");
   if (groupId) {
     revalidatePath(`/admin/groups/${groupId}`);
   }
@@ -36,7 +51,7 @@ export async function createAutoGroup(formData: FormData) {
     throw new Error("Group name is required");
   }
 
-  const plan = (String(formData.get("plan") || "log") as PlanTier) || "log";
+  const plan = String(formData.get("plan") || "log") === "analyze" ? "analyze" : "log";
 
   const { data, error } = await supabase
     .from("dealer_groups")
@@ -65,12 +80,38 @@ export async function updateAutoGroup(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
   if (!name) throw new Error("Group name is required");
 
-  const plan = String(formData.get("plan") || "log") as PlanTier;
+  const applyPlanToStores = String(formData.get("apply_plan_to_stores") || "") === "1";
+  const planRaw = String(formData.get("plan") || "log");
+  const plan: PlanTier = planRaw === "analyze" ? "analyze" : "log";
 
-  const { error } = await supabase.from("dealer_groups").update({ name, plan }).eq("id", id);
+  const { error } = await supabase.from("dealer_groups").update({ name }).eq("id", id);
 
   if (error) {
     throw new Error(`Update auto group failed: ${error.message}`);
+  }
+
+  if (applyPlanToStores) {
+    const patch: Record<string, unknown> = {
+      plan,
+      updated_at: new Date().toISOString(),
+    };
+    if (plan === "analyze") {
+      patch.billing_status = "active";
+      patch.billing_interval = "monthly";
+    } else {
+      patch.billing_status = "none";
+      patch.billing_interval = null;
+      patch.trial_ends_at = null;
+      patch.acquire_enabled = false;
+    }
+    const { error: storeError } = await supabase
+      .from("stores")
+      .update(patch)
+      .eq("dealer_group_id", id);
+    if (storeError) {
+      throw new Error(`Apply plan to stores failed: ${storeError.message}`);
+    }
+    await syncGroupPlanCache(supabase, id);
   }
 
   revalidateGroup(id);
@@ -136,12 +177,16 @@ export async function createStoreInGroup(formData: FormData) {
     dealer_group_id,
     name,
     is_demo: false,
+    plan: "log",
+    billing_status: "none",
+    monthly_price_cents: 250000,
   });
 
   if (error) {
     throw new Error(`Create store failed: ${error.message}`);
   }
 
+  await syncGroupPlanCache(supabase, dealer_group_id);
   revalidateGroup(dealer_group_id);
 }
 
@@ -156,9 +201,76 @@ export async function updateStoreInGroup(formData: FormData) {
     throw new Error("Store id, group, and name are required");
   }
 
+  const planRaw = String(formData.get("plan") || "log");
+  const plan: PlanTier = planRaw === "analyze" ? "analyze" : "log";
+  const acquire_enabled = String(formData.get("acquire_enabled") || "") === "1";
+  const billing_status = String(formData.get("billing_status") || "none") as BillingStatus;
+  const intervalRaw = String(formData.get("billing_interval") || "") as BillingInterval;
+  const billing_interval =
+    intervalRaw === "monthly" || intervalRaw === "annual" ? intervalRaw : null;
+
+  // Prefer dollars field (admin UI). Fall back to cents for older forms.
+  const dollarsRaw = String(formData.get("monthly_price_dollars") || "")
+    .trim()
+    .replace(/[$,\s]/g, "");
+  let monthly_price_cents: number;
+  if (dollarsRaw !== "") {
+    const dollars = Number(dollarsRaw);
+    if (!Number.isFinite(dollars) || dollars < 0) {
+      throw new Error("Monthly price must be a valid dollar amount (e.g. 2500)");
+    }
+    monthly_price_cents = Math.round(dollars * 100);
+  } else {
+    const monthlyRaw = String(formData.get("monthly_price_cents") || "250000");
+    monthly_price_cents = Math.max(0, parseInt(monthlyRaw, 10) || 250000);
+  }
+
+  const trial_ends_at = String(formData.get("trial_ends_at") || "").trim() || null;
+  const current_period_end = String(formData.get("current_period_end") || "").trim() || null;
+  const bulk_import_window_ends_at =
+    String(formData.get("bulk_import_window_ends_at") || "").trim() || null;
+  const markActivationPaid = String(formData.get("activation_fee_paid") || "") === "1";
+  const clearActivation = String(formData.get("clear_activation_fee") || "") === "1";
+
+  const patch: Record<string, unknown> = {
+    name,
+    plan,
+    acquire_enabled,
+    billing_status:
+      billing_status === "trialing" ||
+      billing_status === "active" ||
+      billing_status === "past_due" ||
+      billing_status === "canceled"
+        ? billing_status
+        : "none",
+    billing_interval,
+    monthly_price_cents,
+    trial_ends_at: trial_ends_at ? new Date(trial_ends_at).toISOString() : null,
+    current_period_end: current_period_end
+      ? new Date(current_period_end).toISOString()
+      : null,
+    bulk_import_window_ends_at: bulk_import_window_ends_at
+      ? new Date(bulk_import_window_ends_at).toISOString()
+      : null,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (clearActivation) {
+    patch.activation_fee_paid_at = null;
+  } else if (markActivationPaid) {
+    const { data: existing } = await supabase
+      .from("stores")
+      .select("activation_fee_paid_at")
+      .eq("id", id)
+      .maybeSingle();
+    if (!existing?.activation_fee_paid_at) {
+      patch.activation_fee_paid_at = new Date().toISOString();
+    }
+  }
+
   const { error } = await supabase
     .from("stores")
-    .update({ name })
+    .update(patch)
     .eq("id", id)
     .eq("dealer_group_id", dealer_group_id);
 
@@ -166,6 +278,42 @@ export async function updateStoreInGroup(formData: FormData) {
     throw new Error(`Update store failed: ${error.message}`);
   }
 
+  await syncGroupPlanCache(supabase, dealer_group_id);
+  revalidateGroup(dealer_group_id);
+  redirect(`/admin/groups/${dealer_group_id}?billingSaved=1`);
+}
+
+export async function startStoreTrial90Days(formData: FormData) {
+  const supabase = await requireAdminServiceClient();
+
+  const id = String(formData.get("id") || "").trim();
+  const dealer_group_id = String(formData.get("dealer_group_id") || "").trim();
+  if (!id || !dealer_group_id) throw new Error("Store id and group are required");
+
+  const trialEnd = new Date();
+  trialEnd.setUTCDate(trialEnd.getUTCDate() + 90);
+  const importEnd = new Date();
+  importEnd.setUTCDate(importEnd.getUTCDate() + 90);
+
+  const { error } = await supabase
+    .from("stores")
+    .update({
+      plan: "analyze",
+      billing_status: "trialing",
+      billing_interval: "monthly",
+      trial_ends_at: trialEnd.toISOString(),
+      current_period_end: trialEnd.toISOString(),
+      bulk_import_window_ends_at: importEnd.toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .eq("dealer_group_id", dealer_group_id);
+
+  if (error) {
+    throw new Error(`Start trial failed: ${error.message}`);
+  }
+
+  await syncGroupPlanCache(supabase, dealer_group_id);
   revalidateGroup(dealer_group_id);
 }
 
@@ -186,6 +334,7 @@ export async function deleteStoreInGroup(formData: FormData) {
     throw new Error(`Delete store failed: ${error.message}`);
   }
 
+  await syncGroupPlanCache(supabase, dealer_group_id);
   revalidateGroup(dealer_group_id);
 }
 

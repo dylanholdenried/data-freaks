@@ -6,3 +6,5 @@ node_modules/
 .env*.local
 supabase/.temp
 .env*
+.tmp-backups/
+.tmp-logo-extract/

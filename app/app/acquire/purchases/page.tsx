@@ -1,9 +1,9 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import {
-  getDealerGroupAcquireEnabled,
   getEffectiveDealerGroupId,
 } from "@/lib/dealer-group-context";
+import { getEffectiveEntitlements } from "@/lib/entitlements";
 import { getAccessibleStores } from "@/lib/store-access";
 import { canAccessAcquire } from "@/lib/plan-access";
 import { canMutateAcquire } from "@/lib/roles";
@@ -38,8 +38,8 @@ export default async function AcquirePurchasesPage({
     return <SelectAutoGroupEmptyState />;
   }
 
-  const acquireEnabled = await getDealerGroupAcquireEnabled(dealerGroupId);
-  if (!canAccessAcquire(acquireEnabled)) {
+  const entitlements = await getEffectiveEntitlements(supabase, profile);
+  if (!canAccessAcquire(entitlements.acquire_enabled)) {
     return <AcquireNoAccessState />;
   }
 

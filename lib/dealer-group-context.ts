@@ -47,7 +47,7 @@ export async function listDealerGroupsForAdmin(): Promise<DealerGroupOption[]> {
   return (data ?? []) as DealerGroupOption[];
 }
 
-/** Plan (and name) for a dealer group — service client bypasses home-group-only RLS. */
+/** Group-level cache / display (not for feature gates). */
 export type DealerGroupPlanInfo = {
   plan: string | null;
   name: string | null;

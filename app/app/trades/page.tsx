@@ -1,9 +1,9 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import {
-  getDealerGroupPlanInfo,
   getEffectiveDealerGroupId,
 } from "@/lib/dealer-group-context";
+import { getEffectiveEntitlements } from "@/lib/entitlements";
 import { getAccessibleStores } from "@/lib/store-access";
 import { canAccessProfitCenter } from "@/lib/plan-access";
 import { isStoreViewer } from "@/lib/roles";
@@ -66,14 +66,15 @@ export default async function TradesPage({
     return <SelectAutoGroupEmptyState />;
   }
 
-  const groupInfo = await getDealerGroupPlanInfo(dealerGroupId);
+  const entitlements = await getEffectiveEntitlements(supabase, profile);
 
-  if (!canAccessProfitCenter(groupInfo?.plan)) {
+  if (!canAccessProfitCenter(entitlements.plan)) {
     return (
       <PlanNoAccessState
         title="Trades"
-        description="Trade-in volume, attach rate, ACV/allowance, and hold analytics are available on the Analyze plan and above."
+        description="Trade-in volume, attach rate, ACV/allowance, and hold analytics are available on the Analyze plan."
         requiredPlan="Analyze"
+        viewerRole={profile.role}
       />
     );
   }
@@ -115,7 +116,7 @@ export default async function TradesPage({
       deals={[]}
       trades={[]}
       dealSalespeople={[]}
-      groupName={groupInfo?.name ?? ""}
+      groupName={entitlements.groupName ?? ""}
       preset={preset}
       range={range}
       initialStoreId={storeId}
@@ -153,7 +154,7 @@ export default async function TradesPage({
       deals={bundle.deals}
       trades={bundle.trades}
       dealSalespeople={bundle.dealSalespeople}
-      groupName={groupInfo?.name ?? ""}
+      groupName={entitlements.groupName ?? ""}
       preset={preset}
       range={range}
       initialStoreId={storeId}

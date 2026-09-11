@@ -119,13 +119,28 @@ export async function saveProvisionDraft(requestId: string, payload: ProvisionDr
   }
 
   let dealerGroupId = request.dealer_group_id as string | null;
+  const plan = payload.plan === "analyze" ? "analyze" : "log";
+  const storeBillingDefaults =
+    plan === "analyze"
+      ? {
+          plan: "analyze" as const,
+          billing_status: "active" as const,
+          billing_interval: "monthly" as const,
+          monthly_price_cents: 250000,
+        }
+      : {
+          plan: "log" as const,
+          billing_status: "none" as const,
+          billing_interval: null,
+          monthly_price_cents: 250000,
+        };
 
   if (dealerGroupId) {
     const { error: groupUpdateError } = await supabase
       .from("dealer_groups")
       .update({
         name: groupName,
-        plan: payload.plan,
+        plan,
         website: payload.website?.trim() || request.website || null,
         status: "pending",
         is_active: false,
@@ -141,7 +156,7 @@ export async function saveProvisionDraft(requestId: string, payload: ProvisionDr
       .from("dealer_groups")
       .insert({
         name: groupName,
-        plan: payload.plan,
+        plan,
         website: payload.website?.trim() || request.website || null,
         status: "pending",
         is_active: false,
@@ -191,7 +206,12 @@ export async function saveProvisionDraft(requestId: string, payload: ProvisionDr
     if (storeId) {
       const { error: updateStoreError } = await supabase
         .from("stores")
-        .update({ name: storeName, is_active: true, is_demo: false })
+        .update({
+          name: storeName,
+          is_active: true,
+          is_demo: false,
+          ...storeBillingDefaults,
+        })
         .eq("id", storeId)
         .eq("dealer_group_id", dealerGroupId);
       if (updateStoreError) {
@@ -205,6 +225,7 @@ export async function saveProvisionDraft(requestId: string, payload: ProvisionDr
           name: storeName,
           is_demo: false,
           is_active: true,
+          ...storeBillingDefaults,
         })
         .select("id")
         .single();
@@ -297,6 +318,13 @@ export async function saveProvisionDraft(requestId: string, payload: ProvisionDr
 
   if (requestUpdateError) {
     throw new Error(`Update request failed: ${requestUpdateError.message}`);
+  }
+
+  const { error: syncError } = await supabase.rpc("sync_dealer_group_plan_cache", {
+    p_group_id: dealerGroupId,
+  });
+  if (syncError) {
+    console.error("sync_dealer_group_plan_cache after provision", syncError);
   }
 
   revalidateProvision(requestId, dealerGroupId);

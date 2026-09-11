@@ -4,11 +4,10 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import {
-  getDealerGroupAcquireEnabled,
-  getDealerGroupPlan,
   getEffectiveDealerGroupId,
   listDealerGroupsForAdmin,
 } from "@/lib/dealer-group-context";
+import { getEffectiveEntitlements } from "@/lib/entitlements";
 import { formatProfileName, formatRoleLabel } from "@/lib/profile-display";
 import { isPlatformStaff, isStoreViewer } from "@/lib/roles";
 import { getImpersonationState, isAppViewOnly } from "@/lib/impersonation";
@@ -37,7 +36,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("first_name,last_name,role,status,dealer_group_id,onboarding_welcome_seen_at")
+    .select("id,first_name,last_name,role,status,dealer_group_id,onboarding_welcome_seen_at")
     .or(profileMatchAuthUserId(user.id))
     .maybeSingle();
 
@@ -65,8 +64,14 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const displayName = formatProfileName(profile.first_name, profile.last_name);
   const roleLabel = formatRoleLabel(profile.role);
 
-  const groupPlan = await getDealerGroupPlan(selectedGroupId);
-  const acquireEnabled = await getDealerGroupAcquireEnabled(selectedGroupId);
+  const entitlements = await getEffectiveEntitlements(supabase, {
+    id: profile.id,
+    role: profile.role,
+    dealer_group_id: profile.dealer_group_id,
+  });
+  const groupPlan = entitlements.plan;
+  const acquireEnabled = entitlements.acquire_enabled;
+  const showBilling = profile.role === "group_admin" || isPlatformAdmin;
 
   return (
     <DaAppThemeProvider>
@@ -90,6 +95,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
             acquireEnabled={acquireEnabled}
             viewOnly={navViewOnly}
             isPlatformAdmin={isPlatformAdmin}
+            showBilling={showBilling}
           />
           <div className="mt-auto space-y-3 p-3">
             {isPlatformAdmin ? (
@@ -144,6 +150,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
                   plan={groupPlan}
                   acquireEnabled={acquireEnabled}
                   viewOnly={navViewOnly}
+                  showBilling={showBilling}
                 />
               </div>
               <div className="flex items-center gap-3 text-xs text-[var(--da-muted)]">

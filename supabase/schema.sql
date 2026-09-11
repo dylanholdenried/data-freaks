@@ -14,6 +14,26 @@ end$$;
 
 do $$
 begin
+  if not exists (select 1 from pg_type where typname = 'billing_interval') then
+    create type billing_interval as enum ('monthly', 'annual');
+  end if;
+end$$;
+
+do $$
+begin
+  if not exists (select 1 from pg_type where typname = 'billing_status') then
+    create type billing_status as enum (
+      'none',
+      'trialing',
+      'active',
+      'past_due',
+      'canceled'
+    );
+  end if;
+end$$;
+
+do $$
+begin
   if not exists (select 1 from pg_type where typname = 'dealer_group_status') then
     create type dealer_group_status as enum (
       'pending',
@@ -276,6 +296,15 @@ create table public.stores (
   code text,
   is_active boolean not null default true,
   is_demo boolean not null default false,
+  plan plan_tier not null default 'log',
+  acquire_enabled boolean not null default false,
+  billing_interval billing_interval,
+  billing_status billing_status not null default 'none',
+  trial_ends_at timestamptz,
+  current_period_end timestamptz,
+  bulk_import_window_ends_at timestamptz,
+  activation_fee_paid_at timestamptz,
+  monthly_price_cents integer not null default 250000 check (monthly_price_cents >= 0),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

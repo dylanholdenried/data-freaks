@@ -1,18 +1,13 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { fetchAllByIds, fetchAllRows } from "@/lib/supabase/fetch-all";
-import {
-  getDealerGroupPlan,
-  getEffectiveDealerGroupId,
-} from "@/lib/dealer-group-context";
+import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import { getAccessibleStores } from "@/lib/store-access";
-import { canAccessProfitCenter } from "@/lib/plan-access";
 import {
   getCentralTimeParts,
   type CalendarDay,
 } from "@/lib/dashboard/pace";
 import SelectAutoGroupEmptyState from "../SelectAutoGroupEmptyState";
-import PlanNoAccessState from "../PlanNoAccessState";
 import LeaderboardClient from "./LeaderboardClient";
 
 type Store = { id: string; name: string };
@@ -62,18 +57,6 @@ export default async function SalespersonLeaderboardPage({
 
   if (!dealerGroupId || !profile) {
     return <SelectAutoGroupEmptyState />;
-  }
-
-  const groupPlan = await getDealerGroupPlan(dealerGroupId);
-
-  if (!canAccessProfitCenter(groupPlan)) {
-    return (
-      <PlanNoAccessState
-        title="Salesperson Leaderboard"
-        description="MTD and YTD salesperson rankings by units are available on the Analyze plan and above."
-        requiredPlan="Analyze"
-      />
-    );
   }
 
   const ct = getCentralTimeParts();

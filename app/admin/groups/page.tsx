@@ -91,7 +91,6 @@ export default async function AdminGroupsPage() {
               >
                 <option value="log">Log</option>
                 <option value="analyze">Analyze</option>
-                <option value="advise">Advise</option>
               </select>
             </div>
             <div className="flex items-end">

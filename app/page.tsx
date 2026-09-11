@@ -59,19 +59,13 @@ const RUNGS = [
   {
     level: "Level 2 · Software",
     title: "Analyze",
-    body: "The Profit Center. Gross and turn by make, model, price band, and source. Know exactly what makes you money — and what's been quietly losing it.",
+    body: "Profit Center, Trades, and Inventory Command. Gross and turn by make, model, price band, and source — know what makes you money.",
     hot: true,
   },
   {
-    level: "Level 3 · Advisory",
-    title: "Advise",
-    body: "1-on-1 with the founder. Your historical deals loaded and decoded, and a custom buy-box built from your store's actual outcomes.",
-    hot: false,
-  },
-  {
-    level: "Level 4 · Service",
+    level: "Level 3 · Service",
     title: "Acquire",
-    body: "We buy the cars your data says to buy — sourced, purchased, and transported to your lot. Your buy-box, executed for you.",
+    body: "We buy the cars your data says to buy — sourced, purchased, and transported to your lot. Buy-Box and purchase workflow included.",
     hot: false,
   },
 ] as const;

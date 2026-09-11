@@ -3,9 +3,9 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import {
-  getDealerGroupPlanInfo,
   getEffectiveDealerGroupId,
 } from "@/lib/dealer-group-context";
+import { getEffectiveEntitlements } from "@/lib/entitlements";
 import { getAccessibleStores } from "@/lib/store-access";
 import { canAccessProfitCenter } from "@/lib/plan-access";
 import { isStoreViewer } from "@/lib/roles";
@@ -94,8 +94,8 @@ export async function loadTradesRange(opts: {
     return { ok: false, error: "No auto group selected." };
   }
 
-  const groupInfo = await getDealerGroupPlanInfo(dealerGroupId);
-  if (!canAccessProfitCenter(groupInfo?.plan)) {
+  const entitlements = await getEffectiveEntitlements(supabase, profile);
+  if (!canAccessProfitCenter(entitlements.plan)) {
     return { ok: false, error: "Trades requires the Analyze plan." };
   }
 

@@ -4,10 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   createStoreInGroup,
   deleteStoreInGroup,
+  startStoreTrial90Days,
   updateAutoGroup,
   updateProfitCenterSettings,
   updateStoreInGroup,
@@ -17,20 +17,32 @@ import { openStoreViewForGroupAction } from "@/app/app/group-actions";
 import { requireAdminServiceClient } from "@/app/admin/admin-data";
 import { formatProfileName, formatRoleLabel, formatStatusLabel } from "@/lib/profile-display";
 import { isPlatformStaff, isStoreScopedRole } from "@/lib/roles";
-import FormWithSaveToast from "./FormWithSaveToast";
+import {
+  annualPriceCents,
+  billingStatusLabel,
+  DEFAULT_MONTHLY_PRICE_CENTS,
+  formatMoneyFromCents,
+} from "@/lib/billing";
 import AddUserModal from "./AddUserModal";
 
 type PageProps = {
   params: { id: string };
-  searchParams?: { activated?: string; emailError?: string };
+  searchParams?: { activated?: string; emailError?: string; billingSaved?: string };
 };
+
+function toDateInputValue(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toISOString().slice(0, 10);
+}
 
 async function getGroupDetail(id: string) {
   const supabase = await requireAdminServiceClient();
 
   const { data: group, error: groupError } = await supabase
     .from("dealer_groups")
-    .select("id, name, plan, is_demo, created_at")
+    .select("id, name, plan, acquire_enabled, is_demo, created_at")
     .eq("id", id)
     .maybeSingle();
 
@@ -43,7 +55,9 @@ async function getGroupDetail(id: string) {
     await Promise.all([
     supabase
       .from("stores")
-      .select("id, name, is_demo, created_at")
+      .select(
+        "id, name, is_demo, created_at, plan, acquire_enabled, billing_interval, billing_status, trial_ends_at, current_period_end, bulk_import_window_ends_at, activation_fee_paid_at, monthly_price_cents"
+      )
       .eq("dealer_group_id", id)
       .order("name", { ascending: true }),
     supabase
@@ -75,7 +89,6 @@ async function getGroupDetail(id: string) {
       const list = accessByProfile.get(profileKey) ?? [];
       list.push(row.store_id);
       accessByProfile.set(profileKey, list);
-      // Also index by auth user_id for lookup flexibility
       if (profileKey !== row.user_id) {
         const byAuth = accessByProfile.get(row.user_id) ?? [];
         byAuth.push(row.store_id);
@@ -102,6 +115,7 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
   const storeOptions = stores.map((s) => ({ id: s.id, name: s.name }));
   const storeNameById = new Map(stores.map((s) => [s.id, s.name]));
   const activated = searchParams?.activated === "1";
+  const billingSaved = searchParams?.billingSaved === "1";
   const emailError = searchParams?.emailError
     ? decodeURIComponent(searchParams.emailError)
     : null;
@@ -123,8 +137,27 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
     list_size: pcSettings?.list_size ?? DEFAULT_BUY_BOX_SETTINGS.listSize,
   };
 
+  const analyzeStores = stores.filter((s) => s.plan === "analyze");
+  const monthlyTotal = analyzeStores.reduce(
+    (sum, s) => sum + (s.monthly_price_cents ?? DEFAULT_MONTHLY_PRICE_CENTS),
+    0
+  );
+  const annualTotal = analyzeStores.reduce(
+    (sum, s) =>
+      sum + annualPriceCents(s.monthly_price_cents ?? DEFAULT_MONTHLY_PRICE_CENTS),
+    0
+  );
+  const acquireStores = stores.filter((s) => s.acquire_enabled);
+  const derivedPlan =
+    group.plan === "analyze" || analyzeStores.length > 0 ? "analyze" : "log";
+
   return (
     <div className="space-y-6">
+      {billingSaved ? (
+        <div className="rounded-md border border-[color-mix(in_srgb,var(--da-green)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-green)_12%,transparent)] px-3 py-2 text-sm text-[var(--da-green)]">
+          Store billing saved. Open store view → Billing to confirm the updated prices.
+        </div>
+      ) : null}
       {activated ? (
         <div className="rounded-md border border-[color-mix(in_srgb,var(--da-green)_35%,transparent)] bg-[color-mix(in_srgb,var(--da-green)_12%,transparent)] px-3 py-2 text-sm text-[var(--da-green)]">
           Auto group activated. The group admin can sign in at /login.
@@ -143,14 +176,15 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
           </Link>
           <h1 className="mt-2 text-xl font-semibold tracking-tight">{group.name}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            View and manage stores and users for this auto group.
+            View and manage stores, billing, and users for this auto group.
           </p>
         </div>
         <div className="flex items-center gap-2">
           {group.is_demo ? <Badge variant="outline">Demo</Badge> : null}
           <Badge variant="success" className="capitalize">
-            {group.plan}
+            {derivedPlan} (derived)
           </Badge>
+          {group.acquire_enabled ? <Badge variant="outline">Acquire</Badge> : null}
           <form action={openStoreViewForGroupAction}>
             <input type="hidden" name="dealer_group_id" value={group.id} />
             <Button type="submit" size="sm" variant="outline">
@@ -175,25 +209,86 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-muted-foreground" htmlFor="group_plan">
-                Plan
+                Apply plan to all stores
               </label>
               <select
                 id="group_plan"
                 name="plan"
-                defaultValue={group.plan}
+                defaultValue={derivedPlan}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
                 <option value="log">Log</option>
                 <option value="analyze">Analyze</option>
-                <option value="advise">Advise</option>
               </select>
             </div>
-            <div className="sm:col-span-3">
+            <div className="sm:col-span-3 flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input type="checkbox" name="apply_plan_to_stores" value="1" className="rounded border" />
+                Also apply selected plan to every store (overwrites per-store plan)
+              </label>
               <Button type="submit" size="sm">
                 Save group
               </Button>
             </div>
           </form>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Group plan badge is derived from stores. Edit payment level per store below for trials
+            and beta onboarding.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold">Payment details</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border border-border p-3">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Analyze stores</p>
+              <p className="mt-1 text-xl font-semibold">{analyzeStores.length}</p>
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Monthly list</p>
+              <p className="mt-1 text-xl font-semibold">{formatMoneyFromCents(monthlyTotal)}</p>
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Annual prepay</p>
+              <p className="mt-1 text-xl font-semibold">{formatMoneyFromCents(annualTotal)}</p>
+            </div>
+          </div>
+          <ul className="divide-y divide-border rounded-lg border border-border">
+            {stores.length === 0 ? (
+              <li className="px-3 py-2 text-muted-foreground">No stores yet.</li>
+            ) : (
+              stores.map((s) => {
+                const price = s.monthly_price_cents ?? DEFAULT_MONTHLY_PRICE_CENTS;
+                return (
+                  <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+                    <div>
+                      <span className="font-medium">{s.name}</span>
+                      <span className="ml-2 text-xs text-muted-foreground capitalize">
+                        {s.plan === "analyze" ? "Analyze" : "Log"} ·{" "}
+                        {billingStatusLabel(s.billing_status)}
+                        {s.acquire_enabled ? " · Acquire" : ""}
+                      </span>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {s.plan === "analyze"
+                        ? `${formatMoneyFromCents(price)}/mo · ${formatMoneyFromCents(annualPriceCents(price))}/yr`
+                        : "$0"}
+                    </div>
+                  </li>
+                );
+              })
+            )}
+          </ul>
+          {acquireStores.length > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Acquire on {acquireStores.map((s) => s.name).join(", ")} — $400/unit billed next month
+              (manual until Stripe).
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -251,7 +346,7 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
                 className="mb-1 block text-xs font-medium text-muted-foreground"
                 htmlFor="weight_front"
               >
-                Weight · front profit
+                Weight · front
               </label>
               <Input
                 id="weight_front"
@@ -268,7 +363,7 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
                 className="mb-1 block text-xs font-medium text-muted-foreground"
                 htmlFor="weight_back"
               >
-                Weight · back profit
+                Weight · back
               </label>
               <Input
                 id="weight_back"
@@ -325,7 +420,7 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-semibold">Stores ({stores.length})</CardTitle>
+          <CardTitle className="text-sm font-semibold">Stores & billing ({stores.length})</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <form action={createStoreInGroup} className="flex flex-wrap items-end gap-3">
@@ -339,41 +434,32 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
             <Button type="submit">Add store</Button>
           </form>
 
-          <div className="-mx-6 border-t border-border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Store</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {stores.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={2} className="text-sm text-muted-foreground">
-                      No stores yet.
-                    </TableCell>
-                  </TableRow>
-                )}
-                {stores.map((store) => (
-                  <TableRow key={store.id}>
-                    <TableCell>
-                      <form action={updateStoreInGroup} className="flex flex-wrap items-center gap-2">
+          <div className="space-y-4">
+            {stores.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No stores yet.</p>
+            ) : (
+              stores.map((store) => (
+                <div
+                  key={store.id}
+                  className="rounded-lg border border-border p-4 space-y-3"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{store.name}</span>
+                      {store.is_demo ? <Badge variant="outline">Demo</Badge> : null}
+                      <Badge variant="outline" className="capitalize">
+                        {store.plan === "analyze" ? "Analyze" : "Log"}
+                      </Badge>
+                      <Badge variant="outline">{billingStatusLabel(store.billing_status)}</Badge>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <form action={startStoreTrial90Days}>
                         <input type="hidden" name="id" value={store.id} />
                         <input type="hidden" name="dealer_group_id" value={group.id} />
-                        <Input
-                          name="name"
-                          defaultValue={store.name}
-                          aria-label="Store name"
-                          className="max-w-xs"
-                        />
-                        {store.is_demo ? <Badge variant="outline">Demo</Badge> : null}
-                        <Button type="submit" size="sm" variant="outline">
-                          Save
+                        <Button type="submit" size="sm" variant="secondary">
+                          Start 90-day trial
                         </Button>
                       </form>
-                    </TableCell>
-                    <TableCell className="text-right">
                       <form action={deleteStoreInGroup}>
                         <input type="hidden" name="id" value={store.id} />
                         <input type="hidden" name="dealer_group_id" value={group.id} />
@@ -381,11 +467,153 @@ export default async function AdminGroupDetailPage({ params, searchParams }: Pag
                           Delete
                         </Button>
                       </form>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                    </div>
+                  </div>
+
+                  <form action={updateStoreInGroup} className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                    <input type="hidden" name="id" value={store.id} />
+                    <input type="hidden" name="dealer_group_id" value={group.id} />
+                    <div className="sm:col-span-2">
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                        Store name
+                      </label>
+                      <Input name="name" defaultValue={store.name} required />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                        Plan
+                      </label>
+                      <select
+                        name="plan"
+                        defaultValue={store.plan === "analyze" ? "analyze" : "log"}
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      >
+                        <option value="log">Log</option>
+                        <option value="analyze">Analyze</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                        Billing status
+                      </label>
+                      <select
+                        name="billing_status"
+                        defaultValue={store.billing_status ?? "none"}
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      >
+                        <option value="none">None (Log)</option>
+                        <option value="trialing">Trialing</option>
+                        <option value="active">Active</option>
+                        <option value="past_due">Past due</option>
+                        <option value="canceled">Canceled</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                        Interval
+                      </label>
+                      <select
+                        name="billing_interval"
+                        defaultValue={store.billing_interval ?? ""}
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      >
+                        <option value="">—</option>
+                        <option value="monthly">Monthly</option>
+                        <option value="annual">Annual</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                        Monthly price (USD)
+                      </label>
+                      <Input
+                        name="monthly_price_dollars"
+                        type="number"
+                        min={0}
+                        step={1}
+                        defaultValue={Math.round(
+                          (store.monthly_price_cents ?? DEFAULT_MONTHLY_PRICE_CENTS) / 100
+                        )}
+                      />
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        List price for this rooftop (e.g. 2500 = $2,500/mo)
+                      </p>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                        Trial ends
+                      </label>
+                      <Input
+                        name="trial_ends_at"
+                        type="date"
+                        defaultValue={toDateInputValue(store.trial_ends_at)}
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                        Period end
+                      </label>
+                      <Input
+                        name="current_period_end"
+                        type="date"
+                        defaultValue={toDateInputValue(store.current_period_end)}
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                        Bulk import window ends
+                      </label>
+                      <Input
+                        name="bulk_import_window_ends_at"
+                        type="date"
+                        defaultValue={toDateInputValue(store.bulk_import_window_ends_at)}
+                      />
+                    </div>
+                    <div className="flex flex-col justify-end gap-2 sm:col-span-2 lg:col-span-4">
+                      <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <input
+                          type="checkbox"
+                          name="acquire_enabled"
+                          value="1"
+                          defaultChecked={Boolean(store.acquire_enabled)}
+                          className="rounded border"
+                        />
+                        Acquire enabled
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <input
+                          type="checkbox"
+                          name="activation_fee_paid"
+                          value="1"
+                          defaultChecked={Boolean(store.activation_fee_paid_at)}
+                          className="rounded border"
+                        />
+                        Activation fee paid
+                        {store.activation_fee_paid_at
+                          ? ` (${toDateInputValue(store.activation_fee_paid_at)})`
+                          : ""}
+                      </label>
+                      {store.activation_fee_paid_at ? (
+                        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <input
+                            type="checkbox"
+                            name="clear_activation_fee"
+                            value="1"
+                            className="rounded border"
+                          />
+                          Clear activation fee paid date
+                        </label>
+                      ) : null}
+                      <div>
+                        <Button type="submit" size="sm">
+                          Save store billing
+                        </Button>
+                      </div>
+                    </div>
+                  </form>
+                </div>
+              ))
+            )}
           </div>
         </CardContent>
       </Card>

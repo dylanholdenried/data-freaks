@@ -1,9 +1,9 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import {
-  getDealerGroupPlan,
   getEffectiveDealerGroupId,
 } from "@/lib/dealer-group-context";
+import { getEffectiveEntitlements } from "@/lib/entitlements";
 import { getAccessibleStores } from "@/lib/store-access";
 import { canAccessInventoryCommand } from "@/lib/plan-access";
 import { isStoreViewer } from "@/lib/roles";
@@ -45,14 +45,15 @@ export default async function InventoryCommandPage({
     return <SelectAutoGroupEmptyState />;
   }
 
-  const groupPlan = await getDealerGroupPlan(dealerGroupId);
+  const entitlements = await getEffectiveEntitlements(supabase, profile);
 
-  if (!canAccessInventoryCommand(groupPlan)) {
+  if (!canAccessInventoryCommand(entitlements.plan)) {
     return (
       <PlanNoAccessState
         title="Inventory Command"
-        description="Daily inventory command center — merchandising, pricing, demand, and subprime audit — is available on the Advise plan."
-        requiredPlan="Advise"
+        description="Daily inventory command center — merchandising, pricing, demand, and subprime audit — is available on the Analyze plan."
+        requiredPlan="Analyze"
+        viewerRole={profile.role}
       />
     );
   }

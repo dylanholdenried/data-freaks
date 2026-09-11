@@ -1,9 +1,9 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import {
-  getDealerGroupPlanInfo,
   getEffectiveDealerGroupId,
 } from "@/lib/dealer-group-context";
+import { getEffectiveEntitlements } from "@/lib/entitlements";
 import { getAccessibleStores } from "@/lib/store-access";
 import { canAccessProfitCenter } from "@/lib/plan-access";
 import { isStoreViewer } from "@/lib/roles";
@@ -59,14 +59,15 @@ export default async function ProfitCenterPage({
     return <SelectAutoGroupEmptyState />;
   }
 
-  const groupInfo = await getDealerGroupPlanInfo(dealerGroupId);
+  const entitlements = await getEffectiveEntitlements(supabase, profile);
 
-  if (!canAccessProfitCenter(groupInfo?.plan)) {
+  if (!canAccessProfitCenter(entitlements.plan)) {
     return (
       <PlanNoAccessState
         title="Profit Center"
-        description="Gross and turn analytics by make, model, price band, acquisition source, and salesperson leaderboards are available on the Analyze plan and above."
+        description="Gross and turn analytics by make, model, price band, acquisition source, and salesperson leaderboards are available on the Analyze plan."
         requiredPlan="Analyze"
+        viewerRole={profile.role}
       />
     );
   }
@@ -100,7 +101,7 @@ export default async function ProfitCenterPage({
       salespeople={[]}
       dealSalespeople={[]}
       buyBoxSettings={DEFAULT_BUY_BOX_SETTINGS}
-      groupName={groupInfo?.name ?? ""}
+      groupName={entitlements.groupName ?? ""}
       preset={preset}
       range={range}
       initialStoreId={storeId}
@@ -149,7 +150,7 @@ export default async function ProfitCenterPage({
       salespeople={salespeople}
       dealSalespeople={bundle.dealSalespeople}
       buyBoxSettings={buyBoxSettings}
-      groupName={groupInfo?.name ?? ""}
+      groupName={entitlements.groupName ?? ""}
       preset={preset}
       range={range}
       initialStoreId={storeId}

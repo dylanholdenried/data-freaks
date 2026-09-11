@@ -61,6 +61,7 @@ export function canAccessViewerAppPath(pathname: string): boolean {
   if (p.startsWith("/app/calendar")) return true;
   if (p.startsWith("/app/salesperson-leaderboard")) return true;
   if (p.startsWith("/app/acquire/")) return true;
+  if (p.startsWith("/app/buy-box")) return true;
   if (p === "/app/deals") return true;
   if (p.startsWith("/app/deals/")) {
     if (p === "/app/deals/new" || p.startsWith("/app/deals/new/")) return false;
@@ -77,6 +78,7 @@ export const VIEWER_NAV_HREFS = new Set([
   "/app/salesperson-leaderboard",
   "/app/acquire/purchases",
   "/app/acquire/performance",
+  "/app/buy-box",
 ]);
 
 /** V1: only platform staff may mutate Acquire purchase records. */

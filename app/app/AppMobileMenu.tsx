@@ -3,7 +3,7 @@
 import { useEffect, useId, useState } from "react";
 import Link from "next/link";
 import { Lock, Menu, X } from "lucide-react";
-import { navAccessState, type PlanTier } from "@/lib/plan-access";
+import { navAccessState, requiredProductForHref, type PlanTier } from "@/lib/plan-access";
 import { isViewerNavHref } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import AutoGroupSwitcher, { type AutoGroupOption } from "./AutoGroupSwitcher";
@@ -21,34 +21,40 @@ const SECTIONS: { title: string; links: NavItem[] }[] = [
     links: [
       { href: "/app/dashboard", label: "Dashboard" },
       { href: "/app/deals", label: "Sales Registry" },
-      { href: "/app/setup", label: "Setup & Config" },
       { href: "/app/calendar", label: "Calendar" },
+      { href: "/app/salesperson-leaderboard", label: "Salesperson Leaderboard" },
       { href: "/app/deals/new", label: "New Deal" },
     ],
   },
   {
     title: "Analyze",
     links: [
-      { href: "/app/salesperson-leaderboard", label: "Salesperson Leaderboard" },
       { href: "/app/profit-center", label: "Profit Center" },
       { href: "/app/trades", label: "Trades" },
-    ],
-  },
-  {
-    title: "Advise",
-    links: [
       { href: "/app/inventory-command", label: "Inventory Command" },
-      { href: "/app/buy-box", label: "Buy-Box" },
     ],
   },
   {
     title: "Acquire",
     links: [
       { href: "/app/acquire/purchases", label: "Purchases" },
+      { href: "/app/buy-box", label: "Buy-Box" },
       { href: "/app/acquire/performance", label: "Performance" },
     ],
   },
 ];
+
+const ACCOUNT_LINKS: NavItem[] = [
+  { href: "/app/setup", label: "Setup & Config" },
+  { href: "/app/billing", label: "Billing" },
+];
+
+function lockTitle(href: string): string {
+  const product = requiredProductForHref(href);
+  if (product === "acquire") return "Requires Acquire addon";
+  if (product === "analyze") return "Requires Analyze plan";
+  return "Locked";
+}
 
 export default function AppMobileMenu({
   isPlatformAdmin = false,
@@ -57,6 +63,7 @@ export default function AppMobileMenu({
   plan = "log",
   acquireEnabled = false,
   viewOnly = false,
+  showBilling = false,
 }: {
   isPlatformAdmin?: boolean;
   groups?: AutoGroupOption[];
@@ -64,6 +71,7 @@ export default function AppMobileMenu({
   plan?: PlanTier | string | null;
   acquireEnabled?: boolean;
   viewOnly?: boolean;
+  showBilling?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const titleId = useId();
@@ -161,10 +169,9 @@ export default function AppMobileMenu({
                         <Link
                           key={href}
                           href={href}
-                          className={cn(locked ? linkLocked : linkClass)}
-                          prefetch
                           onClick={close}
-                          title={locked ? `Requires ${title} plan` : undefined}
+                          className={cn(locked ? linkLocked : linkClass)}
+                          title={locked ? lockTitle(href) : undefined}
                         >
                           <span className="min-w-0 flex-1 truncate">{label}</span>
                           {locked ? <Lock className="h-3.5 w-3.5 shrink-0 opacity-80" /> : null}
@@ -174,14 +181,27 @@ export default function AppMobileMenu({
                   </div>
                 );
               })}
+
+              {!viewOnly ? (
+                <div className="space-y-1 border-t border-border pt-4">
+                  <p className="px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                    Account
+                  </p>
+                  {ACCOUNT_LINKS.filter(
+                    (link) => link.href !== "/app/billing" || showBilling
+                  ).map(({ href, label }) => (
+                    <Link
+                      key={href}
+                      href={href}
+                      onClick={close}
+                      className={linkClass}
+                    >
+                      {label}
+                    </Link>
+                  ))}
+                </div>
+              ) : null}
             </nav>
-            {isPlatformAdmin ? (
-              <div className="border-t border-border p-3">
-                <Link href="/admin" className={linkClass} prefetch onClick={close}>
-                  Platform Admin
-                </Link>
-              </div>
-            ) : null}
           </aside>
         </div>
       ) : null}

@@ -72,8 +72,8 @@ export default function ProvisionWizardClient({ request, profile, group, initial
   const [message, setMessage] = useState<string | null>(null);
 
   const [groupName, setGroupName] = useState(group?.name || request.dealer_group_name);
-  const [plan, setPlan] = useState<"log" | "analyze" | "advise">(
-    (group?.plan as "log" | "analyze" | "advise") || "log"
+  const [plan, setPlan] = useState<"log" | "analyze">(
+    group?.plan === "analyze" || group?.plan === "advise" ? "analyze" : "log"
   );
   const [website, setWebsite] = useState(group?.website || request.website || "");
   const [adminFirstName, setAdminFirstName] = useState(
@@ -252,11 +252,10 @@ export default function ProvisionWizardClient({ request, profile, group, initial
             <select
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               value={plan}
-              onChange={(e) => setPlan(e.target.value as "log" | "analyze" | "advise")}
+              onChange={(e) => setPlan(e.target.value as "log" | "analyze")}
             >
               <option value="log">Log</option>
               <option value="analyze">Analyze</option>
-              <option value="advise">Advise</option>
             </select>
           </label>
           <label className="space-y-1 text-sm">
