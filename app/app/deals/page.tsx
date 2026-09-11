@@ -120,9 +120,11 @@ export default async function DealsPage({
   const rollupParam = paramString(searchParams, "rollup");
   const yearParam = paramString(searchParams, "year");
   const monthParam = paramString(searchParams, "month");
+  const dayParam = paramString(searchParams, "day");
 
   let initialYear = defaultYear;
   let initialMonth = defaultMonth;
+  let initialDay: number | null = null;
   if (yearParam) {
     const y = parseInt(yearParam, 10);
     if (Number.isFinite(y) && y >= 2020 && y <= 2100) initialYear = y;
@@ -130,6 +132,11 @@ export default async function DealsPage({
   if (monthParam) {
     const m = parseInt(monthParam, 10);
     if (Number.isFinite(m) && m >= 1 && m <= 12) initialMonth = m;
+  }
+  if (dayParam) {
+    const d = parseInt(dayParam, 10);
+    const maxDay = new Date(initialYear, initialMonth, 0).getDate();
+    if (Number.isFinite(d) && d >= 1 && d <= maxDay) initialDay = d;
   }
 
   const initialStatus: StatusFilter =
@@ -217,6 +224,7 @@ export default async function DealsPage({
       dealSalespeople={dealSalespeople}
       initialYear={initialYear}
       initialMonth={initialMonth}
+      initialDay={initialDay}
       initialStatus={initialStatus}
       initialStore={initialStore}
       initialDepartment={initialDepartment}

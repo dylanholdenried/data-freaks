@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { toggleCalendarDay } from "@/app/app/actions";
@@ -19,6 +20,18 @@ import {
   cardDepartmentId,
   isRolledUpDepartment,
 } from "@/lib/departments/rollup";
+
+function dealsHrefForDay(storeId: string, dateStr: string) {
+  const [y, m, d] = dateStr.split("-");
+  const params = new URLSearchParams({
+    store: storeId,
+    year: y,
+    month: String(Number(m)),
+    day: String(Number(d)),
+    status: "all",
+  });
+  return `/app/deals?${params.toString()}`;
+}
 
 export type CalendarStore = { id: string; name: string };
 export type CalendarDepartment = {
@@ -206,8 +219,8 @@ export default function CalendarClient({
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {readOnly
-            ? "View operating days for your assigned stores. Days complete automatically at 6:00 PM Central for pace."
-            : "Click a day to mark it open or closed. Days complete automatically at 6:00 PM Central for pace."}
+            ? "View operating days for your assigned stores. Open a day to review deals in Sales Registry. Days complete automatically at 6:00 PM Central for pace."
+            : "Use the Open/Closed pill to set operating days. Open a day to review that store's deals in Sales Registry. Days complete automatically at 6:00 PM Central for pace."}
         </p>
 
         <div className="mt-5 flex flex-wrap items-center gap-2">
@@ -280,7 +293,7 @@ export default function CalendarClient({
           cells.push(
             <div
               key={`pad-${store.id}-${i}`}
-              className="min-h-[5.5rem] rounded-md bg-transparent"
+              className="min-h-[6.25rem] rounded-md bg-transparent"
             />
           );
         }
@@ -295,37 +308,45 @@ export default function CalendarClient({
           const busy = pendingKey === key && isPending;
 
           cells.push(
-            <button
+            <div
               key={`${store.id}-${dateStr}`}
-              type="button"
-              onClick={() => handleToggle(store.id, dateStr, open)}
-              disabled={busy || readOnly}
-              aria-pressed={open}
-              aria-label={
-                readOnly
-                  ? `${dateStr}, ${open ? "open" : "closed"}`
-                  : `${dateStr}, ${open ? "open" : "closed"}. Click to toggle.`
-              }
+              aria-label={`${dateStr}, ${open ? "open" : "closed"}`}
               className={cn(
-                "relative min-h-[5.5rem] w-full overflow-hidden rounded-md border p-1.5 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--da-blue)] disabled:opacity-70",
-                !readOnly && "hover:brightness-110",
+                "relative flex min-h-[6.25rem] w-full flex-col overflow-hidden rounded-md border p-1.5 text-left",
                 open
                   ? "border-[color-mix(in_srgb,var(--da-green)_35%,var(--da-line))] bg-[color-mix(in_srgb,var(--da-green)_18%,transparent)]"
                   : "border-[color-mix(in_srgb,var(--da-red)_35%,var(--da-line))] bg-[color-mix(in_srgb,var(--da-red)_18%,transparent)]",
                 isToday &&
-                  "outline outline-2 outline-offset-1 outline-[var(--da-amber)]",
-                readOnly && "cursor-default"
+                  "outline outline-2 outline-offset-1 outline-[var(--da-amber)]"
               )}
             >
               <div className="relative z-[1] flex items-start justify-between gap-1">
                 <span className="text-xs font-semibold text-foreground">
                   {day}
                 </span>
-                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                <button
+                  type="button"
+                  onClick={() => handleToggle(store.id, dateStr, open)}
+                  disabled={busy || readOnly}
+                  aria-pressed={open}
+                  aria-label={
+                    readOnly
+                      ? `${open ? "Open" : "Closed"}`
+                      : `Mark ${dateStr} ${open ? "closed" : "open"}`
+                  }
+                  className={cn(
+                    "rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--da-blue)] disabled:opacity-70",
+                    open
+                      ? "bg-[color-mix(in_srgb,var(--da-green)_35%,transparent)] text-[var(--da-green)]"
+                      : "bg-[color-mix(in_srgb,var(--da-red)_35%,transparent)] text-[var(--da-red)]",
+                    !readOnly && "hover:brightness-110",
+                    readOnly && "cursor-default"
+                  )}
+                >
                   {open ? "Open" : "Closed"}
-                </span>
+                </button>
               </div>
-              <div className="relative z-[1] mt-1 space-y-0.5">
+              <div className="relative z-[1] mt-1 min-h-0 flex-1 space-y-0.5">
                 {storeDepts.length === 0 ? (
                   <p className="text-[10px] text-muted-foreground">No depts</p>
                 ) : (
@@ -348,6 +369,14 @@ export default function CalendarClient({
                   })
                 )}
               </div>
+              <div className="relative z-[3] mt-1">
+                <Link
+                  href={dealsHrefForDay(store.id, dateStr)}
+                  className="inline-flex w-full items-center justify-center rounded-md border border-border/80 bg-background/80 px-1.5 py-0.5 text-[10px] font-semibold text-foreground transition hover:bg-background focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--da-blue)]"
+                >
+                  View deals
+                </Link>
+              </div>
               {completed && (
                 <span
                   aria-hidden
@@ -358,7 +387,7 @@ export default function CalendarClient({
                   }}
                 />
               )}
-            </button>
+            </div>
           );
         }
 

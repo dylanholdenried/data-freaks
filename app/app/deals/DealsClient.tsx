@@ -59,6 +59,7 @@ interface Props {
   dealSalespeople: DealSalesperson[];
   initialYear: number;
   initialMonth: number;
+  initialDay?: number | null;
   initialStatus?: StatusFilter;
   initialStore?: "both" | string;
   initialDepartment?: string;
@@ -204,6 +205,7 @@ export default function DealsClient({
   dealSalespeople,
   initialYear,
   initialMonth,
+  initialDay = null,
   initialStatus = "all",
   initialStore,
   initialDepartment = "",
@@ -229,6 +231,7 @@ export default function DealsClient({
   const [allTime, setAllTime] = useState(false);
   const [yearFilter, setYearFilter] = useState(initialYear);
   const [monthFilter, setMonthFilter] = useState(initialMonth);
+  const [dayFilter, setDayFilter] = useState<number | null>(initialDay);
   const [departmentFilter, setDepartmentFilter] = useState(initialDepartment);
   const [includeRollup, setIncludeRollup] = useState(initialRollup);
   const [salespersonFilter, setSalespersonFilter] = useState("");
@@ -321,6 +324,10 @@ export default function DealsClient({
         const y = parseInt(deal.sale_date.slice(0, 4), 10);
         const m = parseInt(deal.sale_date.slice(5, 7), 10);
         if (y !== yearFilter || m !== monthFilter) return false;
+        if (dayFilter != null) {
+          const d = parseInt(deal.sale_date.slice(8, 10), 10);
+          if (d !== dayFilter) return false;
+        }
       }
       if (departmentFilter) {
         if (rollupIds) {
@@ -392,6 +399,7 @@ export default function DealsClient({
     allTime,
     yearFilter,
     monthFilter,
+    dayFilter,
     departmentFilter,
     includeRollup,
     salespersonFilter,
@@ -491,16 +499,17 @@ export default function DealsClient({
 
         {/* Date + dropdowns */}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          {/* Month / Year / All time */}
-          <div className="flex items-center gap-2">
+          {/* Month / Year / Day / All time */}
+          <div className="flex flex-wrap items-center gap-2">
             <select
               value={monthFilter}
               onChange={(e) => {
                 setMonthFilter(Number(e.target.value));
+                setDayFilter(null);
                 setAllTime(false);
               }}
               disabled={allTime}
-              className={`${SEL} flex-1`}
+              className={`${SEL} min-w-[7.5rem] flex-1`}
             >
               {MONTH_NAMES.map((name, i) => (
                 <option key={i + 1} value={i + 1}>
@@ -512,6 +521,7 @@ export default function DealsClient({
               value={yearFilter}
               onChange={(e) => {
                 setYearFilter(Number(e.target.value));
+                setDayFilter(null);
                 setAllTime(false);
               }}
               disabled={allTime}
@@ -523,9 +533,35 @@ export default function DealsClient({
                 </option>
               ))}
             </select>
+            <select
+              value={dayFilter ?? ""}
+              onChange={(e) => {
+                const v = e.target.value;
+                setDayFilter(v ? Number(v) : null);
+                setAllTime(false);
+              }}
+              disabled={allTime}
+              className="h-9 w-[72px] shrink-0 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+              aria-label="Day"
+            >
+              <option value="">All days</option>
+              {Array.from(
+                {
+                  length: new Date(yearFilter, monthFilter, 0).getDate(),
+                },
+                (_, i) => i + 1
+              ).map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
             <button
               type="button"
-              onClick={() => setAllTime((v) => !v)}
+              onClick={() => {
+                setAllTime((v) => !v);
+                setDayFilter(null);
+              }}
               className={`shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
                 allTime
                   ? "bg-blue-600 text-white"
