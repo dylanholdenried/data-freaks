@@ -4,6 +4,8 @@ import { IC, pomTone } from "@/lib/inventory-command/midmo";
 import { displayYmm } from "@/lib/acquire/incoming";
 import {
   adjPctOfMarket,
+  daysBetween,
+  effectiveGross,
   formatMoney,
   formatMoneyExact,
   headerAgeDays,
@@ -16,7 +18,6 @@ import {
   ACQ_EXIT_STRATEGY_LABELS,
   ACQ_STAGE_LABELS,
   ACQ_STAGES,
-  isCompletedStage,
   purchaseCardColors,
   type AcqExitStrategy,
   type AcqPurchase,
@@ -52,6 +53,14 @@ function MetricRow({
   );
 }
 
+/** Format ISO date (YYYY-MM-DD) as MM/DD/YYYY. */
+function formatSaleDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso.trim());
+  if (!m) return "—";
+  return `${m[2]}/${m[3]}/${m[1]}`;
+}
+
 /** Visual front of a purchase trading card (shared by grid + flip overlay). */
 export function PurchaseCardFace({
   purchase,
@@ -80,22 +89,26 @@ export function PurchaseCardFace({
     vehicle_model: purchase.vehicle_model,
   });
   const vin = purchase.vin?.trim() || "—";
-  const completed = isCompletedStage(purchase.stage);
-  const vehicleAge = headerAgeDays(purchase);
+  const isSold = purchase.stage === "sold";
+  const vehicleAge = isSold
+    ? daysBetween(purchase.purchase_date, purchase.sold_date)
+    : headerAgeDays(purchase);
   const daysInStep = purchase.days_in_step;
+  const saleDateLabel = formatSaleDate(purchase.sold_date);
   const actionItemLabels = missingAcquireActionItems(purchase).map((i) => i.label);
   const actionItems = actionItemLabels.length;
   const cost = merchCost(purchase);
   const price = websitePrice(purchase);
   const mark = markup(purchase);
   const pom = adjPctOfMarket(purchase);
+  const totalGross = effectiveGross(purchase);
   const exitLabel =
     purchase.exit_strategy &&
     (ACQ_EXIT_STRATEGY_LABELS as Record<string, string>)[purchase.exit_strategy]
       ? ACQ_EXIT_STRATEGY_LABELS[purchase.exit_strategy as AcqExitStrategy]
       : null;
   const stageLabel =
-    purchase.stage === "sold" && exitLabel
+    isSold && exitLabel
       ? `${ACQ_STAGE_LABELS.sold} · ${exitLabel}`
       : ACQ_STAGE_LABELS[purchase.stage];
 
@@ -156,14 +169,14 @@ export function PurchaseCardFace({
               className="text-[10px] font-semibold uppercase tracking-[0.08em]"
               style={{ color: IC.muted }}
             >
-              Age
+              {isSold ? "Sold Age" : "Age"}
             </p>
             <div
               className="inline-flex items-center justify-center rounded-md px-2 py-0.5"
               style={{ background: colors.badge, boxShadow: `inset 0 0 0 1px ${colors.stripe}55` }}
               title={
-                completed
-                  ? "Days from purchase to sold"
+                isSold
+                  ? "Days from purchase to sale"
                   : "Days since purchase"
               }
             >
@@ -190,20 +203,28 @@ export function PurchaseCardFace({
               className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]"
               style={{ color: IC.muted }}
             >
-              Days in step
+              {isSold ? "Sale Date" : "Days in step"}
             </p>
             <div
               className="mt-0.5 inline-flex items-center justify-center rounded-md px-2 py-0.5"
               style={{ background: colors.badge, boxShadow: `inset 0 0 0 1px ${colors.stripe}55` }}
+              title={isSold ? saleDateLabel : undefined}
             >
               <span
-                className="text-base font-bold leading-none tabular-nums"
+                className={cn(
+                  "font-bold leading-none tabular-nums",
+                  isSold ? "text-sm" : "text-base"
+                )}
                 style={{
                   fontFamily: "var(--ic-font-display), Barlow Condensed, sans-serif",
                   color: IC.text,
                 }}
               >
-                {daysInStep != null ? `${daysInStep}d` : "—"}
+                {isSold
+                  ? saleDateLabel
+                  : daysInStep != null
+                    ? `${daysInStep}d`
+                    : "—"}
               </span>
             </div>
             <p
@@ -271,14 +292,34 @@ export function PurchaseCardFace({
           className="min-w-0 space-y-1 rounded-md border px-2 py-1.5"
           style={{ borderColor: IC.border, background: "rgba(15,20,28,0.55)" }}
         >
-          <MetricRow label="Cost" value={formatMoney(cost)} />
-          <MetricRow label="Price" value={formatMoney(price)} />
-          <MetricRow label="Markup" value={formatMoneyExact(mark)} />
-          <MetricRow
-            label="Adj % of Market"
-            value={pom != null ? `${pom}%` : "—"}
-            tone={pomTone(pom)}
-          />
+          {isSold ? (
+            <>
+              <MetricRow
+                label="Front Gross"
+                value={formatMoneyExact(purchase.front_gross)}
+              />
+              <MetricRow
+                label="Back Gross"
+                value={formatMoneyExact(purchase.back_gross)}
+              />
+              <MetricRow
+                label="Total Gross"
+                value={formatMoneyExact(totalGross)}
+              />
+              <MetricRow label="Exit Strategy" value={exitLabel ?? "—"} />
+            </>
+          ) : (
+            <>
+              <MetricRow label="Cost" value={formatMoney(cost)} />
+              <MetricRow label="Price" value={formatMoney(price)} />
+              <MetricRow label="Markup" value={formatMoneyExact(mark)} />
+              <MetricRow
+                label="Adj % of Market"
+                value={pom != null ? `${pom}%` : "—"}
+                tone={pomTone(pom)}
+              />
+            </>
+          )}
         </div>
 
         <div className="min-w-0 space-y-1" onClick={(e) => e.stopPropagation()}>
