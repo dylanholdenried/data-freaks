@@ -42,6 +42,9 @@ type SortCol =
   | "sale_date"
   | "stock_number"
   | "customer_last_name"
+  | "vehicle"
+  | "department"
+  | "salesperson"
   | "acquisition_source"
   | "status"
   | "front_profit"
@@ -363,6 +366,25 @@ export default function DealsClient({
         case "customer_last_name":
           val = (a.customer_last_name ?? "").localeCompare(b.customer_last_name ?? "");
           break;
+        case "vehicle": {
+          const aV = `${a.vehicle_year} ${a.vehicle_make} ${a.vehicle_model}`;
+          const bV = `${b.vehicle_year} ${b.vehicle_make} ${b.vehicle_model}`;
+          val = aV.localeCompare(bV, undefined, { sensitivity: "base", numeric: true });
+          break;
+        }
+        case "department":
+          val = (deptById.get(a.department_id) ?? "").localeCompare(
+            deptById.get(b.department_id) ?? "",
+            undefined,
+            { sensitivity: "base" }
+          );
+          break;
+        case "salesperson": {
+          const aSp = (dealSpNameMap.get(a.id) ?? []).join(", ");
+          const bSp = (dealSpNameMap.get(b.id) ?? []).join(", ");
+          val = aSp.localeCompare(bSp, undefined, { sensitivity: "base" });
+          break;
+        }
         case "acquisition_source":
           val = (a.acquisition_source ?? "").localeCompare(b.acquisition_source ?? "", undefined, {
             sensitivity: "base",
@@ -497,82 +519,83 @@ export default function DealsClient({
           ))}
         </div>
 
-        {/* Date + dropdowns */}
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          {/* Month / Year / Day / All time */}
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={monthFilter}
-              onChange={(e) => {
-                setMonthFilter(Number(e.target.value));
-                setDayFilter(null);
-                setAllTime(false);
-              }}
-              disabled={allTime}
-              className={`${SEL} min-w-[7.5rem] flex-1`}
-            >
-              {MONTH_NAMES.map((name, i) => (
-                <option key={i + 1} value={i + 1}>
-                  {name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={yearFilter}
-              onChange={(e) => {
-                setYearFilter(Number(e.target.value));
-                setDayFilter(null);
-                setAllTime(false);
-              }}
-              disabled={allTime}
-              className="h-9 w-[76px] shrink-0 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
-            >
-              {availableYears.map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
-            <select
-              value={dayFilter ?? ""}
-              onChange={(e) => {
-                const v = e.target.value;
-                setDayFilter(v ? Number(v) : null);
-                setAllTime(false);
-              }}
-              disabled={allTime}
-              className="h-9 w-[72px] shrink-0 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
-              aria-label="Day"
-            >
-              <option value="">All days</option>
-              {Array.from(
-                {
-                  length: new Date(yearFilter, monthFilter, 0).getDate(),
-                },
-                (_, i) => i + 1
-              ).map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={() => {
-                setAllTime((v) => !v);
-                setDayFilter(null);
-              }}
-              className={`shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
-                allTime
-                  ? "bg-blue-600 text-white"
-                  : "bg-muted text-muted-foreground hover:bg-[var(--da-line)]"
-              }`}
-            >
-              All time
-            </button>
-          </div>
+        {/* Date filters: Month / Day / Year / All time */}
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={monthFilter}
+            onChange={(e) => {
+              setMonthFilter(Number(e.target.value));
+              setDayFilter(null);
+              setAllTime(false);
+            }}
+            disabled={allTime}
+            className={`${SEL} min-w-[7.5rem] w-auto sm:w-[9.5rem]`}
+            aria-label="Month"
+          >
+            {MONTH_NAMES.map((name, i) => (
+              <option key={i + 1} value={i + 1}>
+                {name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={dayFilter ?? ""}
+            onChange={(e) => {
+              const v = e.target.value;
+              setDayFilter(v ? Number(v) : null);
+              setAllTime(false);
+            }}
+            disabled={allTime}
+            className="h-9 w-[72px] shrink-0 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+            aria-label="Day"
+          >
+            <option value="">All days</option>
+            {Array.from(
+              {
+                length: new Date(yearFilter, monthFilter, 0).getDate(),
+              },
+              (_, i) => i + 1
+            ).map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
+          <select
+            value={yearFilter}
+            onChange={(e) => {
+              setYearFilter(Number(e.target.value));
+              setDayFilter(null);
+              setAllTime(false);
+            }}
+            disabled={allTime}
+            className="h-9 w-[76px] shrink-0 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+            aria-label="Year"
+          >
+            {availableYears.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => {
+              setAllTime((v) => !v);
+              setDayFilter(null);
+            }}
+            className={`shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
+              allTime
+                ? "bg-blue-600 text-white"
+                : "bg-muted text-muted-foreground hover:bg-[var(--da-line)]"
+            }`}
+          >
+            All time
+          </button>
+        </div>
 
-          {/* Department */}
+        {/* Department / people / finance filters */}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <select
             value={departmentFilter}
             onChange={(e) => {
@@ -596,7 +619,6 @@ export default function DealsClient({
             })}
           </select>
 
-          {/* Salesperson */}
           <select
             value={salespersonFilter}
             onChange={(e) => setSalespersonFilter(e.target.value)}
@@ -610,7 +632,6 @@ export default function DealsClient({
             ))}
           </select>
 
-          {/* Finance Manager */}
           <select
             value={financeManagerFilter}
             onChange={(e) => setFinanceManagerFilter(e.target.value)}
@@ -624,7 +645,6 @@ export default function DealsClient({
             ))}
           </select>
 
-          {/* Finance Type */}
           <select
             value={financeTypeFilter}
             onChange={(e) => setFinanceTypeFilter(e.target.value)}
@@ -667,12 +687,12 @@ export default function DealsClient({
           <SortHeader col="sale_date" label="Date" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
           <SortHeader col="stock_number" label="Stock #" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
           <SortHeader col="customer_last_name" label="Customer" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Vehicle</span>
+          <SortHeader col="vehicle" label="Vehicle" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
           {showStore && (
             <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Store</span>
           )}
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Dept</span>
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Salesperson</span>
+          <SortHeader col="department" label="Dept" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+          <SortHeader col="salesperson" label="Salesperson" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
           <SortHeader col="acquisition_source" label="Acquisition Source" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
           <SortHeader col="status" label="Status" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
           <SortHeader col="front_profit" label="Front" right sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
