@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronRight } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { rollupIdSet } from "@/lib/departments/rollup";
+import { buildDealsRegistryPath, rememberDealsRegistryPath } from "@/lib/deals/registry-url";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -67,6 +68,11 @@ interface Props {
   initialStore?: "both" | string;
   initialDepartment?: string;
   initialRollup?: boolean;
+  initialAllTime?: boolean;
+  initialSalesperson?: string;
+  initialFinanceManager?: string;
+  initialFinanceType?: string;
+  initialSearch?: string;
   viewOnly?: boolean;
 }
 
@@ -213,6 +219,11 @@ export default function DealsClient({
   initialStore,
   initialDepartment = "",
   initialRollup = false,
+  initialAllTime = false,
+  initialSalesperson = "",
+  initialFinanceManager = "",
+  initialFinanceType = "",
+  initialSearch = "",
   viewOnly = false,
 }: Props) {
   // ── Local deals (updated when marking delivered without a full refetch) ──────
@@ -231,16 +242,104 @@ export default function DealsClient({
   const [storeFilter, setStoreFilter] = useState<"both" | string>(
     initialStore ?? (stores.length === 1 ? stores[0].id : "both")
   );
-  const [allTime, setAllTime] = useState(false);
+  const [allTime, setAllTime] = useState(initialAllTime);
   const [yearFilter, setYearFilter] = useState(initialYear);
   const [monthFilter, setMonthFilter] = useState(initialMonth);
   const [dayFilter, setDayFilter] = useState<number | null>(initialDay);
   const [departmentFilter, setDepartmentFilter] = useState(initialDepartment);
   const [includeRollup, setIncludeRollup] = useState(initialRollup);
-  const [salespersonFilter, setSalespersonFilter] = useState("");
-  const [financeManagerFilter, setFinanceManagerFilter] = useState("");
-  const [financeTypeFilter, setFinanceTypeFilter] = useState("");
-  const [searchText, setSearchText] = useState("");
+  const [salespersonFilter, setSalespersonFilter] = useState(initialSalesperson);
+  const [financeManagerFilter, setFinanceManagerFilter] =
+    useState(initialFinanceManager);
+  const [financeTypeFilter, setFinanceTypeFilter] = useState(initialFinanceType);
+  const [searchText, setSearchText] = useState(initialSearch);
+  const [debouncedSearch, setDebouncedSearch] = useState(initialSearch);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(searchText), 300);
+    return () => window.clearTimeout(timer);
+  }, [searchText]);
+
+  const registryPath = useMemo(
+    () =>
+      buildDealsRegistryPath({
+        status: statusFilter,
+        store: storeFilter,
+        department: departmentFilter,
+        rollup: includeRollup,
+        allTime,
+        year: yearFilter,
+        month: monthFilter,
+        day: dayFilter,
+        salesperson: salespersonFilter,
+        financeManager: financeManagerFilter,
+        financeType: financeTypeFilter,
+        q: searchText,
+      }),
+    [
+      statusFilter,
+      storeFilter,
+      departmentFilter,
+      includeRollup,
+      allTime,
+      yearFilter,
+      monthFilter,
+      dayFilter,
+      salespersonFilter,
+      financeManagerFilter,
+      financeTypeFilter,
+      searchText,
+    ]
+  );
+
+  const registryPathForUrl = useMemo(
+    () =>
+      buildDealsRegistryPath({
+        status: statusFilter,
+        store: storeFilter,
+        department: departmentFilter,
+        rollup: includeRollup,
+        allTime,
+        year: yearFilter,
+        month: monthFilter,
+        day: dayFilter,
+        salesperson: salespersonFilter,
+        financeManager: financeManagerFilter,
+        financeType: financeTypeFilter,
+        q: debouncedSearch,
+      }),
+    [
+      statusFilter,
+      storeFilter,
+      departmentFilter,
+      includeRollup,
+      allTime,
+      yearFilter,
+      monthFilter,
+      dayFilter,
+      salespersonFilter,
+      financeManagerFilter,
+      financeTypeFilter,
+      debouncedSearch,
+    ]
+  );
+
+  // Keep the address bar + session memory in sync so edit return restores filters.
+  useEffect(() => {
+    rememberDealsRegistryPath(registryPathForUrl);
+    if (typeof window === "undefined") return;
+    const current = `${window.location.pathname}${window.location.search}`;
+    if (current === registryPathForUrl) return;
+    window.history.replaceState(
+      window.history.state ?? null,
+      "",
+      registryPathForUrl
+    );
+  }, [registryPathForUrl]);
+
+  function dealEditHref(dealId: string) {
+    return `/app/deals/${dealId}/edit?returnTo=${encodeURIComponent(registryPath)}`;
+  }
 
   // ── Sort state ───────────────────────────────────────────────────────────────
   const [sortCol, setSortCol] = useState<SortCol>("sale_date");
@@ -727,8 +826,9 @@ export default function DealsClient({
                   className={`group flex min-w-0 items-center gap-3 px-5 py-3 transition-colors hover:bg-muted xl:grid ${TGRID} xl:gap-2`}
                 >
                   <Link
-                    href={`/app/deals/${deal.id}/edit`}
+                    href={dealEditHref(deal.id)}
                     prefetch
+                    onClick={() => rememberDealsRegistryPath(registryPath)}
                     className="flex min-w-0 flex-1 flex-col xl:contents"
                   >
                     {/* Date — always visible, grid cell 1 */}
@@ -828,8 +928,9 @@ export default function DealsClient({
                       </Button>
                     ) : (
                       <Link
-                        href={`/app/deals/${deal.id}/edit`}
+                        href={dealEditHref(deal.id)}
                         prefetch
+                        onClick={() => rememberDealsRegistryPath(registryPath)}
                         className="hidden xl:block"
                         aria-label="Open deal"
                       >

@@ -11,6 +11,7 @@ import SelectAutoGroupEmptyState from "../../../SelectAutoGroupEmptyState";
 import {
   flattenAcquisitionSourceDepartmentLinks,
 } from "@/lib/acquisition-sources";
+import { safeDealsReturnTo } from "@/lib/deals/registry-url";
 
 type DealRow = {
   id: string;
@@ -68,7 +69,13 @@ type TradeRow = {
   exit_strategy: string | null;
 };
 
-export default async function EditDealPage({ params }: { params: { id: string } }) {
+export default async function EditDealPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams: Record<string, string | string[] | undefined>;
+}) {
   const supabase = createSupabaseServerClient();
   const {
     data: { user },
@@ -307,6 +314,10 @@ export default async function EditDealPage({ params }: { params: { id: string } 
   }
 
   const viewOnly = await isAppViewOnly(profile.role);
+  const returnRaw = searchParams.returnTo;
+  const returnTo = safeDealsReturnTo(
+    typeof returnRaw === "string" ? returnRaw : null
+  );
 
   return (
     <UpdatePendingForm
@@ -314,6 +325,7 @@ export default async function EditDealPage({ params }: { params: { id: string } 
       dealStatus={deal.status}
       canReopen={canReopenDeal(profile.role) && !viewOnly}
       readOnly={viewOnly}
+      returnTo={returnTo}
       events={dealEvents}
       stockNumber={deal.stock_number}
       customerLastName={deal.customer_last_name ?? ""}

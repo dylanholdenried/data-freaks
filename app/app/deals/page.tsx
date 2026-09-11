@@ -121,6 +121,11 @@ export default async function DealsPage({
   const yearParam = paramString(searchParams, "year");
   const monthParam = paramString(searchParams, "month");
   const dayParam = paramString(searchParams, "day");
+  const allParam = paramString(searchParams, "all");
+  const spParam = paramString(searchParams, "sp");
+  const fmParam = paramString(searchParams, "fm");
+  const ftParam = paramString(searchParams, "ft");
+  const qParam = paramString(searchParams, "q");
 
   let initialYear = defaultYear;
   let initialMonth = defaultMonth;
@@ -201,6 +206,14 @@ export default async function DealsPage({
       ? departmentParam
       : "";
   const initialRollup = rollupParam === "1" && Boolean(initialDepartment);
+  const initialAllTime = allParam === "1";
+  const initialSalesperson = spParam ?? "";
+  const initialFinanceManager = fmParam ?? "";
+  const initialFinanceType =
+    ftParam && ["prime", "subprime", "lease", "cash"].includes(ftParam)
+      ? ftParam
+      : "";
+  const initialSearch = qParam ?? "";
 
   // deal_salespeople: chunk IDs + page each chunk past the 1000-row cap
   const dealIds = deals.map((d) => d.id);
@@ -229,6 +242,11 @@ export default async function DealsPage({
       initialStore={initialStore}
       initialDepartment={initialDepartment}
       initialRollup={initialRollup}
+      initialAllTime={initialAllTime}
+      initialSalesperson={initialSalesperson}
+      initialFinanceManager={initialFinanceManager}
+      initialFinanceType={initialFinanceType}
+      initialSearch={initialSearch}
       viewOnly={await isAppViewOnly(profile.role)}
     />
   );

@@ -117,3 +117,8 @@ export async function reopenDeal(
 
   return { ok: true, status: targetStatus };
 }
+
+/** Bust Sales Registry cache after client-side deal mutations. */
+export async function revalidateDealsRegistry(): Promise<void> {
+  revalidatePath("/app/deals");
+}

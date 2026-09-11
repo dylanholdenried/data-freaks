@@ -18,7 +18,8 @@ import {
   type DealMatch,
 } from "@/lib/deals/duplicate-checks";
 import type { DealEventRow } from "@/lib/deals/deal-events";
-import { reopenDeal } from "@/app/app/deals/actions";
+import { reopenDeal, revalidateDealsRegistry } from "@/app/app/deals/actions";
+import { resolveDealsReturnTo } from "@/lib/deals/registry-url";
 import { cn } from "@/lib/utils";
 import { filterAcquisitionSourcesForDepartment } from "@/lib/acquisition-sources";
 import DealAuditLog from "./DealAuditLog";
@@ -62,6 +63,8 @@ interface Props {
   canReopen: boolean;
   /** Force full read-only mode (e.g. store_viewer). */
   readOnly?: boolean;
+  /** Sales Registry URL (with filters) to return to after save/close/delivered. */
+  returnTo?: string;
   events: DealEventRow[];
   // Step 1 fields — editable until closed
   stockNumber: string;
@@ -214,6 +217,7 @@ export default function UpdatePendingForm({
   dealStatus: initialDealStatus,
   canReopen,
   readOnly = false,
+  returnTo = "/app/deals",
   events,
   // Destructure with "initial" aliases so state can own the canonical names
   stockNumber: initialStockNumber,
@@ -253,10 +257,19 @@ export default function UpdatePendingForm({
 }: Props) {
   const router = useRouter();
   const [dealStatus, setDealStatus] = useState(initialDealStatus);
+  const registryReturnTo = resolveDealsReturnTo(returnTo);
 
   useEffect(() => {
     setDealStatus(initialDealStatus);
   }, [initialDealStatus]);
+
+  function returnToRegistry() {
+    const dest = resolveDealsReturnTo(returnTo);
+    // Bust list cache without blocking navigation (awaiting this previously left users stuck).
+    void revalidateDealsRegistry().catch(() => {});
+    // Hard navigation guarantees we leave the edit page and load fresh registry data.
+    window.location.assign(dest);
+  }
 
   // ── Step 1 editable state ─────────────────────────────────────────────────────
   const [stockNumber, setStockNumber] = useState(initialStockNumber);
@@ -826,7 +839,7 @@ export default function UpdatePendingForm({
       }
 
       setSaved(true);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      returnToRegistry();
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : "An unexpected error occurred. Please try again.";
@@ -990,8 +1003,7 @@ export default function UpdatePendingForm({
       await saveTrades(supabase);
       setDealStatus("closed");
       setClosed(true);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      setTimeout(() => router.push("/app/deals"), 2000);
+      returnToRegistry();
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : "An unexpected error occurred. Please try again.";
@@ -1022,8 +1034,7 @@ export default function UpdatePendingForm({
       await saveTrades(supabase);
       setDealStatus("dead");
       setMarkedLost(true);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      setTimeout(() => router.push("/app/deals"), 2000);
+      returnToRegistry();
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : "An unexpected error occurred. Please try again.";
@@ -1054,8 +1065,7 @@ export default function UpdatePendingForm({
       await saveTrades(supabase);
       setDealStatus("delivered");
       setMarkedDelivered(true);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      setTimeout(() => router.push("/app/deals"), 2000);
+      returnToRegistry();
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : "An unexpected error occurred. Please try again.";
@@ -1075,10 +1085,13 @@ export default function UpdatePendingForm({
         setReopenError(result.error);
         return;
       }
+      // Clear success/busy latches so Save/Close work without a page refresh.
       setDealStatus(result.status);
       setClosed(false);
       setMarkedLost(false);
-      setMarkedDelivered(result.status === "delivered");
+      setMarkedDelivered(false);
+      setErrors([]);
+      setCloseErrors([]);
       setShowReopenModal(false);
       router.refresh();
     } catch (err) {
@@ -1207,7 +1220,7 @@ export default function UpdatePendingForm({
               has been marked Closed. Redirecting to Sales Registry…
             </p>
             <a
-              href="/app/deals"
+              href={registryReturnTo}
               className="mt-1 inline-block text-xs text-green-700 underline hover:text-green-900"
             >
               Go to Sales Registry →
@@ -1228,7 +1241,7 @@ export default function UpdatePendingForm({
               has been marked Delivered. Redirecting to Sales Registry…
             </p>
             <a
-              href="/app/deals"
+              href={registryReturnTo}
               className="mt-1 inline-block text-xs text-blue-700 underline hover:text-blue-900"
             >
               Go to Sales Registry →
@@ -1249,7 +1262,7 @@ export default function UpdatePendingForm({
               has been marked Lost. Redirecting to Sales Registry…
             </p>
             <a
-              href="/app/deals"
+              href={registryReturnTo}
               className="mt-1 inline-block text-xs text-muted-foreground underline hover:text-foreground"
             >
               Go to Sales Registry →
