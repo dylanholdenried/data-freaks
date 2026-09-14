@@ -394,8 +394,6 @@ export default function DashboardClient({
 
   const allStoresSelected =
     stores.length > 0 && selectedStoreIds.length === stores.length;
-  const showStoreCards =
-    !allStoresSelected && selectedStoreIds.length > 0;
 
   function toggleStore(storeId: string) {
     setSelectedStoreIds((prev) => {
@@ -795,7 +793,7 @@ export default function DashboardClient({
         </div>
       ) : (
         <>
-          {showStoreCards && storeSections.length > 0 ? (
+          {storeSections.length > 0 ? (
             <section
               className="dash-store-grid"
               aria-label="Store totals"
