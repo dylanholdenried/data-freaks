@@ -13,6 +13,7 @@ export type SaleBooksSource =
 export type ResolvedSaleBooks = {
   sale_mmr: number | null;
   sale_jd: number | null;
+  sale_pom: number | null;
   sale_books_at: string | null;
   sale_books_source: SaleBooksSource | null;
 };
@@ -28,12 +29,16 @@ export type SaleBooksDeal = {
   vehicle_model: string | null;
   trim: string | null;
   odometer: number | null;
+  age: number | null;
   sale_price: number | null;
+  list_price: number | null;
+  list_price_na: boolean;
   front_profit: number | null;
   back_profit: number | null;
   finance_type: string | null;
   sale_mmr: number | null;
   sale_jd: number | null;
+  sale_pom: number | null;
   sale_books_at: string | null;
   sale_books_source: SaleBooksSource | null;
   sale_books_manual: boolean;
@@ -127,7 +132,7 @@ export async function resolveLastInventoryBooks(
 
   const { data: units, error } = await supabase
     .from("inv_units")
-    .select("stk, mmr, jd, inv_snapshots!inner(store_id, snapshot_date)")
+    .select("stk, mmr, jd, pom, inv_snapshots!inner(store_id, snapshot_date)")
     .eq("inv_snapshots.store_id", storeId)
     .ilike("stk", stk)
     .order("snapshot_date", { ascending: false, foreignTable: "inv_snapshots" })
@@ -139,6 +144,7 @@ export async function resolveLastInventoryBooks(
       stk: string;
       mmr: number | null;
       jd: number | null;
+      pom: number | null;
       inv_snapshots:
         | { store_id: string; snapshot_date: string }
         | { store_id: string; snapshot_date: string }[]
@@ -154,17 +160,21 @@ export async function resolveLastInventoryBooks(
           stk: u.stk,
           mmr: u.mmr,
           jd: u.jd,
+          pom: u.pom,
           snapshot_date: snap?.snapshot_date ?? null,
         };
       })
       .filter((u) => u.stk.trim().toUpperCase() === want && u.snapshot_date)
       .sort((a, b) => (b.snapshot_date! > a.snapshot_date! ? 1 : -1));
 
-    const best = ranked.find((u) => num(u.mmr) != null || num(u.jd) != null);
+    const best = ranked.find(
+      (u) => num(u.mmr) != null || num(u.jd) != null || num(u.pom) != null
+    );
     if (best) {
       return {
         sale_mmr: num(best.mmr),
         sale_jd: num(best.jd),
+        sale_pom: num(best.pom),
         sale_books_at: best.snapshot_date
           ? `${best.snapshot_date}T12:00:00.000Z`
           : null,
@@ -184,7 +194,7 @@ async function resolveAcquireFallback(
   const { data } = await supabase
     .from("acq_purchases")
     .select(
-      "stock_number, frozen_mmr, frozen_jd, live_mmr, live_jd, frozen_at, updated_at, created_at"
+      "stock_number, frozen_mmr, frozen_jd, live_mmr, live_jd, live_pom, frozen_at, updated_at, created_at"
     )
     .eq("store_id", storeId)
     .ilike("stock_number", stockNumber)
@@ -198,6 +208,7 @@ async function resolveAcquireFallback(
     frozen_jd: number | null;
     live_mmr: number | null;
     live_jd: number | null;
+    live_pom: number | null;
     frozen_at: string | null;
     updated_at: string | null;
     created_at: string | null;
@@ -207,11 +218,13 @@ async function resolveAcquireFallback(
 
   const mmr = num(row.frozen_mmr) ?? num(row.live_mmr);
   const jd = num(row.frozen_jd) ?? num(row.live_jd);
-  if (mmr == null && jd == null) return emptyBooks();
+  const pom = num(row.live_pom);
+  if (mmr == null && jd == null && pom == null) return emptyBooks();
 
   return {
     sale_mmr: mmr,
     sale_jd: jd,
+    sale_pom: pom,
     sale_books_at: row.frozen_at ?? row.updated_at ?? row.created_at,
     sale_books_source: "acquire_frozen",
   };
@@ -221,6 +234,7 @@ function emptyBooks(): ResolvedSaleBooks {
   return {
     sale_mmr: null,
     sale_jd: null,
+    sale_pom: null,
     sale_books_at: null,
     sale_books_source: null,
   };
@@ -234,10 +248,16 @@ export function saleBooksUpdatePayload(
   if (opts?.preserveManual && opts.alreadyManual) {
     return {};
   }
-  if (books.sale_mmr == null && books.sale_jd == null && !books.sale_books_source) {
+  if (
+    books.sale_mmr == null &&
+    books.sale_jd == null &&
+    books.sale_pom == null &&
+    !books.sale_books_source
+  ) {
     return {
       sale_mmr: null,
       sale_jd: null,
+      sale_pom: null,
       sale_books_at: null,
       sale_books_source: null,
       sale_books_manual: false,
@@ -246,6 +266,7 @@ export function saleBooksUpdatePayload(
   return {
     sale_mmr: books.sale_mmr,
     sale_jd: books.sale_jd,
+    sale_pom: books.sale_pom,
     sale_books_at: books.sale_books_at,
     sale_books_source: books.sale_books_source,
     sale_books_manual: false,

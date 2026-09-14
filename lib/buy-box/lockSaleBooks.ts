@@ -32,12 +32,12 @@ export async function lockMissingSaleBooksForStore(
   const { data: deals } = await supabase
     .from("deals")
     .select(
-      "id,stock_number,department_id,sale_mmr,sale_jd,sale_books_manual"
+      "id,stock_number,department_id,sale_mmr,sale_jd,sale_pom,sale_books_manual"
     )
     .eq("store_id", storeId)
     .eq("status", "closed")
     .eq("sale_books_manual", false)
-    .or("sale_mmr.is.null,sale_jd.is.null")
+    .or("sale_mmr.is.null,sale_jd.is.null,sale_pom.is.null")
     .limit(limit);
 
   let updated = 0;
@@ -47,6 +47,7 @@ export async function lockMissingSaleBooksForStore(
     department_id: string;
     sale_mmr: number | null;
     sale_jd: number | null;
+    sale_pom: number | null;
     sale_books_manual: boolean;
   }[]) {
     if (!preOwnedIds.has(row.department_id)) continue;
@@ -57,12 +58,15 @@ export async function lockMissingSaleBooksForStore(
       storeId,
       row.stock_number
     );
-    if (books.sale_mmr == null && books.sale_jd == null) continue;
+    if (books.sale_mmr == null && books.sale_jd == null && books.sale_pom == null) {
+      continue;
+    }
 
     const payload = saleBooksUpdatePayload(books);
     // Preserve any half-filled side already present
     if (row.sale_mmr != null) payload.sale_mmr = row.sale_mmr;
     if (row.sale_jd != null) payload.sale_jd = row.sale_jd;
+    if (row.sale_pom != null) payload.sale_pom = row.sale_pom;
 
     const { error } = await supabase
       .from("deals")

@@ -435,6 +435,7 @@ create table public.deals (
   msrp numeric(12,2),
   sale_mmr numeric(12,2),
   sale_jd numeric(12,2),
+  sale_pom numeric(8,2),
   sale_books_at timestamptz,
   sale_books_source text,
   sale_books_manual boolean not null default false,

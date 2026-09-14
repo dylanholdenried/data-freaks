@@ -12,7 +12,11 @@ import {
   saleOverMmr,
   type SaleBooksDeal,
 } from "@/lib/buy-box/sale-books";
-import { formatFinanceType } from "@/lib/buy-box/loadDeals";
+import {
+  formatAdjPctMkt,
+  formatFinanceType,
+  storeDisplayName,
+} from "@/lib/buy-box/loadDeals";
 import { buyBoxHref } from "@/lib/buy-box/hrefs";
 import { computeSaleBooksKpis } from "@/lib/buy-box/scorecard";
 import { pcFmt$, pcFmtN, pcFmtMiles } from "@/lib/profit-center/format";
@@ -22,28 +26,26 @@ type Store = { id: string; name: string };
 
 type DealSortKey =
   | "sale_date"
+  | "store"
   | "stock_number"
   | "vehicle"
   | "odometer"
+  | "age"
+  | "sale_pom"
   | "finance_type"
+  | "list_price"
   | "sale_price"
   | "front_profit"
   | "back_profit"
   | "sale_mmr"
   | "overMmr"
   | "sale_jd"
-  | "overJd"
-  | "source";
+  | "overJd";
 
 type SortDir = "asc" | "desc";
 
 function storePillLabel(name: string) {
-  const n = name.trim();
-  const jb = /^jim\s+butler\s+(.+)$/i.exec(n);
-  if (jb) return jb[1].trim().toUpperCase();
-  const parts = n.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return parts[parts.length - 1]!.toUpperCase();
-  return n.toUpperCase();
+  return storeDisplayName(name).toUpperCase();
 }
 
 function compareNullableNumber(
@@ -89,6 +91,12 @@ export default function BuyBoxDealsClient({
   const [sortKey, setSortKey] = useState<DealSortKey>("overMmr");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
+  const storeNameById = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const s of stores) map[s.id] = storeDisplayName(s.name);
+    return map;
+  }, [stores]);
+
   const kpis = useMemo(() => computeSaleBooksKpis(deals), [deals]);
 
   const dealRows = useMemo(() => {
@@ -99,26 +107,34 @@ export default function BuyBoxDealsClient({
       const vehicleB = [b.vehicle_year, b.vehicle_make, b.vehicle_model, b.trim]
         .filter(Boolean)
         .join(" ");
-      const sourceA = a.sale_books_manual
-        ? "manual"
-        : a.sale_books_source?.replace(/_/g, " ") ?? "";
-      const sourceB = b.sale_books_manual
-        ? "manual"
-        : b.sale_books_source?.replace(/_/g, " ") ?? "";
+      const storeA = storeNameById[a.store_id] ?? "";
+      const storeB = storeNameById[b.store_id] ?? "";
 
       switch (sortKey) {
         case "sale_date":
           return compareText(a.sale_date, b.sale_date, sortDir);
+        case "store":
+          return compareText(storeA, storeB, sortDir);
         case "stock_number":
           return compareText(a.stock_number, b.stock_number, sortDir);
         case "vehicle":
           return compareText(vehicleA, vehicleB, sortDir);
         case "odometer":
           return compareNullableNumber(a.odometer, b.odometer, sortDir);
+        case "age":
+          return compareNullableNumber(a.age, b.age, sortDir);
+        case "sale_pom":
+          return compareNullableNumber(a.sale_pom, b.sale_pom, sortDir);
         case "finance_type":
           return compareText(
             formatFinanceType(a.finance_type),
             formatFinanceType(b.finance_type),
+            sortDir
+          );
+        case "list_price":
+          return compareNullableNumber(
+            a.list_price_na ? null : a.list_price,
+            b.list_price_na ? null : b.list_price,
             sortDir
           );
         case "sale_price":
@@ -135,13 +151,11 @@ export default function BuyBoxDealsClient({
           return compareNullableNumber(a.sale_jd, b.sale_jd, sortDir);
         case "overJd":
           return compareNullableNumber(saleOverJd(a), saleOverJd(b), sortDir);
-        case "source":
-          return compareText(sourceA, sourceB, sortDir);
         default:
           return 0;
       }
     });
-  }, [deals, sortKey, sortDir]);
+  }, [deals, sortKey, sortDir, storeNameById]);
 
   function toggleSort(key: DealSortKey) {
     if (sortKey === key) {
@@ -151,7 +165,7 @@ export default function BuyBoxDealsClient({
       setSortDir(
         key === "stock_number" ||
           key === "vehicle" ||
-          key === "source" ||
+          key === "store" ||
           key === "finance_type"
           ? "asc"
           : "desc"
@@ -166,10 +180,14 @@ export default function BuyBoxDealsClient({
 
   const sortCols: { key: DealSortKey; label: string }[] = [
     { key: "sale_date", label: "Sale date" },
+    { key: "store", label: "Store" },
     { key: "stock_number", label: "Stock" },
     { key: "vehicle", label: "Vehicle" },
     { key: "odometer", label: "Odometer" },
+    { key: "age", label: "Age" },
+    { key: "sale_pom", label: "Adj % mkt" },
     { key: "finance_type", label: "Finance" },
+    { key: "list_price", label: "List" },
     { key: "sale_price", label: "Sale" },
     { key: "front_profit", label: "Front" },
     { key: "back_profit", label: "Back" },
@@ -177,7 +195,6 @@ export default function BuyBoxDealsClient({
     { key: "overMmr", label: "vs MMR" },
     { key: "sale_jd", label: "JD Clean" },
     { key: "overJd", label: "vs JD" },
-    { key: "source", label: "Source" },
   ];
 
   return (
@@ -189,7 +206,7 @@ export default function BuyBoxDealsClient({
             {make} {model}
           </h1>
           <p className="pc-meta">
-            Buy-Box deals · {storeLabel} ·{" "}
+            Buy-Box deals · {storeDisplayName(storeLabel)} ·{" "}
             {range.from === "2000-01-01" ? "All time" : `${range.from} → ${range.to}`}
             {" · "}
             {deals.length.toLocaleString()} deal{deals.length === 1 ? "" : "s"}
@@ -238,7 +255,8 @@ export default function BuyBoxDealsClient({
             Closed pre-owned deals
           </p>
           <p className="pc-meta" style={{ marginTop: "0.25rem" }}>
-            Click headers to sort. Blank MMR/JD excluded from model averages on the scorecard.
+            Age is days in stock at close. Adj % mkt is locked from the last inventory report at
+            sale. Click headers to sort.
           </p>
         </div>
         {dealRows.length === 0 ? (
@@ -270,6 +288,7 @@ export default function BuyBoxDealsClient({
                   return (
                     <tr key={d.id}>
                       <td>{d.sale_date}</td>
+                      <td>{storeNameById[d.store_id] ?? "—"}</td>
                       <td>
                         <Link href={`/app/deals/${d.id}/edit`} className="pc-link font-mono">
                           {d.stock_number}
@@ -292,7 +311,10 @@ export default function BuyBoxDealsClient({
                         </div>
                       </td>
                       <td>{pcFmtMiles(d.odometer)}</td>
+                      <td>{d.age == null ? "—" : `${pcFmtN(d.age)}d`}</td>
+                      <td>{formatAdjPctMkt(d.sale_pom)}</td>
                       <td>{formatFinanceType(d.finance_type)}</td>
+                      <td>{d.list_price_na ? "NA" : pcFmt$(d.list_price)}</td>
                       <td>{pcFmt$(d.sale_price)}</td>
                       <td>{pcFmt$(d.front_profit)}</td>
                       <td>{pcFmt$(d.back_profit)}</td>
@@ -317,11 +339,6 @@ export default function BuyBoxDealsClient({
                         >
                           {pcFmt$(overJd)}
                         </span>
-                      </td>
-                      <td>
-                        {d.sale_books_manual
-                          ? "manual"
-                          : d.sale_books_source?.replace(/_/g, " ") ?? "—"}
                       </td>
                     </tr>
                   );
