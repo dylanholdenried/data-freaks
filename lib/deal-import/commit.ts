@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NormalizedDealImportRow } from "./csv-schema";
 import type { ResolvedDealImport } from "./validate";
+import { lockMissingSaleBooksForStore } from "@/lib/buy-box/lockSaleBooks";
 
 export type CommitBatchResult = {
   batch_id: string;
@@ -32,6 +33,7 @@ export async function commitDealImportBatch(
     if (!result || typeof result.inserted !== "number") {
       throw new Error("Commit failed: unexpected response from database");
     }
+    await maybeLockSaleBooksAfterImport(supabase, batchId);
     return {
       batch_id: result.batch_id ?? batchId,
       inserted: result.inserted,
@@ -56,7 +58,27 @@ export async function commitDealImportBatch(
     throw new Error(`Commit failed: ${error.message}`);
   }
 
-  return commitDealImportBatchJs(supabase, batchId);
+  const jsResult = await commitDealImportBatchJs(supabase, batchId);
+  await maybeLockSaleBooksAfterImport(supabase, batchId);
+  return jsResult;
+}
+
+async function maybeLockSaleBooksAfterImport(
+  supabase: SupabaseClient,
+  batchId: string
+) {
+  try {
+    const { data: batch } = await supabase
+      .from("deal_import_batches")
+      .select("store_id")
+      .eq("id", batchId)
+      .maybeSingle();
+    const storeId = (batch as { store_id: string } | null)?.store_id;
+    if (!storeId) return;
+    await lockMissingSaleBooksForStore(supabase, storeId, { limit: 800 });
+  } catch {
+    /* best-effort — import already committed */
+  }
 }
 
 async function commitDealImportBatchJs(

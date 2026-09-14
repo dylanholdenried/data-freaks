@@ -12,9 +12,10 @@ import {
   type DatePreset,
 } from "@/lib/profit-center/dateRange";
 import { loadSaleBooksDeals } from "@/lib/buy-box/loadDeals";
-import PlanNoAccessState from "../PlanNoAccessState";
-import SelectAutoGroupEmptyState from "../SelectAutoGroupEmptyState";
-import BuyBoxClient from "./BuyBoxClient";
+import { modelKey } from "@/lib/buy-box/hrefs";
+import PlanNoAccessState from "../../PlanNoAccessState";
+import SelectAutoGroupEmptyState from "../../SelectAutoGroupEmptyState";
+import BuyBoxDealsClient from "../BuyBoxDealsClient";
 
 type Store = { id: string; name: string };
 type Department = { id: string; name: string; store_id: string };
@@ -26,11 +27,22 @@ function parsePreset(raw: string | undefined): DatePreset {
   return "mtd";
 }
 
-export default async function BuyBoxPage({
+function str(v: string | string[] | undefined): string {
+  return typeof v === "string" ? v.trim() : "";
+}
+
+export default async function BuyBoxDealsPage({
   searchParams,
 }: {
   searchParams: Record<string, string | string[] | undefined>;
 }) {
+  const make = str(searchParams.make);
+  const model = str(searchParams.model);
+
+  if (!make || !model) {
+    redirect("/app/buy-box");
+  }
+
   const supabase = createSupabaseServerClient();
   const {
     data: { user },
@@ -80,16 +92,19 @@ export default async function BuyBoxPage({
 
   const now = new Date();
   const range = resolveDateRange(preset, { now });
+  const wantKey = modelKey(make, model);
 
   if (storeIds.length === 0) {
     return (
-      <BuyBoxClient
+      <BuyBoxDealsClient
         stores={stores}
         deals={[]}
         departmentNamesById={{}}
+        make={make}
+        model={model}
         preset={preset}
         range={range}
-        initialStoreId={storeId}
+        storeId={storeId}
         groupName={entitlements.groupName ?? ""}
       />
     );
@@ -109,21 +124,26 @@ export default async function BuyBoxPage({
     departmentNamesById[d.id] = d.name;
   }
 
-  const deals = await loadSaleBooksDeals(
+  const allDeals = await loadSaleBooksDeals(
     supabase,
     scopedStoreIds,
     range,
     departments
   );
+  const deals = allDeals.filter(
+    (d) => modelKey(d.vehicle_make ?? "", d.vehicle_model ?? "") === wantKey
+  );
 
   return (
-    <BuyBoxClient
+    <BuyBoxDealsClient
       stores={stores}
       deals={deals}
       departmentNamesById={departmentNamesById}
+      make={make}
+      model={model}
       preset={preset}
       range={range}
-      initialStoreId={storeId}
+      storeId={storeId}
       groupName={entitlements.groupName ?? ""}
     />
   );

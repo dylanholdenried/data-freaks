@@ -39,6 +39,11 @@ type DealRow = {
   list_price: number | null;
   list_price_na: boolean;
   age: number | null;
+  sale_mmr: number | null;
+  sale_jd: number | null;
+  sale_books_at: string | null;
+  sale_books_source: string | null;
+  sale_books_manual: boolean;
   entered_by: string | null;
   created_at: string;
 };
@@ -107,6 +112,7 @@ export default async function EditDealPage({
         "vin,trim,color,body_style,drivetrain,odometer," +
         "acquisition_source,finance_type,finance_manager_id," +
         "front_profit,back_profit,sale_price,list_price,list_price_na,age," +
+        "sale_mmr,sale_jd,sale_books_at,sale_books_source,sale_books_manual," +
         "entered_by,created_at"
     )
     .eq("id", params.id)
@@ -352,6 +358,11 @@ export default async function EditDealPage({
       initialListPrice={deal.list_price}
       initialListPriceNa={deal.list_price_na ?? false}
       initialAge={deal.age}
+      initialSaleMmr={deal.sale_mmr}
+      initialSaleJd={deal.sale_jd}
+      initialSaleBooksAt={deal.sale_books_at}
+      initialSaleBooksSource={deal.sale_books_source}
+      initialSaleBooksManual={deal.sale_books_manual ?? false}
       allAcquisitionSources={allAcquisitionSources.map((s) => ({
         id: s.id,
         name: s.name,

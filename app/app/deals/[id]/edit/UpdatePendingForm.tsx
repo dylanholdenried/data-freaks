@@ -19,6 +19,15 @@ import {
 } from "@/lib/deals/duplicate-checks";
 import type { DealEventRow } from "@/lib/deals/deal-events";
 import { reopenDeal, revalidateDealsRegistry } from "@/app/app/deals/actions";
+import { updateDealSaleBooks } from "@/app/app/buy-box/actions";
+import {
+  hasMissingBooksFlag,
+  isPreOwnedDepartment,
+  resolveLastInventoryBooks,
+  saleBooksUpdatePayload,
+  saleOverJd,
+  saleOverMmr,
+} from "@/lib/buy-box/sale-books";
 import { resolveDealsReturnTo } from "@/lib/deals/registry-url";
 import { cn } from "@/lib/utils";
 import { filterAcquisitionSourcesForDepartment } from "@/lib/acquisition-sources";
@@ -94,6 +103,11 @@ interface Props {
   initialListPrice: number | null;
   initialListPriceNa: boolean;
   initialAge: number | null;
+  initialSaleMmr: number | null;
+  initialSaleJd: number | null;
+  initialSaleBooksAt: string | null;
+  initialSaleBooksSource: string | null;
+  initialSaleBooksManual: boolean;
   // Dropdown options
   allAcquisitionSources: { id: string; name: string; active?: boolean }[];
   acquisitionSourceDepartments: {
@@ -245,6 +259,11 @@ export default function UpdatePendingForm({
   initialListPrice,
   initialListPriceNa,
   initialAge,
+  initialSaleMmr,
+  initialSaleJd,
+  initialSaleBooksAt,
+  initialSaleBooksSource,
+  initialSaleBooksManual,
   allAcquisitionSources,
   acquisitionSourceDepartments,
   financeManagers,
@@ -416,6 +435,14 @@ export default function UpdatePendingForm({
     initialListPriceNa ? "" : numStr(initialListPrice)
   );
   const [age, setAge] = useState(numStr(initialAge));
+  const [saleMmr, setSaleMmr] = useState(numStr(initialSaleMmr));
+  const [saleJd, setSaleJd] = useState(numStr(initialSaleJd));
+  const [saleBooksAt, setSaleBooksAt] = useState(initialSaleBooksAt);
+  const [saleBooksSource, setSaleBooksSource] = useState(initialSaleBooksSource);
+  const [saleBooksManual, setSaleBooksManual] = useState(initialSaleBooksManual);
+  const [savingBooks, setSavingBooks] = useState(false);
+  const [booksError, setBooksError] = useState<string | null>(null);
+  const [booksSaved, setBooksSaved] = useState(false);
 
   // ── UI state ──────────────────────────────────────────────────────────────────
   const [saving, setSaving] = useState(false);
@@ -993,9 +1020,28 @@ export default function UpdatePendingForm({
 
     try {
       const supabase = createSupabaseBrowserClient();
+      const deptName =
+        departments.find((d) => d.id === departmentId)?.name ?? "";
+      const preOwned = isPreOwnedDepartment(deptName);
+
+      let booksPayload: Record<string, unknown> = {};
+      if (preOwned && !saleBooksManual) {
+        const books = await resolveLastInventoryBooks(
+          supabase,
+          storeId,
+          stockNumber
+        );
+        booksPayload = saleBooksUpdatePayload(books);
+        if (books.sale_mmr != null) setSaleMmr(String(books.sale_mmr));
+        if (books.sale_jd != null) setSaleJd(String(books.sale_jd));
+        setSaleBooksAt(books.sale_books_at);
+        setSaleBooksSource(books.sale_books_source);
+        setSaleBooksManual(false);
+      }
+
       const { error } = await supabase
         .from("deals")
-        .update({ ...buildPayload(), status: "closed" })
+        .update({ ...buildPayload(), ...booksPayload, status: "closed" })
         .eq("id", dealId);
 
       if (error) throw new Error(error.message);
@@ -1112,6 +1158,62 @@ export default function UpdatePendingForm({
     dealStatus === "dead" ||
     closed ||
     markedLost;
+
+  const selectedDeptName =
+    departments.find((d) => d.id === departmentId)?.name ?? "";
+  const preOwnedDeal = isPreOwnedDepartment(selectedDeptName);
+  const booksForDelta = {
+    sale_price: salePrice.trim() !== "" ? parseFloat(salePrice) : null,
+    sale_mmr: saleMmr.trim() !== "" ? parseFloat(saleMmr) : null,
+    sale_jd: saleJd.trim() !== "" ? parseFloat(saleJd) : null,
+  };
+  const overMmrNow = saleOverMmr(booksForDelta);
+  const overJdNow = saleOverJd(booksForDelta);
+  const missingBooksFlag =
+    dealStatus === "closed" &&
+    preOwnedDeal &&
+    hasMissingBooksFlag(
+      {
+        sale_date: saleDate,
+        sale_mmr: booksForDelta.sale_mmr,
+        sale_jd: booksForDelta.sale_jd,
+      },
+      { preOwned: true }
+    );
+
+  async function handleSaveSaleBooks() {
+    setSavingBooks(true);
+    setBooksError(null);
+    setBooksSaved(false);
+    try {
+      const mmrRaw = saleMmr.trim();
+      const jdRaw = saleJd.trim();
+      const mmrVal = mmrRaw === "" ? null : parseFloat(mmrRaw);
+      const jdVal = jdRaw === "" ? null : parseFloat(jdRaw);
+      if (mmrVal != null && !Number.isFinite(mmrVal)) {
+        throw new Error("MMR must be a number.");
+      }
+      if (jdVal != null && !Number.isFinite(jdVal)) {
+        throw new Error("JD Power Clean Trade must be a number.");
+      }
+      const result = await updateDealSaleBooks({
+        dealId,
+        saleMmr: mmrVal,
+        saleJd: jdVal,
+      });
+      if (!result.ok) throw new Error(result.error);
+      setSaleBooksManual(true);
+      setSaleBooksSource("manual");
+      setSaleBooksAt(new Date().toISOString());
+      setBooksSaved(true);
+    } catch (err: unknown) {
+      setBooksError(
+        err instanceof Error ? err.message : "Could not save sale books."
+      );
+    } finally {
+      setSavingBooks(false);
+    }
+  }
 
   const busy =
     saving ||
@@ -2229,6 +2331,140 @@ export default function UpdatePendingForm({
           </div>
         </CardContent>
       </Card>
+
+      {/* ── Sale books (pre-owned only) ───────────────────────────────────────── */}
+      {preOwnedDeal && (
+        <Card className="app-panel border-border shadow-none">
+          <CardHeader className="border-border">
+            <CardTitle className="text-lg">Sale-time books (pre-owned)</CardTitle>
+            <p className="text-sm font-normal text-muted-foreground">
+              Last reported MMR and JD Power Clean Trade when the unit left inventory.
+              Locked on close; override manually if missing. Used on Buy-Box scorecards
+              (sale price − books).
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {missingBooksFlag && (
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+                Missing MMR and/or JD Clean Trade — flagged for 7 days after close. Enter
+                values below or this flag drops after the window (deal stays excluded from
+                averages while blank).
+              </div>
+            )}
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="space-y-1">
+                <label className={LBL}>MMR at sale</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={saleMmr}
+                  onChange={(e) => {
+                    setSaleMmr(e.target.value);
+                    setBooksSaved(false);
+                  }}
+                  disabled={readOnly || dealStatus !== "closed"}
+                  className={
+                    dealStatus === "closed" && !saleMmr.trim()
+                      ? "border-amber-400"
+                      : ""
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <label className={LBL}>JD Power Clean Trade at sale</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={saleJd}
+                  onChange={(e) => {
+                    setSaleJd(e.target.value);
+                    setBooksSaved(false);
+                  }}
+                  disabled={readOnly || dealStatus !== "closed"}
+                  className={
+                    dealStatus === "closed" && !saleJd.trim()
+                      ? "border-amber-400"
+                      : ""
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <label className={LBL}>Sale vs MMR</label>
+                <div
+                  className={cn(
+                    "flex h-10 items-center rounded-md border border-border px-3 text-sm tabular-nums",
+                    overMmrNow != null && overMmrNow > 0
+                      ? "text-emerald-600"
+                      : overMmrNow != null && overMmrNow < 0
+                        ? "text-red-600"
+                        : "text-muted-foreground"
+                  )}
+                >
+                  {overMmrNow == null
+                    ? "—"
+                    : overMmrNow.toLocaleString("en-US", {
+                        style: "currency",
+                        currency: "USD",
+                        maximumFractionDigits: 0,
+                      })}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className={LBL}>Sale vs JD Clean Trade</label>
+                <div
+                  className={cn(
+                    "flex h-10 items-center rounded-md border border-border px-3 text-sm tabular-nums",
+                    overJdNow != null && overJdNow > 0
+                      ? "text-emerald-600"
+                      : overJdNow != null && overJdNow < 0
+                        ? "text-red-600"
+                        : "text-muted-foreground"
+                  )}
+                >
+                  {overJdNow == null
+                    ? "—"
+                    : overJdNow.toLocaleString("en-US", {
+                        style: "currency",
+                        currency: "USD",
+                        maximumFractionDigits: 0,
+                      })}
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+              <span>
+                Source:{" "}
+                {saleBooksManual
+                  ? "manual"
+                  : saleBooksSource?.replace(/_/g, " ") ?? "— (locks on close)"}
+              </span>
+              {saleBooksAt ? (
+                <span>
+                  As of:{" "}
+                  {saleBooksAt.slice(0, 10)}
+                </span>
+              ) : null}
+              {dealStatus === "closed" && !readOnly ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={savingBooks}
+                  onClick={handleSaveSaleBooks}
+                >
+                  {savingBooks ? "Saving…" : "Save books override"}
+                </Button>
+              ) : null}
+              {booksSaved ? (
+                <span className="text-emerald-600">Saved</span>
+              ) : null}
+              {booksError ? (
+                <span className="text-red-600">{booksError}</span>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── Action bar ───────────────────────────────────────────────────────── */}
       {!isLocked && (
