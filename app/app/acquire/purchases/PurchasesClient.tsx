@@ -29,11 +29,13 @@ import {
 } from "@/lib/acquire/cost";
 import { countAcquireActionItems, needsTransportScheduled } from "@/lib/acquire/action-items";
 import { storesQueryString } from "@/lib/acquire/store-labels";
+import { computeMonthlyPurchaseSalesVolume } from "@/lib/acquire/monthly-volume";
 import AcquireStorePills from "../AcquireStorePills";
 import PurchaseCard, { type CardOriginRect } from "./PurchaseCard";
 import PurchaseFlipOverlay from "./PurchaseFlipOverlay";
 import AddPurchaseModal from "./AddPurchaseModal";
 import BulkUploadModal from "./BulkUploadModal";
+import PurchasesVolumeChart from "./PurchasesVolumeChart";
 import type { VehicleCatalogMake, VehicleCatalogModel } from "./AcquireVehicleFields";
 import { Search, X } from "lucide-react";
 
@@ -87,6 +89,11 @@ export default function PurchasesClient({
     // Unassigned cars stay visible until a destination store is set.
     return localPurchases.filter((p) => p.store_id == null || allowed.has(p.store_id));
   }, [localPurchases, selectedStoreIds]);
+
+  const monthlyVolume = useMemo(
+    () => computeMonthlyPurchaseSalesVolume(storePurchases),
+    [storePurchases]
+  );
 
   function applyPurchaseUpdate(updated: AcqPurchase, opts?: { switchBucketNow?: boolean }) {
     setLocalPurchases((prev) =>
@@ -281,6 +288,13 @@ export default function PurchasesClient({
           onChange={onStoresChange}
         />
       </div>
+
+      <IcPanel
+        title="Purchases vs sales"
+        note="Months with activity · unit volume + total gross by sold date"
+      >
+        <PurchasesVolumeChart data={monthlyVolume} />
+      </IcPanel>
 
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <IcKpi
