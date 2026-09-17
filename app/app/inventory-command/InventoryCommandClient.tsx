@@ -7,6 +7,7 @@ import {
   isHotUnit,
 } from "@/lib/inventory-command/compute";
 import { collectDhUnitsForStore } from "@/lib/inventory-command/dh-purchases";
+import type { DhPurchaseOverlay } from "@/lib/inventory-command/dh-purchases";
 import { fmtMoneyCompact, fmtNum } from "@/lib/inventory-command/format";
 import {
   formatExportDate,
@@ -40,6 +41,7 @@ export type InventoryCommandClientProps = {
   movements: InvMovement[];
   priceActions: InvPriceAction[];
   latestByStore: Record<string, string | null>;
+  dhPurchases?: DhPurchaseOverlay[];
 };
 
 const TABS: { id: InventoryCommandTab; label: string }[] = [
@@ -63,6 +65,7 @@ export default function InventoryCommandClient({
   movements,
   priceActions,
   latestByStore,
+  dhPurchases = [],
 }: InventoryCommandClientProps) {
   const [storeId, setStoreId] = useState(initialStoreId);
   const [tab, setTab] = useState<InventoryCommandTab>("overview");
@@ -83,8 +86,8 @@ export default function InventoryCommandClient({
   }, [units, snapshotDate]);
 
   const dhCount = useMemo(
-    () => collectDhUnitsForStore(units, storeId, storeName).length,
-    [units, storeId, storeName]
+    () => collectDhUnitsForStore(units, storeId, storeName, dhPurchases).length,
+    [units, storeId, storeName, dhPurchases]
   );
 
   const totalCost = useMemo(
@@ -204,7 +207,12 @@ export default function InventoryCommandClient({
               <OverviewTab units={units} snapshotDate={snapshotDate} />
             ) : null}
             {tab === "dh" ? (
-              <DhPurchasesTab units={units} storeId={storeId} storeName={storeName} />
+              <DhPurchasesTab
+                units={units}
+                storeId={storeId}
+                storeName={storeName}
+                purchases={dhPurchases}
+              />
             ) : null}
             {tab === "trends" ? (
               <TrendsTab

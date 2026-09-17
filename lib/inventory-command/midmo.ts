@@ -129,10 +129,23 @@ export function parseVehMakeModel(veh: string | null | undefined): {
 
   const rest = parts.slice(i);
   let model = rest[0] ?? "";
-  if (rest.length > 1 && /^\d/.test(rest[1]!)) {
+  // Keep series tokens like "2500" / "350", not displacement ("2.5") or trim.
+  if (rest.length > 1 && /^\d{3,4}[A-Za-z]*$/.test(rest[1]!)) {
     model = `${rest[0]} ${rest[1]}`;
   }
   return { make, model };
+}
+
+/** Year + make + model only — drops trim from inventory `veh` strings. */
+export function formatVehYmm(veh: string | null | undefined): string {
+  if (!veh?.trim()) return "—";
+  const parts = veh.trim().split(/\s+/);
+  const year = /^\d{4}$/.test(parts[0] ?? "") ? parts[0]! : null;
+  const { make, model } = parseVehMakeModel(veh);
+  const out = [year, make !== "Unknown" ? make : null, model || null]
+    .filter(Boolean)
+    .join(" ");
+  return out || veh.trim();
 }
 
 export function storeShortLabel(name: string): string {

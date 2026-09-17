@@ -46,9 +46,12 @@ export async function loadLatestInventoryUnits(
 
   const units = (unitRows ?? []).map((u) => ({
     ...u,
-    disp: (u.disp === "subprime" ? "subprime" : "retail") as
-      | "retail"
-      | "subprime",
+    disp:
+      u.disp === "subprime"
+        ? "subprime"
+        : u.disp === "wholesale"
+          ? "wholesale"
+          : "retail",
   })) as InvUnitRow[];
 
   const dates = [...latestSnapIdByStore.values()].map((s) => s.date).sort();

@@ -8,6 +8,7 @@ import {
   dhMerchGaps,
   dhPrefixForStore,
   dhSummary,
+  type DhPurchaseOverlay,
   type DhUnitRow,
 } from "@/lib/inventory-command/dh-purchases";
 import { fmtMoney, fmtMoneyCompact, fmtNum } from "@/lib/inventory-command/format";
@@ -17,13 +18,16 @@ import {
   colAge,
   colCost,
   colDsr,
+  colMarkup,
   colPhotos,
   colPom,
   colPrice,
   colSrp,
+  colStatus,
   colStock,
+  colStrategy,
   colVdp,
-  colVeh,
+  colVehYmm,
   colVr,
 } from "../ui/columns";
 import { IcAttention, IcEmpty, IcKpi, IcPanel } from "../ui/primitives";
@@ -37,10 +41,13 @@ function spreadTone(n: number | null | undefined): string {
 function baseDhCols(): IcCol<DhUnitRow>[] {
   return [
     colStock(),
-    colVeh(),
+    colVehYmm(),
+    colStatus(),
+    colStrategy(),
     colAge(),
     colCost(),
     colPrice(),
+    colMarkup(),
     colPom(),
     colDsr(),
     colPhotos(),
@@ -97,13 +104,15 @@ export default function DhPurchasesTab({
   units,
   storeId,
   storeName,
+  purchases = [],
 }: {
   units: InvUnitRow[];
   storeId: string;
   storeName: string;
+  purchases?: DhPurchaseOverlay[];
 }) {
   const prefix = dhPrefixForStore(storeName);
-  const rows = collectDhUnitsForStore(units, storeId, storeName);
+  const rows = collectDhUnitsForStore(units, storeId, storeName, purchases);
   const summary = dhSummary(rows);
   const merchGaps = dhMerchGaps(rows);
   const lookers = dhHighLookersNotSelling(rows);

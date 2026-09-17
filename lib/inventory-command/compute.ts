@@ -35,6 +35,8 @@ export function normalizeDisp(raw: unknown): InvDisposition {
     .trim()
     .toLowerCase();
   if (s === "subprime") return "subprime";
+  if (s === "wholesale") return "wholesale";
+  // Upload / vAuto often labels the prime retail bucket as "prime" or "retail".
   return "retail";
 }
 
@@ -145,13 +147,13 @@ export function computeDailyMetrics(
     if ((u.ph ?? 0) >= FULL_PHOTO_COUNT) full += 1;
     if ((u.ph ?? 0) === 0) noPh += 1;
     if (isTtlFail(u)) ttlFail += 1;
-    if (u.disp === "retail") {
+    if (u.disp === "subprime") {
+      subprime += 1;
+    } else if (u.disp !== "wholesale") {
       retail += 1;
       const dsr = u.dsr ?? 0;
       if (dsr >= STALE_DAYS) stale += 1;
       if (u.price == null) noPrice += 1;
-    } else {
-      subprime += 1;
     }
     if (isHotUnit(u.age, snapshotDate)) {
       hot += 1;

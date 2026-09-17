@@ -14,10 +14,19 @@ import type {
   InvPriceAction,
   InvUnitRow,
 } from "@/lib/inventory-command/types";
+import type { DhPurchaseOverlay } from "@/lib/inventory-command/dh-purchases";
+import { ACQ_STAGES, type AcqPurchaseStage } from "@/lib/acquire/types";
 import { countTtlFails } from "@/lib/inventory-command/compute";
 import PlanNoAccessState from "../PlanNoAccessState";
 import SelectAutoGroupEmptyState from "../SelectAutoGroupEmptyState";
 import InventoryCommandClient from "./InventoryCommandClient";
+
+function asAcqStage(raw: string | null | undefined): AcqPurchaseStage {
+  if (raw && (ACQ_STAGES as readonly string[]).includes(raw)) {
+    return raw as AcqPurchaseStage;
+  }
+  return "need_to_stock_in";
+}
 
 export default async function InventoryCommandPage({
   searchParams,
@@ -104,7 +113,12 @@ export default async function InventoryCommandPage({
       .eq("snapshot_id", snapshotId);
     units = (unitRows ?? []).map((u) => ({
       ...u,
-      disp: (u.disp === "subprime" ? "subprime" : "retail") as "retail" | "subprime",
+      disp:
+        u.disp === "subprime"
+          ? "subprime"
+          : u.disp === "wholesale"
+            ? "wholesale"
+            : "retail",
     })) as InvUnitRow[];
   }
 
@@ -160,6 +174,24 @@ export default async function InventoryCommandPage({
     priceActions = (pa ?? []) as InvPriceAction[];
   }
 
+  let dhPurchases: DhPurchaseOverlay[] = [];
+  {
+    const { data: purchRows } = await supabase
+      .from("acq_purchases")
+      .select(
+        "stock_number, stage, on_hold, vehicle_year, vehicle_make, vehicle_model"
+      )
+      .eq("store_id", initialStoreId);
+    dhPurchases = (purchRows ?? []).map((p) => ({
+      stock_number: p.stock_number,
+      stage: asAcqStage(p.stage),
+      on_hold: Boolean(p.on_hold),
+      vehicle_year: p.vehicle_year,
+      vehicle_make: p.vehicle_make,
+      vehicle_model: p.vehicle_model,
+    }));
+  }
+
   return (
     <InventoryCommandClient
       stores={stores}
@@ -171,6 +203,7 @@ export default async function InventoryCommandPage({
       movements={movements}
       priceActions={priceActions}
       latestByStore={latestByStore}
+      dhPurchases={dhPurchases}
     />
   );
 }

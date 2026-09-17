@@ -1,13 +1,29 @@
 /** DH Purchases — personal inventory by store stock prefix (DHL / DHC). */
 
+import {
+  ACQ_STAGE_LABELS,
+  type AcqPurchaseStage,
+} from "@/lib/acquire/types";
+import { displayYmm } from "@/lib/acquire/incoming";
 import { FULL_PHOTO_COUNT } from "./config";
 import {
   calledAction,
+  formatVehYmm,
   mmrWater,
   storeShortLabel,
   type CalledAction,
 } from "./midmo";
-import type { InvUnitRow } from "./types";
+import type { InvDisposition, InvUnitRow } from "./types";
+
+/** Slim Acquire overlay joined onto DH rows by stock #. */
+export type DhPurchaseOverlay = {
+  stock_number: string | null;
+  stage: AcqPurchaseStage;
+  on_hold: boolean;
+  vehicle_year: number | null;
+  vehicle_make: string | null;
+  vehicle_model: string | null;
+};
 
 export type DhUnitRow = InvUnitRow & {
   storeId: string;
@@ -17,7 +33,55 @@ export type DhUnitRow = InvUnitRow & {
   jdSpread: number | null;
   spd: number | null;
   action: CalledAction;
+  /** Year / make / model only (trim stripped). */
+  vehDisplay: string;
+  /** Acquire pipeline status label, or null if unmatched. */
+  statusLabel: string | null;
+  /** Upload disposition bucket: Prime / Subprime / Wholesale. */
+  strategyLabel: string;
+  markup: number | null;
 };
+
+function normStock(s: string | null | undefined): string {
+  return (s ?? "").trim().toUpperCase();
+}
+
+/** Map inventory upload `disp` to the strategy labels used on the DH tab. */
+export function dhStrategyLabel(disp: InvDisposition | string | null | undefined): string {
+  const s = String(disp ?? "")
+    .trim()
+    .toLowerCase();
+  if (s === "subprime") return "Subprime";
+  if (s === "wholesale") return "Wholesale";
+  return "Prime";
+}
+
+export function buildDhPurchaseMap(
+  purchases: DhPurchaseOverlay[]
+): Map<string, DhPurchaseOverlay> {
+  const map = new Map<string, DhPurchaseOverlay>();
+  for (const p of purchases) {
+    const key = normStock(p.stock_number);
+    if (key) map.set(key, p);
+  }
+  return map;
+}
+
+function statusFromPurchase(p: DhPurchaseOverlay | undefined): string | null {
+  if (!p) return null;
+  const base = ACQ_STAGE_LABELS[p.stage] ?? p.stage;
+  return p.on_hold ? `On Hold · ${base}` : base;
+}
+
+function vehFromPurchase(p: DhPurchaseOverlay | undefined, fallbackVeh: string | null): string {
+  if (
+    p &&
+    (p.vehicle_year != null || p.vehicle_make || p.vehicle_model)
+  ) {
+    return displayYmm(p);
+  }
+  return formatVehYmm(fallbackVeh);
+}
 
 /** Linn → DHL, Centralia → DHC. */
 export function dhPrefixForStore(storeName: string): string | null {
@@ -27,13 +91,19 @@ export function dhPrefixForStore(storeName: string): string | null {
   return null;
 }
 
+/**
+ * True for DH purchases only — prefix DHL/DHC and a numeric suffix.
+ * Stocks ending in a letter (e.g. DHL1000A) are trades, not DH purchases.
+ */
 export function isDhStockForStore(
   stk: string | null | undefined,
   storeName: string
 ): boolean {
   const prefix = dhPrefixForStore(storeName);
   if (!prefix) return false;
-  return (stk ?? "").trim().toUpperCase().startsWith(prefix);
+  const key = (stk ?? "").trim().toUpperCase();
+  if (!key.startsWith(prefix)) return false;
+  return !/[A-Z]$/.test(key);
 }
 
 export function dhUnitsForStore(units: InvUnitRow[], storeName: string): InvUnitRow[] {
@@ -48,7 +118,8 @@ function avgOf(nums: number[]): number | null {
 export function enrichDhUnit(
   u: InvUnitRow,
   storeId: string,
-  storeName: string
+  storeName: string,
+  purchase?: DhPurchaseOverlay
 ): DhUnitRow {
   const age = u.age ?? 0;
   const spd =
@@ -66,16 +137,22 @@ export function enrichDhUnit(
     jdSpread: u.jd != null && u.cost != null ? u.jd - u.cost : null,
     spd,
     action: calledAction(u),
+    vehDisplay: vehFromPurchase(purchase, u.veh),
+    statusLabel: statusFromPurchase(purchase),
+    strategyLabel: dhStrategyLabel(u.disp),
+    markup: u.price != null && u.cost != null ? u.price - u.cost : null,
   };
 }
 
 export function collectDhUnitsForStore(
   units: InvUnitRow[],
   storeId: string,
-  storeName: string
+  storeName: string,
+  purchases: DhPurchaseOverlay[] = []
 ): DhUnitRow[] {
+  const byStock = buildDhPurchaseMap(purchases);
   return dhUnitsForStore(units, storeName)
-    .map((u) => enrichDhUnit(u, storeId, storeName))
+    .map((u) => enrichDhUnit(u, storeId, storeName, byStock.get(normStock(u.stk))))
     .sort((a, b) => (b.age ?? 0) - (a.age ?? 0));
 }
 

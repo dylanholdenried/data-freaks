@@ -14,6 +14,34 @@ export function colVeh<T extends InvUnitRow>(): IcCol<T> {
   return { key: "veh", label: "Vehicle" };
 }
 
+/** Year / make / model only — for DH rows with `vehDisplay`. */
+export function colVehYmm<T extends { vehDisplay: string }>(): IcCol<T> {
+  return {
+    key: "vehDisplay",
+    label: "Vehicle",
+    render: (u) => u.vehDisplay,
+    sortValue: (u) => u.vehDisplay,
+  };
+}
+
+export function colStatus<T extends { statusLabel: string | null }>(): IcCol<T> {
+  return {
+    key: "statusLabel",
+    label: "Status",
+    render: (u) => u.statusLabel ?? "—",
+    sortValue: (u) => u.statusLabel,
+  };
+}
+
+export function colStrategy<T extends { strategyLabel: string }>(): IcCol<T> {
+  return {
+    key: "strategyLabel",
+    label: "Strategy",
+    render: (u) => u.strategyLabel,
+    sortValue: (u) => u.strategyLabel,
+  };
+}
+
 export function colAge<T extends InvUnitRow>(): IcCol<T> {
   return {
     key: "age",
@@ -40,6 +68,16 @@ export function colPrice<T extends InvUnitRow>(): IcCol<T> {
     right: true,
     bold: true,
     render: (u) => fmtMoney(u.price),
+  };
+}
+
+export function colMarkup<T extends { markup: number | null }>(): IcCol<T> {
+  return {
+    key: "markup",
+    label: "Markup",
+    right: true,
+    render: (u) => fmtMoney(u.markup),
+    sortValue: (u) => u.markup,
   };
 }
 

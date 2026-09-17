@@ -1,4 +1,4 @@
-export type InvDisposition = "retail" | "subprime";
+export type InvDisposition = "retail" | "subprime" | "wholesale";
 
 export type InvUnitRow = {
   stk: string;

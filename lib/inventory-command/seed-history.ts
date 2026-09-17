@@ -151,7 +151,12 @@ export async function seedInventoryHistory(
         mmr: u.mmr ?? null,
         jd: u.jd ?? null,
         pt: u.pt ?? null,
-        disp: (u.disp ?? "retail").toLowerCase() === "subprime" ? "subprime" : "retail",
+        disp: (() => {
+          const d = (u.disp ?? "retail").toLowerCase();
+          if (d === "subprime") return "subprime";
+          if (d === "wholesale") return "wholesale";
+          return "retail";
+        })(),
       }));
       for (let i = 0; i < rows.length; i += 200) {
         const { error } = await supabase.from("inv_units").insert(rows.slice(i, i + 200));
