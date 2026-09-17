@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, Building2, ClipboardList, Package, Upload, Users } from "lucide-react";
+import { Building2, ClipboardList, Package, Upload, Users } from "lucide-react";
 
 const navLink =
   "flex items-center gap-2 rounded-lg px-3 py-2 text-[var(--da-muted)] hover:bg-[var(--da-panel-2)] hover:text-[var(--da-text)]";
@@ -38,12 +38,6 @@ const links = [
     label: "Inventory upload",
     icon: Package,
     match: (p: string) => p.startsWith("/admin/inventory-upload"),
-  },
-  {
-    href: "/app/dashboard",
-    label: "Store view",
-    icon: BarChart3,
-    match: (p: string) => p.startsWith("/app"),
   },
 ] as const;
 

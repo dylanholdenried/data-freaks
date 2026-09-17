@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Shield } from "lucide-react";
+import { BarChart3, Shield } from "lucide-react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
@@ -61,6 +62,14 @@ export default async function AdminLayout({ children }: { children: ReactNode })
           </div>
           <AdminSidebarNav />
           <div className="mt-auto space-y-3 p-3">
+            <Link
+              href="/app/dashboard"
+              prefetch
+              className="flex items-center justify-center gap-2 rounded-xl border border-[var(--da-line)] bg-[var(--da-panel-2)] px-4 py-2 text-xs font-semibold text-[var(--da-text)] transition-colors hover:bg-[var(--da-line)]"
+            >
+              <BarChart3 className="h-3.5 w-3.5" />
+              Store view
+            </Link>
             <ThemeToggle variant="sidebar" />
             <div className="rounded-xl bg-[var(--da-panel-2)] px-3 py-2 text-[11px] text-[var(--da-muted)]">
               <div className="font-medium text-[var(--da-text)]">{displayName}</div>

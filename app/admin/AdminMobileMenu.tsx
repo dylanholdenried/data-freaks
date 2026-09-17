@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useState } from "react";
 import Link from "next/link";
-import { Menu, X } from "lucide-react";
+import { BarChart3, Menu, X } from "lucide-react";
 
 const linkClass =
   "block rounded-lg px-3 py-2.5 text-sm font-medium text-foreground hover:bg-muted";
@@ -13,7 +13,6 @@ const links = [
   { href: "/admin/users", label: "Users" },
   { href: "/admin/bulk-upload", label: "Bulk upload" },
   { href: "/admin/inventory-upload", label: "Inventory upload" },
-  { href: "/app/dashboard", label: "Store view" },
 ] as const;
 
 export default function AdminMobileMenu() {
@@ -81,12 +80,23 @@ export default function AdminMobileMenu() {
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <nav className="flex-1 overflow-y-auto p-3">
-              {links.map(({ href, label }) => (
-                <Link key={href} href={href} className={linkClass} prefetch onClick={close}>
-                  {label}
-                </Link>
-              ))}
+            <nav className="flex flex-1 flex-col overflow-y-auto p-3">
+              <div className="space-y-0.5">
+                {links.map(({ href, label }) => (
+                  <Link key={href} href={href} className={linkClass} prefetch onClick={close}>
+                    {label}
+                  </Link>
+                ))}
+              </div>
+              <Link
+                href="/app/dashboard"
+                prefetch
+                onClick={close}
+                className="mt-auto flex items-center justify-center gap-2 rounded-xl border border-border bg-muted/60 px-4 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+              >
+                <BarChart3 className="h-3.5 w-3.5" />
+                Store view
+              </Link>
             </nav>
           </aside>
         </div>
