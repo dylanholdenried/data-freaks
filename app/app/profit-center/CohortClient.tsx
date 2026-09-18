@@ -30,6 +30,7 @@ import {
 } from "@/lib/profit-center/inventoryBridge";
 import type { BuyBoxSettings, ScoredModel } from "@/lib/profit-center/buyBox";
 import type { DateRange } from "@/lib/profit-center/dateRange";
+import { financeLabel } from "@/lib/dashboard/pace";
 import type { InvUnitRow } from "@/lib/inventory-command/types";
 import { cn } from "@/lib/utils";
 
@@ -37,8 +38,10 @@ type Store = { id: string; name: string };
 type Department = { id: string; name: string; store_id: string };
 
 type DealSortKey =
+  | "store"
   | "stock"
   | "sale_date"
+  | "finance"
   | "year"
   | "trim"
   | "odometer"
@@ -48,6 +51,14 @@ type DealSortKey =
   | "total"
   | "age"
   | "trade";
+
+/** Format ISO date (YYYY-MM-DD) as MM/DD/YY. */
+function formatSaleDateShort(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso.trim());
+  if (!m) return iso;
+  return `${m[2]}/${m[3]}/${m[1]!.slice(2)}`;
+}
 
 function dealTotal(d: ProfitDeal): number | null {
   if (
@@ -64,13 +75,18 @@ function dealTotal(d: ProfitDeal): number | null {
 function sortValue(
   d: ProfitDeal,
   key: DealSortKey,
-  tradesByDeal: Map<string, ProfitTrade[]>
+  tradesByDeal: Map<string, ProfitTrade[]>,
+  storeNames: Map<string, string>
 ): string | number {
   switch (key) {
+    case "store":
+      return storeNames.get(d.store_id) ?? "";
     case "stock":
       return d.stock_number?.trim() || "";
     case "sale_date":
       return d.sale_date;
+    case "finance":
+      return financeLabel(d.finance_type);
     case "year":
       return d.vehicle_year ?? -Infinity;
     case "trim":
@@ -163,6 +179,10 @@ export default function CohortClient({
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const tradesByDeal = useMemo(() => buildTradesByDeal(trades), [trades]);
+  const storeNames = useMemo(
+    () => new Map(stores.map((s) => [s.id, s.name] as const)),
+    [stores]
+  );
 
   const ctx = useMemo(
     () => ({
@@ -231,7 +251,13 @@ export default function CohortClient({
     } else {
       setSortKey(key);
       setSortDir(
-        key === "stock" || key === "trim" || key === "sale_date" ? "asc" : "desc"
+        key === "store" ||
+          key === "stock" ||
+          key === "trim" ||
+          key === "finance" ||
+          key === "sale_date"
+          ? "asc"
+          : "desc"
       );
     }
   }
@@ -239,8 +265,8 @@ export default function CohortClient({
   const sortedDeals = useMemo(() => {
     const copy = [...cohortDeals];
     copy.sort((a, b) => {
-      const av = sortValue(a, sortKey, tradesByDeal);
-      const bv = sortValue(b, sortKey, tradesByDeal);
+      const av = sortValue(a, sortKey, tradesByDeal, storeNames);
+      const bv = sortValue(b, sortKey, tradesByDeal, storeNames);
       if (typeof av === "string" && typeof bv === "string") {
         return sortDir === "asc"
           ? av.localeCompare(bv)
@@ -251,7 +277,7 @@ export default function CohortClient({
       return sortDir === "asc" ? an - bn : bn - an;
     });
     return copy;
-  }, [cohortDeals, sortKey, sortDir, tradesByDeal]);
+  }, [cohortDeals, sortKey, sortDir, tradesByDeal, storeNames]);
 
   const backHref = profitCenterHref({ preset, storeId, departmentName });
   const storeLabel =
@@ -384,6 +410,13 @@ export default function CohortClient({
               <thead>
                 <tr>
                   <SortHeader
+                    label="Store"
+                    sortKey="store"
+                    activeKey={sortKey}
+                    sortDir={sortDir}
+                    onSort={toggleSort}
+                  />
+                  <SortHeader
                     label="Stock"
                     sortKey="stock"
                     activeKey={sortKey}
@@ -393,6 +426,13 @@ export default function CohortClient({
                   <SortHeader
                     label="Date"
                     sortKey="sale_date"
+                    activeKey={sortKey}
+                    sortDir={sortDir}
+                    onSort={toggleSort}
+                  />
+                  <SortHeader
+                    label="Finance"
+                    sortKey="finance"
                     activeKey={sortKey}
                     sortDir={sortDir}
                     onSort={toggleSort}
@@ -474,6 +514,7 @@ export default function CohortClient({
                   const hasTrade = (tradesByDeal.get(d.id) ?? []).length > 0;
                   return (
                     <tr key={d.id}>
+                      <td>{storeNames.get(d.store_id) ?? "—"}</td>
                       <td>
                         <Link
                           href={`/app/deals/${d.id}/edit`}
@@ -482,7 +523,8 @@ export default function CohortClient({
                           {d.stock_number || "Open"}
                         </Link>
                       </td>
-                      <td>{d.sale_date}</td>
+                      <td>{formatSaleDateShort(d.sale_date)}</td>
+                      <td>{financeLabel(d.finance_type)}</td>
                       <td>{d.vehicle_year || "—"}</td>
                       <td>{d.trim?.trim() || "—"}</td>
                       <td className="text-right">{pcFmtMiles(d.odometer)}</td>
