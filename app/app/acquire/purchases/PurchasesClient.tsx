@@ -156,13 +156,20 @@ export default function PurchasesClient({
       return hay.includes(q);
     });
 
-    if (pill === "action_items" && !q) {
-      // Daily audit: oldest vehicles with missing data first
+    if ((pill === "action_items" || pill === "frontline") && !q) {
+      // Action items / Frontline: oldest inventory age first
       return list.sort((a, b) => {
         const ageA = headerAgeDays(a) ?? -1;
         const ageB = headerAgeDays(b) ?? -1;
         return ageB - ageA;
       });
+    }
+
+    if (pill === "sold" && !q) {
+      // Sold: newest sale date first
+      return list.sort((a, b) =>
+        String(b.sold_date ?? "").localeCompare(String(a.sold_date ?? ""))
+      );
     }
 
     // Default: longest time in current step first
