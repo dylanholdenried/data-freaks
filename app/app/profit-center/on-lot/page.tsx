@@ -30,6 +30,7 @@ import {
   type SalesProfile,
 } from "@/lib/profit-center/inventoryBridge";
 import { modelCohortHref } from "@/lib/profit-center/cohort";
+import { dealMatchesMakeModel } from "@/lib/profit-center/vehicleIdentity";
 import SelectAutoGroupEmptyState from "../../SelectAutoGroupEmptyState";
 import PlanNoAccessState from "../../PlanNoAccessState";
 import OnLotClient from "../OnLotClient";
@@ -171,8 +172,8 @@ export default async function OnLotInventoryPage({
     departmentNames,
   });
 
-  const cohortDeals = scoped.filter(
-    (d) => d.vehicle_make === make && d.vehicle_model === model
+  const cohortDeals = scoped.filter((d) =>
+    dealMatchesMakeModel(d, make, model)
   );
 
   const recs = buildCohortRecommendations(

@@ -5,6 +5,11 @@ import {
 } from "./odometerBands";
 import { dealTradeHold, lostGross, mean, sum } from "./metrics";
 import { inferTruckClass, TRUCK_CLASS_LABELS } from "./truckClass";
+import {
+  preferDisplayCasing,
+  sameMake,
+  sameModel,
+} from "./vehicleIdentity";
 
 export type ProfitDeal = {
   id: string;
@@ -94,8 +99,10 @@ function dimensionKey(
   ctx: AggregateContext
 ): { key: string; label: string }[] {
   switch (dim) {
-    case "make":
-      return [{ key: deal.vehicle_make || "(Unknown)", label: deal.vehicle_make || "(Unknown)" }];
+    case "make": {
+      const label = deal.vehicle_make?.trim() || "(Unknown)";
+      return [{ key: label.toLowerCase(), label }];
+    }
     case "model": {
       const label = `${deal.vehicle_make} ${deal.vehicle_model}`.trim() || "(Unknown)";
       return [{ key: label.toLowerCase(), label }];
@@ -261,6 +268,9 @@ export function aggregateByDimension(
       if (!bucket) {
         bucket = { label, deals: [] };
         buckets.set(key, bucket);
+      } else if (dim === "make" || dim === "model") {
+        // Prefer mixed case over ALL CAPS for display when DMS casing mixes.
+        bucket.label = preferDisplayCasing(bucket.label, label);
       }
       if (!bucket.deals.some((d) => d.id === deal.id)) {
         bucket.deals.push(deal);
@@ -351,8 +361,12 @@ export function filterDeals(
         : "(Unassigned)";
       if (name !== filters.departmentName) return false;
     }
-    if (filters.make !== "all" && d.vehicle_make !== filters.make) return false;
-    if (filters.model !== "all" && d.vehicle_model !== filters.model) return false;
+    if (filters.make !== "all" && !sameMake(d.vehicle_make, filters.make)) {
+      return false;
+    }
+    if (filters.model !== "all" && !sameModel(d.vehicle_model, filters.model)) {
+      return false;
+    }
     if (filters.year !== "all" && String(d.vehicle_year) !== filters.year) return false;
     if (filters.priceBandId !== "all") {
       const band = priceBandForSalePrice(d.sale_price);

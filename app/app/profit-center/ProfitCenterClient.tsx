@@ -47,6 +47,10 @@ import {
   profitCenterHref,
   splitMakeModel,
 } from "@/lib/profit-center/cohort";
+import {
+  sameMake,
+  uniquePreservingPreferredCasing,
+} from "@/lib/profit-center/vehicleIdentity";
 import Link from "next/link";
 
 type Store = { id: string; name: string };
@@ -541,14 +545,14 @@ export default function ProfitCenterClient({
   }, [departments, filters.storeId]);
 
   const filterOptions = useMemo(() => {
-    const makes = [...new Set(deals.map((d) => d.vehicle_make))].sort();
-    const models = [
-      ...new Set(
-        deals
-          .filter((d) => filters.make === "all" || d.vehicle_make === filters.make)
-          .map((d) => d.vehicle_model)
-      ),
-    ].sort();
+    const makes = uniquePreservingPreferredCasing(
+      deals.map((d) => d.vehicle_make)
+    );
+    const models = uniquePreservingPreferredCasing(
+      deals
+        .filter((d) => filters.make === "all" || sameMake(d.vehicle_make, filters.make))
+        .map((d) => d.vehicle_model)
+    );
     const years = [...new Set(deals.map((d) => String(d.vehicle_year)))].sort(
       (a, b) => Number(b) - Number(a)
     );

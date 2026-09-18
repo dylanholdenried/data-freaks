@@ -19,6 +19,7 @@ import {
   profitCenterHref,
   splitMakeModel,
 } from "@/lib/profit-center/cohort";
+import { dealMatchesMakeModel } from "@/lib/profit-center/vehicleIdentity";
 import { pcFmt$, pcFmtN, pcFmtPct } from "@/lib/profit-center/format";
 import type { DateRange } from "@/lib/profit-center/dateRange";
 import { cn } from "@/lib/utils";
@@ -151,9 +152,7 @@ export default function CompareClient({
   function sideDeals(side: string): ProfitDeal[] {
     if (type === "model") {
       const { make, model } = splitMakeModel(side, scoped);
-      return scoped.filter(
-        (d) => d.vehicle_make === make && d.vehicle_model === model
-      );
+      return scoped.filter((d) => dealMatchesMakeModel(d, make, model));
     }
     if (type === "acquisition") {
       return scoped.filter(
@@ -173,9 +172,7 @@ export default function CompareClient({
     }
     if (slice && sliceType === "model") {
       const { make, model } = splitMakeModel(slice, list);
-      list = list.filter(
-        (d) => d.vehicle_make === make && d.vehicle_model === model
-      );
+      list = list.filter((d) => dealMatchesMakeModel(d, make, model));
     }
     return list;
   }

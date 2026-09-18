@@ -5,6 +5,11 @@
 import { PRICE_BANDS, priceBandForSalePrice } from "./priceBands";
 import { ODOMETER_BANDS, odometerBandForMiles } from "./odometerBands";
 import type { ProfitDeal, ProfitFilters } from "./aggregate";
+import {
+  dealMatchesMakeModel,
+  modelIdentityKey,
+  preferDisplayCasing,
+} from "./vehicleIdentity";
 
 export type CohortFocus =
   | "model"
@@ -102,9 +107,15 @@ export function splitMakeModel(
   const trimmed = label.trim();
   const lowers = new Map<string, { make: string; model: string }>();
   for (const d of deals) {
-    const key = `${d.vehicle_make} ${d.vehicle_model}`.trim().toLowerCase();
-    if (!lowers.has(key)) {
+    const key = modelIdentityKey(d.vehicle_make, d.vehicle_model);
+    const existing = lowers.get(key);
+    if (!existing) {
       lowers.set(key, { make: d.vehicle_make, model: d.vehicle_model });
+    } else {
+      lowers.set(key, {
+        make: preferDisplayCasing(existing.make, d.vehicle_make),
+        model: preferDisplayCasing(existing.model, d.vehicle_model),
+      });
     }
   }
   const hit = lowers.get(trimmed.toLowerCase());
@@ -124,13 +135,16 @@ export function dealMatchesCohort(
 ): boolean {
   switch (focus) {
     case "model": {
-      if (opts.make && deal.vehicle_make !== opts.make) return false;
-      if (opts.model && deal.vehicle_model !== opts.model) return false;
-      if (!opts.make && !opts.model && opts.value) {
-        const label = `${deal.vehicle_make} ${deal.vehicle_model}`.trim();
-        return label.toLowerCase() === opts.value.toLowerCase();
+      if (opts.make || opts.model) {
+        return dealMatchesMakeModel(deal, opts.make, opts.model);
       }
-      return Boolean(opts.make || opts.model);
+      if (opts.value) {
+        return (
+          modelIdentityKey(deal.vehicle_make, deal.vehicle_model) ===
+          opts.value.trim().toLowerCase()
+        );
+      }
+      return false;
     }
     case "acquisition": {
       const src = deal.acquisition_source?.trim() || "(Unknown)";
