@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ChevronRight } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -104,6 +105,10 @@ const SEL =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground " +
   "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 " +
   "disabled:cursor-not-allowed disabled:opacity-50";
+
+// Deal lists already rendered this session. A fresh mount that receives one of
+// these again is showing a router-cached payload (browser Back/Forward).
+const renderedDealLists = new WeakSet<Deal[]>();
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -231,6 +236,14 @@ export default function DealsClient({
   useEffect(() => {
     setLocalDeals(deals);
   }, [deals]);
+
+  const router = useRouter();
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    if (!mountedRef.current && renderedDealLists.has(deals)) router.refresh();
+    mountedRef.current = true;
+    renderedDealLists.add(deals);
+  }, [deals, router]);
 
   // ── Mark Delivered confirm ───────────────────────────────────────────────────
   const [deliverConfirmDeal, setDeliverConfirmDeal] = useState<Deal | null>(null);
@@ -578,7 +591,7 @@ export default function DealsClient({
           </div>
           {!viewOnly ? (
             <Button asChild>
-              <Link href="/app/deals/new" prefetch>
+              <Link href="/app/deals/new">
                 + New Deal
               </Link>
             </Button>
@@ -827,7 +840,6 @@ export default function DealsClient({
                 >
                   <Link
                     href={dealEditHref(deal.id)}
-                    prefetch
                     onClick={() => rememberDealsRegistryPath(registryPath)}
                     className="flex min-w-0 flex-1 flex-col xl:contents"
                   >
@@ -929,7 +941,6 @@ export default function DealsClient({
                     ) : (
                       <Link
                         href={dealEditHref(deal.id)}
-                        prefetch
                         onClick={() => rememberDealsRegistryPath(registryPath)}
                         className="hidden xl:block"
                         aria-label="Open deal"

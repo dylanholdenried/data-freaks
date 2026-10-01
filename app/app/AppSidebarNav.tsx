@@ -149,7 +149,6 @@ function NavLinkRow({
   return (
     <Link
       href={href}
-      prefetch
       className={cn(locked ? navLinkLocked : active ? navLinkActive : navLink)}
       aria-current={active ? "page" : undefined}
       title={locked ? lockTitle(href) : undefined}

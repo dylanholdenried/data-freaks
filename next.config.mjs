@@ -2,6 +2,13 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  experimental: {
+    // Always refetch dynamic page data on client navigation. Deals are logged by
+    // many users at once, so reusing a cached RSC payload shows stale registries.
+    staleTimes: {
+      dynamic: 0,
+    },
+  },
   async headers() {
     return [
       {

@@ -124,7 +124,6 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
             {!mutateViewOnly ? (
               <Link
                 href="/app/deals/new"
-                prefetch
                 className="flex items-center justify-center rounded-xl bg-[var(--da-blue)] px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-black/25"
               >
                 + New Deal

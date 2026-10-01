@@ -957,7 +957,6 @@ function DepartmentRow({
                       month,
                     })}
                     className="dash-channel-link"
-                    prefetch
                   >
                     {seg.label} {seg.sold}
                   </Link>
@@ -967,11 +966,11 @@ function DepartmentRow({
           ) : null}
           <div className="dash-dept-actions">
             {awaitingHref != null ? (
-              <Link href={awaitingHref} className="dash-awaiting" prefetch>
+              <Link href={awaitingHref} className="dash-awaiting">
                 {dept.pendingCount} Awaiting Delivery
               </Link>
             ) : null}
-            <Link href={viewAllHref} className="dash-view-deals" prefetch>
+            <Link href={viewAllHref} className="dash-view-deals">
               View all deals →
             </Link>
             {!hasGoal && !viewOnly ? (
