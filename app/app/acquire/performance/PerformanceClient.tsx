@@ -12,10 +12,27 @@ import {
 import { IC } from "@/lib/inventory-command/midmo";
 import type { AcqPurchase, AcqSourceType } from "@/lib/acquire/types";
 import { ACQ_SOURCE_LABELS, ACQ_SOURCE_TYPES } from "@/lib/acquire/types";
-import { computeAcquirePerformance } from "@/lib/acquire/performance";
+import { computeAcquirePerformance, computeReconByStore } from "@/lib/acquire/performance";
 import { formatMoney } from "@/lib/acquire/cost";
 import { storesQueryString } from "@/lib/acquire/store-labels";
 import AcquireStorePills from "../AcquireStorePills";
+
+function signedMoney(n: number | null): string {
+  if (n == null) return "—";
+  return `${n > 0 ? "+" : ""}${formatMoney(n)}`;
+}
+
+function signedPct(n: number | null): string {
+  if (n == null) return "—";
+  const pct = Math.round(n * 100);
+  return `${pct > 0 ? "+" : ""}${pct}%`;
+}
+
+/** Over estimate reads red (cost overrun), under reads green. */
+function varianceColor(n: number | null): string {
+  if (n == null || n === 0) return IC.muted;
+  return n > 0 ? IC.red : IC.green;
+}
 
 export default function PerformanceClient({
   stores,
@@ -43,6 +60,7 @@ export default function PerformanceClient({
   }, [purchases, selectedStoreIds, sourceFilter]);
 
   const perf = useMemo(() => computeAcquirePerformance(scoped), [scoped]);
+  const recon = useMemo(() => computeReconByStore(scoped, stores), [scoped, stores]);
 
   function onStoresChange(next: string[]) {
     setSelectedStoreIds(next);
@@ -167,6 +185,105 @@ export default function PerformanceClient({
               </p>
             </div>
           ))}
+        </div>
+      </IcPanel>
+
+      <IcPanel
+        title="Reconditioning by store"
+        note="Units with actual recon entered · variance = actual − estimate"
+      >
+        <div className="mb-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <IcKpi
+            label="Avg recon / unit"
+            value={formatMoney(recon.total.avgRecon)}
+            sub={`${recon.total.reconCount} units · ${formatMoney(recon.total.totalRecon)} total`}
+          />
+          <IcKpi
+            label="Avg estimate"
+            value={formatMoney(recon.total.avgEstimate)}
+            sub={`${recon.total.comparedCount} units with estimate + actual`}
+          />
+          <IcKpi
+            label="Avg vs estimate"
+            value={signedMoney(recon.total.avgVariance)}
+            sub={`${signedPct(recon.total.avgVariancePct)} of estimate`}
+            status={
+              recon.total.avgVariance == null || recon.total.avgVariance === 0
+                ? "neutral"
+                : recon.total.avgVariance > 0
+                  ? "bad"
+                  : "ok"
+            }
+          />
+          <IcKpi
+            label="Over / under estimate"
+            value={`${recon.total.overCount} / ${recon.total.underCount}`}
+          />
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] text-left text-xs">
+            <thead>
+              <tr style={{ color: IC.muted }}>
+                <th className="px-2 py-2 font-semibold">Store</th>
+                <th className="px-2 py-2 font-semibold">Units</th>
+                <th className="px-2 py-2 font-semibold">Avg recon</th>
+                <th className="px-2 py-2 font-semibold">Total recon</th>
+                <th className="px-2 py-2 font-semibold">Compared</th>
+                <th className="px-2 py-2 font-semibold">Avg estimate</th>
+                <th className="px-2 py-2 font-semibold">Avg actual</th>
+                <th className="px-2 py-2 font-semibold">Avg vs est</th>
+                <th className="px-2 py-2 font-semibold">Avg vs est %</th>
+                <th className="px-2 py-2 font-semibold">Over / Under</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recon.rows.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="px-2 py-6 text-center" style={{ color: IC.muted }}>
+                    No actual recon costs entered yet.
+                  </td>
+                </tr>
+              ) : (
+                [...recon.rows, ...(recon.rows.length > 1 ? [recon.total] : [])].map((row) => {
+                  const isTotal = row === recon.total;
+                  return (
+                    <tr
+                      key={isTotal ? "__total" : (row.storeId ?? "__unassigned")}
+                      style={{
+                        borderTop: `1px solid ${isTotal ? IC.border : IC.line}`,
+                        fontWeight: isTotal ? 600 : undefined,
+                      }}
+                    >
+                      <td className="px-2 py-2 font-medium">{row.storeName}</td>
+                      <td className="px-2 py-2 tabular-nums">{row.reconCount}</td>
+                      <td className="px-2 py-2 tabular-nums">{formatMoney(row.avgRecon)}</td>
+                      <td className="px-2 py-2 tabular-nums">{formatMoney(row.totalRecon)}</td>
+                      <td className="px-2 py-2 tabular-nums">{row.comparedCount}</td>
+                      <td className="px-2 py-2 tabular-nums">{formatMoney(row.avgEstimate)}</td>
+                      <td className="px-2 py-2 tabular-nums">
+                        {formatMoney(row.avgActualCompared)}
+                      </td>
+                      <td
+                        className="px-2 py-2 tabular-nums"
+                        style={{ color: varianceColor(row.avgVariance) }}
+                      >
+                        {signedMoney(row.avgVariance)}
+                      </td>
+                      <td
+                        className="px-2 py-2 tabular-nums"
+                        style={{ color: varianceColor(row.avgVariancePct) }}
+                      >
+                        {signedPct(row.avgVariancePct)}
+                      </td>
+                      <td className="px-2 py-2 tabular-nums">
+                        {row.overCount} / {row.underCount}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       </IcPanel>
 

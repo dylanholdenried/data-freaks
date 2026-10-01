@@ -53,6 +53,26 @@ export type ExitStrategyCount = {
   count: number;
 };
 
+export type ReconStoreRow = {
+  /** null = purchases not assigned to a store */
+  storeId: string | null;
+  storeName: string;
+  /** Units with an actual recon cost entered */
+  reconCount: number;
+  totalRecon: number;
+  avgRecon: number | null;
+  /** Units with both an estimate and an actual (basis for variance) */
+  comparedCount: number;
+  avgEstimate: number | null;
+  avgActualCompared: number | null;
+  /** Avg (actual − estimate); positive = ran over estimate */
+  avgVariance: number | null;
+  /** Avg variance as % of estimate, across compared units with estimate > 0 */
+  avgVariancePct: number | null;
+  overCount: number;
+  underCount: number;
+};
+
 export type AcquirePerformance = {
   stageCounts: StageCount[];
   soldThisMonth: number;
@@ -242,6 +262,65 @@ export function computeAcquirePerformance(
     retailLikeSoldCount: sold.filter((p) => isRetailLike(exitOf(p))).length,
     wholesaleExitSoldCount: sold.filter((p) => exitOf(p) === "wholesale").length,
     transferSoldCount: sold.filter((p) => exitOf(p) === "internal_transfer").length,
+  };
+}
+
+function reconRow(
+  storeId: string | null,
+  storeName: string,
+  list: AcqPurchase[]
+): ReconStoreRow {
+  const actuals = list
+    .filter((p) => p.recon_cost != null)
+    .map((p) => num(p.recon_cost));
+  const compared = list.filter((p) => p.recon_cost != null && p.recon_estimate != null);
+  const estimates = compared.map((p) => num(p.recon_estimate));
+  const comparedActuals = compared.map((p) => num(p.recon_cost));
+  const variances = compared.map((p) => num(p.recon_cost) - num(p.recon_estimate));
+  const variancePcts = compared
+    .filter((p) => num(p.recon_estimate) > 0)
+    .map((p) => (num(p.recon_cost) - num(p.recon_estimate)) / num(p.recon_estimate));
+  return {
+    storeId,
+    storeName,
+    reconCount: actuals.length,
+    totalRecon: actuals.reduce((a, b) => a + b, 0),
+    avgRecon: avg(actuals),
+    comparedCount: compared.length,
+    avgEstimate: avg(estimates),
+    avgActualCompared: avg(comparedActuals),
+    avgVariance: avg(variances),
+    avgVariancePct: avg(variancePcts),
+    overCount: variances.filter((v) => v > 0).length,
+    underCount: variances.filter((v) => v < 0).length,
+  };
+}
+
+/**
+ * Recon cost by store: average actual recon, and how actuals compare to the
+ * acquisition-time estimate. Returns per-store rows plus an all-stores total.
+ */
+export function computeReconByStore(
+  purchases: AcqPurchase[],
+  stores: { id: string; name: string }[]
+): { rows: ReconStoreRow[]; total: ReconStoreRow } {
+  const byStore = new Map<string | null, AcqPurchase[]>();
+  for (const p of purchases) {
+    const list = byStore.get(p.store_id) ?? [];
+    list.push(p);
+    byStore.set(p.store_id, list);
+  }
+
+  const rows: ReconStoreRow[] = stores
+    .filter((s) => byStore.has(s.id))
+    .map((s) => reconRow(s.id, s.name, byStore.get(s.id) ?? []));
+
+  const unassigned = byStore.get(null);
+  if (unassigned?.length) rows.push(reconRow(null, "Unassigned", unassigned));
+
+  return {
+    rows: rows.filter((r) => r.reconCount > 0),
+    total: reconRow(null, "All selected stores", purchases),
   };
 }
 
