@@ -1,6 +1,6 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
-import { isAuthApiError } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
+import { isDefinitiveAuthFailure } from "@/lib/supabase/auth-errors";
 
 type CookieToSet = { name: string; value: string; options?: CookieOptions };
 
@@ -11,17 +11,6 @@ function hasSupabaseAuthCookie(request: NextRequest): boolean {
   return request.cookies
     .getAll()
     .some((c) => c.name.includes("-auth-token"));
-}
-
-/**
- * Only a 4xx from the Auth API (revoked / expired refresh token, deleted user)
- * means the session is really gone. Timeouts, 5xx, and HTML error pages from an
- * overloaded Supabase are transient and must not sign the user out.
- */
-function isDefinitiveAuthFailure(error: unknown): boolean {
-  if (!isAuthApiError(error)) return false;
-  const status = error.status ?? 0;
-  return status >= 400 && status < 500;
 }
 
 export async function middleware(request: NextRequest) {

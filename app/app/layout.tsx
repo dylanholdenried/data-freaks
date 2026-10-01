@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
+import { isDefinitiveAuthFailure } from "@/lib/supabase/auth-errors";
 import {
   getEffectiveDealerGroupId,
   listDealerGroupsForAdmin,
@@ -28,17 +29,28 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const supabase = createSupabaseServerClient();
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser();
 
   if (!user) {
+    // Supabase outage / timeout: show the retry page instead of bouncing a
+    // still-valid session to /login.
+    if (authError && !isDefinitiveAuthFailure(authError)) {
+      throw new Error(`auth_unavailable: ${authError.message}`);
+    }
     redirect("/login");
   }
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("id,first_name,last_name,role,status,dealer_group_id,onboarding_welcome_seen_at")
     .or(profileMatchAuthUserId(user.id))
     .maybeSingle();
+
+  // A failed lookup is not "no profile" — don't send active users to /awaiting-approval.
+  if (profileError) {
+    throw new Error(`profile_lookup_failed: ${profileError.message}`);
+  }
 
   if (!profile || profile.status !== "active") {
     redirect("/awaiting-approval");
