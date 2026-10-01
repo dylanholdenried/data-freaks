@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
-import { fetchAllByIds, fetchAllRows } from "@/lib/supabase/fetch-all";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import { getAccessibleStores } from "@/lib/store-access";
 import { isAppViewOnly } from "@/lib/impersonation";
@@ -37,6 +37,9 @@ type DeptRow = {
 };
 type PersonRow = { id: string; name: string; store_id: string };
 type DealSalesperson = { deal_id: string; salesperson_id: string };
+type DealWithSplits = Deal & {
+  deal_salespeople: { salesperson_id: string }[] | null;
+};
 
 type StatusFilter = "all" | "pending" | "delivered" | "closed" | "dead" | "unwound";
 
@@ -158,8 +161,10 @@ export default async function DealsPage({
 
   // Parallel: ALL deals (paged past PostgREST 1000-row cap) + roster tables
   // Salespeople: no active filter — inactive reps' historical deals must resolve their name
+  // deal_salespeople is embedded so splits ride along with each deals page
+  // instead of fanning out into hundreds of chunked `.in("deal_id")` requests.
   const [dealsRes, deptRes, spRes, fmRes] = await Promise.all([
-    fetchAllRows<Deal>((from, to) =>
+    fetchAllRows<DealWithSplits>((from, to) =>
       supabase
         .from("deals")
         .select(
@@ -167,7 +172,7 @@ export default async function DealsPage({
             "vehicle_year,vehicle_make,vehicle_model," +
             "store_id,department_id," +
             "front_profit,back_profit,finance_type,finance_manager_id," +
-            "acquisition_source"
+            "acquisition_source,deal_salespeople(salesperson_id)"
         )
         .in("store_id", storeIds)
         .order("sale_date", { ascending: false })
@@ -191,7 +196,13 @@ export default async function DealsPage({
       .order("name"),
   ]);
 
-  const deals = dealsRes.data as Deal[];
+  const dealSalespeople: DealSalesperson[] = [];
+  const deals: Deal[] = dealsRes.data.map(({ deal_salespeople, ...deal }) => {
+    for (const s of deal_salespeople ?? []) {
+      dealSalespeople.push({ deal_id: deal.id, salesperson_id: s.salesperson_id });
+    }
+    return deal;
+  });
   const departments = (deptRes.data ?? []) as unknown as DeptRow[];
   const salespeople = (spRes.data ?? []) as unknown as PersonRow[];
   const financeManagers = (fmRes.data ?? []) as unknown as PersonRow[];
@@ -214,18 +225,6 @@ export default async function DealsPage({
       ? ftParam
       : "";
   const initialSearch = qParam ?? "";
-
-  // deal_salespeople: chunk IDs + page each chunk past the 1000-row cap
-  const dealIds = deals.map((d) => d.id);
-  const { data: dealSalespeople } = await fetchAllByIds<DealSalesperson>(
-    dealIds,
-    (idChunk, from, to) =>
-      supabase
-        .from("deal_salespeople")
-        .select("deal_id,salesperson_id")
-        .in("deal_id", idChunk)
-        .range(from, to)
-  );
 
   return (
     <DealsClient

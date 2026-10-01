@@ -1,6 +1,6 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
-import { fetchAllByIds, fetchAllRows } from "@/lib/supabase/fetch-all";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import { getAccessibleStores } from "@/lib/store-access";
 import {
@@ -22,6 +22,9 @@ type DealSalesperson = {
   deal_id: string;
   salesperson_id: string;
   share_percent: number;
+};
+type DealWithSplits = Deal & {
+  deal_salespeople: Omit<DealSalesperson, "deal_id">[] | null;
 };
 
 function parseYearMonth(
@@ -92,11 +95,13 @@ export default async function SalespersonLeaderboardPage({
     return <LeaderboardClient {...emptyProps} />;
   }
 
+  // deal_salespeople is embedded so this page (auto-refreshed every minute)
+  // doesn't fan out into chunked `.in("deal_id")` requests.
   const [dealsRes, spRes, calRes] = await Promise.all([
-    fetchAllRows<Deal>((from, to) =>
+    fetchAllRows<DealWithSplits>((from, to) =>
       supabase
         .from("deals")
-        .select("id,status,store_id,sale_date")
+        .select("id,status,store_id,sale_date,deal_salespeople(salesperson_id,share_percent)")
         .in("store_id", storeIds)
         .gte("sale_date", firstOfYear)
         .lte("sale_date", lastOfMonth)
@@ -116,22 +121,19 @@ export default async function SalespersonLeaderboardPage({
       .lte("date", lastOfMonth),
   ]);
 
-  const deals = dealsRes.data;
+  const dealSalespeople: DealSalesperson[] = [];
+  const deals: Deal[] = dealsRes.data.map(({ deal_salespeople, ...deal }) => {
+    for (const s of deal_salespeople ?? []) {
+      dealSalespeople.push({
+        deal_id: deal.id,
+        salesperson_id: s.salesperson_id,
+        share_percent: s.share_percent,
+      });
+    }
+    return deal;
+  });
   const salespeople = (spRes.data ?? []) as unknown as Salesperson[];
   const calendarDays = (calRes.data ?? []) as unknown as CalendarDay[];
-  const dealIds = deals.map((d) => d.id);
-
-  let dealSalespeople: DealSalesperson[] = [];
-  if (dealIds.length > 0) {
-    const res = await fetchAllByIds<DealSalesperson>(dealIds, (idChunk, from, to) =>
-      supabase
-        .from("deal_salespeople")
-        .select("deal_id,salesperson_id,share_percent")
-        .in("deal_id", idChunk)
-        .range(from, to)
-    );
-    dealSalespeople = res.data;
-  }
 
   return (
     <LeaderboardClient

@@ -19,8 +19,52 @@ type InvUnit = {
   age: number | null;
 };
 
+/** Refresh `live_synced_at` on unchanged matches at most this often. */
+const SYNC_STAMP_STALE_MS = 6 * 60 * 60 * 1000;
+
 function normKey(s: string | null | undefined): string {
   return (s ?? "").trim().toUpperCase();
+}
+
+function sameNum(a: number | string | null | undefined, b: number | string | null | undefined) {
+  if (a == null || b == null) return a == null && b == null;
+  return Number(a) === Number(b);
+}
+
+type PurchaseOverlayRow = {
+  id: string;
+  stock_number: string | null;
+  stage: string;
+  live_matched: boolean | null;
+  live_cost: number | null;
+  live_mmr: number | null;
+  live_jd: number | null;
+  live_price: number | null;
+  live_pom: number | null;
+  live_srp: number | null;
+  live_vdp: number | null;
+  live_photo_count: number | null;
+  live_age: number | null;
+  live_synced_at: string | null;
+  frozen_mmr: number | null;
+  frozen_jd: number | null;
+  frozen_at: string | null;
+};
+
+function liveOverlayUnchanged(p: PurchaseOverlayRow, u: InvUnit): boolean {
+  return (
+    p.live_matched === true &&
+    p.frozen_at == null &&
+    sameNum(p.live_cost, u.cost) &&
+    sameNum(p.live_mmr, u.mmr) &&
+    sameNum(p.live_jd, u.jd) &&
+    sameNum(p.live_price, u.price) &&
+    sameNum(p.live_pom, u.pom) &&
+    sameNum(p.live_srp, u.srp) &&
+    sameNum(p.live_vdp, u.vdp) &&
+    sameNum(p.live_photo_count, u.ph) &&
+    sameNum(p.live_age, u.age)
+  );
 }
 
 export async function syncAcquireOverlaysForStore(
@@ -47,7 +91,7 @@ export async function syncAcquireOverlaysForStore(
   const { data: purchases, error: purchErr } = await supabase
     .from("acq_purchases")
     .select(
-      "id, stock_number, stage, live_matched, live_mmr, live_jd, frozen_mmr, frozen_jd, frozen_at"
+      "id, stock_number, stage, live_matched, live_cost, live_mmr, live_jd, live_price, live_pom, live_srp, live_vdp, live_photo_count, live_age, live_synced_at, frozen_mmr, frozen_jd, frozen_at"
     )
     .eq("store_id", storeId);
 
@@ -56,16 +100,23 @@ export async function syncAcquireOverlaysForStore(
     return { matched: 0, frozen: 0 };
   }
 
-  const now = new Date().toISOString();
+  const nowMs = Date.now();
+  const now = new Date(nowMs).toISOString();
   let matched = 0;
   let frozen = 0;
+  const stampOnlyIds: string[] = [];
+  const unmatchIds: string[] = [];
 
-  for (const p of purchases) {
+  for (const p of purchases as PurchaseOverlayRow[]) {
     const stock = normKey(p.stock_number);
     const unit = stock ? byStock.get(stock) : undefined;
     const isActive = (ACQ_ACTIVE_STAGES as readonly string[]).includes(p.stage);
 
-    if (unit) {
+    if (unit && liveOverlayUnchanged(p, unit)) {
+      matched += 1;
+      const syncedMs = p.live_synced_at ? Date.parse(p.live_synced_at) : 0;
+      if (!(nowMs - syncedMs < SYNC_STAMP_STALE_MS)) stampOnlyIds.push(p.id);
+    } else if (unit) {
       matched += 1;
       const { error } = await supabase
         .from("acq_purchases")
@@ -105,18 +156,31 @@ export async function syncAcquireOverlaysForStore(
         .eq("id", p.id)
         .is("frozen_at", null);
       if (error) console.error("Acquire freeze failed", p.id, error);
-    } else if (!unit) {
+    } else if (p.live_matched) {
       // Clear live match flag if stock no longer on lot (already frozen or never matched)
-      await supabase
-        .from("acq_purchases")
-        .update({
-          live_matched: false,
-          live_synced_at: now,
-          updated_at: now,
-        })
-        .eq("id", p.id)
-        .eq("live_matched", true);
+      unmatchIds.push(p.id);
     }
+  }
+
+  if (stampOnlyIds.length) {
+    const { error } = await supabase
+      .from("acq_purchases")
+      .update({ live_synced_at: now })
+      .in("id", stampOnlyIds);
+    if (error) console.error("Acquire overlay sync stamp failed", error);
+  }
+
+  if (unmatchIds.length) {
+    const { error } = await supabase
+      .from("acq_purchases")
+      .update({
+        live_matched: false,
+        live_synced_at: now,
+        updated_at: now,
+      })
+      .in("id", unmatchIds)
+      .eq("live_matched", true);
+    if (error) console.error("Acquire overlay unmatch failed", error);
   }
 
   return { matched, frozen };

@@ -22,11 +22,17 @@ export function createSupabaseServerClient() {
         get(name: string) {
           return cookieStore.get(name)?.value;
         },
+        // Server Components can't write cookies (Next throws); middleware owns
+        // session refresh, so swallow it instead of failing the caller's query.
         set(name: string, value: string, options: any) {
-          cookieStore.set({ name, value, ...options });
+          try {
+            cookieStore.set({ name, value, ...options });
+          } catch {}
         },
         remove(name: string, options: any) {
-          cookieStore.set({ name, value: "", ...options });
+          try {
+            cookieStore.set({ name, value: "", ...options });
+          } catch {}
         },
       },
       global: {

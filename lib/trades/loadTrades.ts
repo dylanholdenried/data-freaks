@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { fetchAllByIds, fetchAllRows } from "@/lib/supabase/fetch-all";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import type { DateRange } from "@/lib/profit-center/dateRange";
 import type {
   TradeDeal,
@@ -11,6 +11,11 @@ import type {
 const DEAL_SELECT = "id,sale_date,store_id,department_id";
 const TRADE_SELECT =
   "id,deal_id,year,make,model,vin,acv,allowance,exit_strategy";
+
+type TradeDealWithRelations = TradeDeal & {
+  trades: TradeRow[] | null;
+  deal_salespeople: Omit<TradeDealSalesperson, "deal_id">[] | null;
+};
 
 function normalizeTrade(t: TradeRow): TradeRow {
   return {
@@ -48,10 +53,14 @@ export async function loadTradesBundle(
     return { deals: [], trades: [], dealSalespeople: [] };
   }
 
-  const dealsRes = await fetchAllRows<TradeDeal>((from, to) =>
+  // Embed trades + splits so related rows ride along with each deals page
+  // instead of fanning out into chunked `.in("deal_id")` requests.
+  const dealsRes = await fetchAllRows<TradeDealWithRelations>((from, to) =>
     supabase
       .from("deals")
-      .select(DEAL_SELECT)
+      .select(
+        `${DEAL_SELECT},trades(${TRADE_SELECT}),deal_salespeople(salesperson_id,share_percent)`
+      )
       .in("store_id", storeIds)
       .eq("status", "closed")
       .gte("sale_date", range.from)
@@ -64,36 +73,17 @@ export async function loadTradesBundle(
     throw new Error(dealsRes.error.message);
   }
 
-  const deals = dealsRes.data;
-  const dealIds = deals.map((d) => d.id);
+  const trades: TradeRow[] = [];
+  const dealSalespeople: TradeDealSalesperson[] = [];
+  const deals: TradeDeal[] = dealsRes.data.map(
+    ({ trades: dealTrades, deal_salespeople, ...deal }) => {
+      for (const t of dealTrades ?? []) trades.push(normalizeTrade(t));
+      for (const s of deal_salespeople ?? []) {
+        dealSalespeople.push({ deal_id: deal.id, ...s });
+      }
+      return deal;
+    }
+  );
 
-  const [tradesRes, dspRes] = await Promise.all([
-    fetchAllByIds<TradeRow>(dealIds, (idChunk, from, to) =>
-      supabase
-        .from("trades")
-        .select(TRADE_SELECT)
-        .in("deal_id", idChunk)
-        .range(from, to)
-    ),
-    fetchAllByIds<TradeDealSalesperson>(dealIds, (idChunk, from, to) =>
-      supabase
-        .from("deal_salespeople")
-        .select("deal_id,salesperson_id,share_percent")
-        .in("deal_id", idChunk)
-        .range(from, to)
-    ),
-  ]);
-
-  if (tradesRes.error) {
-    throw new Error(tradesRes.error.message);
-  }
-  if (dspRes.error) {
-    throw new Error(dspRes.error.message);
-  }
-
-  return {
-    deals,
-    trades: tradesRes.data.map(normalizeTrade),
-    dealSalespeople: dspRes.data,
-  };
+  return { deals, trades, dealSalespeople };
 }
