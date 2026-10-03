@@ -4,7 +4,7 @@ import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import { getAccessibleStores } from "@/lib/store-access";
 import { isAppViewOnly } from "@/lib/impersonation";
-import { canReopenDeal } from "@/lib/roles";
+import { canReopenDeal, isPlatformStaff } from "@/lib/roles";
 import type { DealEventRow } from "@/lib/deals/deal-events";
 import UpdatePendingForm from "./UpdatePendingForm";
 import SelectAutoGroupEmptyState from "../../../SelectAutoGroupEmptyState";
@@ -38,6 +38,10 @@ type DealRow = {
   sale_price: number | null;
   list_price: number | null;
   list_price_na: boolean;
+  list_price_source: string | null;
+  list_price_at: string | null;
+  sale_inv_disp: string | null;
+  sale_pom: number | null;
   age: number | null;
   sale_mmr: number | null;
   sale_jd: number | null;
@@ -112,6 +116,7 @@ export default async function EditDealPage({
         "vin,trim,color,body_style,drivetrain,odometer," +
         "acquisition_source,finance_type,finance_manager_id," +
         "front_profit,back_profit,sale_price,list_price,list_price_na,age," +
+        "list_price_source,list_price_at,sale_inv_disp,sale_pom," +
         "sale_mmr,sale_jd,sale_books_at,sale_books_source,sale_books_manual," +
         "entered_by,created_at"
     )
@@ -149,6 +154,7 @@ export default async function EditDealPage({
     vModelsResult,
     deptMakesResult,
     eventsResult,
+    firstSnapshotResult,
   ] = await Promise.all([
       supabase
         .from("acquisition_sources")
@@ -198,7 +204,17 @@ export default async function EditDealPage({
         )
         .eq("deal_id", deal.id)
         .order("created_at", { ascending: true }),
+      supabase
+        .from("inv_snapshots")
+        .select("snapshot_date")
+        .eq("store_id", deal.store_id)
+        .order("snapshot_date", { ascending: true })
+        .limit(1)
+        .maybeSingle(),
     ]);
+
+  const inventoryCoverageStart =
+    (firstSnapshotResult.data as { snapshot_date: string } | null)?.snapshot_date ?? null;
 
   const allAcquisitionSources = (srcResult.data ?? []) as {
     id: string;
@@ -320,6 +336,7 @@ export default async function EditDealPage({
   }
 
   const viewOnly = await isAppViewOnly(profile.role);
+  const canOverrideListPrice = isPlatformStaff(profile.role) && !viewOnly;
   const returnRaw = searchParams.returnTo;
   const returnTo = safeDealsReturnTo(
     typeof returnRaw === "string" ? returnRaw : null
@@ -357,6 +374,12 @@ export default async function EditDealPage({
       initialSalePrice={deal.sale_price}
       initialListPrice={deal.list_price}
       initialListPriceNa={deal.list_price_na ?? false}
+      initialListPriceSource={deal.list_price_source}
+      initialListPriceAt={deal.list_price_at}
+      initialSaleInvDisp={deal.sale_inv_disp}
+      initialSalePom={deal.sale_pom}
+      inventoryCoverageStart={inventoryCoverageStart}
+      canOverrideListPrice={canOverrideListPrice}
       initialAge={deal.age}
       initialSaleMmr={deal.sale_mmr}
       initialSaleJd={deal.sale_jd}

@@ -89,3 +89,13 @@ export function canMutateAcquire(role: string | null | undefined): boolean {
 export function isViewerNavHref(href: string): boolean {
   return VIEWER_NAV_HREFS.has(href);
 }
+
+/** Unfinished pages visible only to platform/owner admins (nav + page guard). */
+export const ADMIN_ONLY_NAV_HREFS = new Set([
+  "/app/acquire/performance",
+  "/app/pricing-discipline",
+]);
+
+export function isAdminOnlyNavHref(href: string): boolean {
+  return ADMIN_ONLY_NAV_HREFS.has(href);
+}

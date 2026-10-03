@@ -16,6 +16,10 @@ export function canAccessInventoryCommand(plan: string | null | undefined): bool
   return normalizePlan(plan) === "analyze";
 }
 
+export function canAccessPricingDiscipline(plan: string | null | undefined): boolean {
+  return normalizePlan(plan) === "analyze";
+}
+
 /** Buy-Box is an Acquire addon feature. */
 export function canAccessBuyBox(acquireEnabled: boolean | null | undefined): boolean {
   return Boolean(acquireEnabled);
@@ -31,6 +35,7 @@ const ANALYZE_HREFS = new Set([
   "/app/profit-center",
   "/app/trades",
   "/app/inventory-command",
+  "/app/pricing-discipline",
 ]);
 
 /** Nav hrefs that require Acquire addon */
@@ -52,7 +57,7 @@ export function requiredProductForHref(
   href: string
 ): "analyze" | "acquire" | null {
   if (isAcquireNavHref(href)) return "acquire";
-  if (ANALYZE_HREFS.has(href) || href.startsWith("/app/profit-center") || href.startsWith("/app/trades") || href.startsWith("/app/inventory-command")) {
+  if (ANALYZE_HREFS.has(href) || href.startsWith("/app/profit-center") || href.startsWith("/app/trades") || href.startsWith("/app/inventory-command") || href.startsWith("/app/pricing-discipline")) {
     return "analyze";
   }
   return null;
@@ -68,7 +73,8 @@ export function canAccessAppNav(
     ANALYZE_HREFS.has(href) ||
     href.startsWith("/app/profit-center") ||
     href.startsWith("/app/trades") ||
-    href.startsWith("/app/inventory-command")
+    href.startsWith("/app/inventory-command") ||
+    href.startsWith("/app/pricing-discipline")
   ) {
     return canAccessProfitCenter(plan);
   }

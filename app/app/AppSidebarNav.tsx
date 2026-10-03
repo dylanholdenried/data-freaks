@@ -17,9 +17,10 @@ import {
   ShoppingBag,
   BarChart3,
   CreditCard,
+  Tag,
 } from "lucide-react";
 import { navAccessState, requiredProductForHref, type PlanTier } from "@/lib/plan-access";
-import { isViewerNavHref } from "@/lib/roles";
+import { isAdminOnlyNavHref, isViewerNavHref } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 
 const navLink =
@@ -68,6 +69,12 @@ const ANALYZE_LINKS: NavItem[] = [
     label: "Profit Center",
     icon: CircleDollarSign,
     match: (p) => p.startsWith("/app/profit-center"),
+  },
+  {
+    href: "/app/pricing-discipline",
+    label: "Pricing Discipline",
+    icon: Tag,
+    match: (p) => p.startsWith("/app/pricing-discipline"),
   },
   {
     href: "/app/trades",
@@ -170,7 +177,7 @@ export default function AppSidebarNav({
   plan?: PlanTier | string | null;
   acquireEnabled?: boolean;
   viewOnly?: boolean;
-  /** Performance is unfinished — only platform admins see the nav link. */
+  /** Unfinished pages (Performance, Pricing Discipline) — only platform admins see the nav link. */
   isPlatformAdmin?: boolean;
   showBilling?: boolean;
 }) {
@@ -183,7 +190,7 @@ export default function AppSidebarNav({
             : links;
           if (!isPlatformAdmin) {
             visibleLinks = visibleLinks.filter(
-              (link) => link.href !== "/app/acquire/performance"
+              (link) => !isAdminOnlyNavHref(link.href)
             );
           }
           if (visibleLinks.length === 0) return null;

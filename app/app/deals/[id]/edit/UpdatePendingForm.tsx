@@ -32,6 +32,8 @@ import { resolveDealsReturnTo } from "@/lib/deals/registry-url";
 import { cn } from "@/lib/utils";
 import { filterAcquisitionSourcesForDepartment } from "@/lib/acquisition-sources";
 import DealAuditLog from "./DealAuditLog";
+import InventoryListPricePanel from "./InventoryListPricePanel";
+import { LIST_PRICE_ENFORCED_FROM } from "@/lib/pricing-discipline/metrics";
 
 type TradeRow = {
   id: string;
@@ -102,6 +104,13 @@ interface Props {
   initialSalePrice: number | null;
   initialListPrice: number | null;
   initialListPriceNa: boolean;
+  initialListPriceSource: string | null;
+  initialListPriceAt: string | null;
+  initialSaleInvDisp: string | null;
+  initialSalePom: number | null;
+  /** Earliest inventory snapshot date for the store; null = no inventory uploads. */
+  inventoryCoverageStart: string | null;
+  canOverrideListPrice: boolean;
   initialAge: number | null;
   initialSaleMmr: number | null;
   initialSaleJd: number | null;
@@ -258,6 +267,12 @@ export default function UpdatePendingForm({
   initialSalePrice,
   initialListPrice,
   initialListPriceNa,
+  initialListPriceSource,
+  initialListPriceAt,
+  initialSaleInvDisp,
+  initialSalePom,
+  inventoryCoverageStart,
+  canOverrideListPrice,
   initialAge,
   initialSaleMmr,
   initialSaleJd,
@@ -796,12 +811,16 @@ export default function UpdatePendingForm({
       front_profit: frontProfit.trim() !== "" ? parseFloat(frontProfit) : null,
       back_profit: backProfit.trim() !== "" ? parseFloat(backProfit) : null,
       sale_price: salePrice.trim() !== "" ? parseFloat(salePrice) : null,
-      list_price_na: listPriceNa,
-      list_price: listPriceNa
-        ? null
-        : listPrice.trim() !== ""
-          ? parseFloat(listPrice)
-          : null,
+      ...(inventoryLocked
+        ? {}
+        : {
+            list_price_na: listPriceNa,
+            list_price: listPriceNa
+              ? null
+              : listPrice.trim() !== ""
+                ? parseFloat(listPrice)
+                : null,
+          }),
       age: age.trim() ? parseInt(age, 10) : null,
       trade_status: tradeRows.length > 0 ? "has_trade" : "no_trade",
     };
@@ -908,8 +927,8 @@ export default function UpdatePendingForm({
     if (backProfit.trim() === "")
       errs.push("Back gross is required (enter 0 if zero)");
     if (!salePrice.trim()) errs.push("Sale price is required");
-    if (listPriceNa) {
-      // NA voids lost gross — allowed
+    if (inventoryLocked || listPriceNa) {
+      // Inventory-locked on close, or NA voids lost gross — allowed
     } else if (!listPrice.trim()) {
       errs.push("List price is required (enter a number or select NA)");
     } else if (!Number.isFinite(parseFloat(listPrice))) {
@@ -1162,6 +1181,14 @@ export default function UpdatePendingForm({
   const selectedDeptName =
     departments.find((d) => d.id === departmentId)?.name ?? "";
   const preOwnedDeal = isPreOwnedDepartment(selectedDeptName);
+  const effectiveSaleDate = saleDate || new Date().toISOString().slice(0, 10);
+  const inventoryLocked =
+    preOwnedDeal &&
+    inventoryCoverageStart != null &&
+    effectiveSaleDate >= inventoryCoverageStart &&
+    (effectiveSaleDate >= LIST_PRICE_ENFORCED_FROM ||
+      initialListPriceSource === "inventory_snapshot" ||
+      initialListPriceSource === "manual");
   const booksForDelta = {
     sale_price: salePrice.trim() !== "" ? parseFloat(salePrice) : null,
     sale_mmr: saleMmr.trim() !== "" ? parseFloat(saleMmr) : null,
@@ -2283,7 +2310,29 @@ export default function UpdatePendingForm({
               />
             </div>
           </div>
+          {inventoryLocked ? (
+            <InventoryListPricePanel
+              dealId={dealId}
+              storeId={storeId}
+              stockNumber={stockNumber}
+              saleDate={saleDate}
+              dealStatus={dealStatus}
+              salePrice={salePrice.trim() !== "" ? parseFloat(salePrice) : null}
+              financeType={financeType}
+              initial={{
+                listPrice: initialListPrice,
+                listPriceNa: initialListPriceNa,
+                source: initialListPriceSource,
+                listPriceAt: initialListPriceAt,
+                disp: initialSaleInvDisp,
+                pom: initialSalePom,
+              }}
+              canOverride={canOverrideListPrice}
+              readOnly={readOnly}
+            />
+          ) : null}
           <div className="grid gap-4 sm:grid-cols-3">
+            {!inventoryLocked ? (
             <div className="space-y-1 sm:col-span-2">
               <label className={LBL}>List Price</label>
               <div className="flex flex-wrap items-center gap-3">
@@ -2317,6 +2366,7 @@ export default function UpdatePendingForm({
                 </label>
               </div>
             </div>
+            ) : null}
             <div className="space-y-1">
               <label className={LBL}>Age (days in stock)</label>
               <Input

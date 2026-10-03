@@ -4,7 +4,7 @@ import { useEffect, useId, useState } from "react";
 import Link from "next/link";
 import { Lock, Menu, X } from "lucide-react";
 import { navAccessState, requiredProductForHref, type PlanTier } from "@/lib/plan-access";
-import { isViewerNavHref } from "@/lib/roles";
+import { isAdminOnlyNavHref, isViewerNavHref } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import AutoGroupSwitcher, { type AutoGroupOption } from "./AutoGroupSwitcher";
 
@@ -30,6 +30,7 @@ const SECTIONS: { title: string; links: NavItem[] }[] = [
     title: "Analyze",
     links: [
       { href: "/app/profit-center", label: "Profit Center" },
+      { href: "/app/pricing-discipline", label: "Pricing Discipline" },
       { href: "/app/trades", label: "Trades" },
       { href: "/app/inventory-command", label: "Inventory Command" },
     ],
@@ -153,7 +154,7 @@ export default function AppMobileMenu({
                   : links;
                 if (!isPlatformAdmin) {
                   visibleLinks = visibleLinks.filter(
-                    (link) => link.href !== "/app/acquire/performance"
+                    (link) => !isAdminOnlyNavHref(link.href)
                   );
                 }
                 if (visibleLinks.length === 0) return null;

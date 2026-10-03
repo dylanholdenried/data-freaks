@@ -142,7 +142,17 @@ function rowFromNamedCsv(
   const lastChange = parseLastChange(get(["last_price_change", "last_$_change"]));
 
   // pom may already be percent in template
-  let pomRaw = toNum(get(["pom", "adjusted_%_of_market"]));
+  let pomRaw = toNum(
+    get([
+      "pom",
+      "adjusted_%_of_market",
+      "adj_%_of_market",
+      "adj_%_mkt",
+      "adj_%_mkt_value",
+      "adj._%_mkt",
+      "adj._%_of_market",
+    ])
+  );
   const pom = pomToPercent(pomRaw);
 
   return {
@@ -152,7 +162,7 @@ function rowFromNamedCsv(
     age: toInt(get(["age"])),
     ph: toInt(get(["ph", "photo_count"])),
     cost: toNum(get(["cost", "unit_cost"])),
-    price: toNum(get(["price"])),
+    price: toNum(get(["price", "list_price", "internet_price"])),
     pom,
     dsr: daysSinceChange(lastChange, snapshotDate),
     srp,
@@ -161,7 +171,7 @@ function rowFromNamedCsv(
     mmr: toNum(get(["mmr", "mmr_wholesale"])),
     jd: toNum(get(["jd", "j.d._power_trade_in", "jd_power_trade_in"])),
     pt: toStr(get(["pt", "profittime"])),
-    disp: normalizeDisp(get(["disp"])),
+    disp: normalizeDisp(get(["disp", "disposition"])),
   };
 }
 
