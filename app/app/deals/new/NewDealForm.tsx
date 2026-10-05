@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { createSupabaseBrowserClient, describeError } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -333,7 +333,7 @@ export default function NewDealForm({
           setStockReuseMatch(null);
           setStockCheckError(
             err instanceof Error
-              ? `Could not check stock number: ${err.message}`
+              ? `Could not check stock number: ${describeError(err, "")}`
               : "Could not check stock number."
           );
         }
@@ -573,7 +573,7 @@ export default function NewDealForm({
       resetForm();
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "An unexpected error occurred. Please try again.";
+      const msg = describeError(err, "An unexpected error occurred. Please try again.");
       setErrors([msg]);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {

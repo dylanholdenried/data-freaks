@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { createSupabaseBrowserClient, describeError } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -888,7 +888,7 @@ export default function UpdatePendingForm({
       returnToRegistry();
     } catch (err: unknown) {
       const msg =
-        err instanceof Error ? err.message : "An unexpected error occurred. Please try again.";
+        describeError(err, "An unexpected error occurred. Please try again.");
       setErrors([msg]);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
@@ -1071,7 +1071,7 @@ export default function UpdatePendingForm({
       returnToRegistry();
     } catch (err: unknown) {
       const msg =
-        err instanceof Error ? err.message : "An unexpected error occurred. Please try again.";
+        describeError(err, "An unexpected error occurred. Please try again.");
       setCloseErrors([`Close failed: ${msg}`]);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
@@ -1102,7 +1102,7 @@ export default function UpdatePendingForm({
       returnToRegistry();
     } catch (err: unknown) {
       const msg =
-        err instanceof Error ? err.message : "An unexpected error occurred. Please try again.";
+        describeError(err, "An unexpected error occurred. Please try again.");
       setErrors([`Mark lost failed: ${msg}`]);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
@@ -1133,7 +1133,7 @@ export default function UpdatePendingForm({
       returnToRegistry();
     } catch (err: unknown) {
       const msg =
-        err instanceof Error ? err.message : "An unexpected error occurred. Please try again.";
+        describeError(err, "An unexpected error occurred. Please try again.");
       setErrors([`Mark delivered failed: ${msg}`]);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {

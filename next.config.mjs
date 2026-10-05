@@ -9,6 +9,18 @@ const nextConfig = {
       dynamic: 0,
     },
   },
+  async rewrites() {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (!supabaseUrl) return [];
+    // Browser Supabase traffic goes through our domain (see lib/supabase/client.ts)
+    // so networks that block *.supabase.co can still log deals.
+    return [
+      {
+        source: "/sb/:path*",
+        destination: `${supabaseUrl.replace(/\/$/, "")}/:path*`,
+      },
+    ];
+  },
   async headers() {
     return [
       {

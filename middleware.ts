@@ -84,8 +84,9 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Match all request paths except static files and images.
+     * Match all request paths except static files, images, and the /sb
+     * Supabase proxy (those requests carry their own bearer token).
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sb/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
