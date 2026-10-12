@@ -7,7 +7,6 @@ import {
   type PrevUnitLite,
 } from "./compute";
 import { parseVautoExport } from "./parse";
-import type { InvUnitRow } from "./types";
 
 export type IngestResult = {
   snapshotId: string;
@@ -82,7 +81,7 @@ export async function ingestInventoryExport(opts: {
   }));
   const prevByStk = new Map(prevLite.map((u) => [u.stk, u]));
 
-  const units: InvUnitRow[] = attachDeltas(parsed, prevByStk);
+  const units = attachDeltas(parsed, prevByStk);
   const metrics = computeDailyMetrics(storeId, snapshotDate, units);
   const movements = computeMovements(storeId, snapshotDate, units, prevLite);
   const priceActions = computePriceActions(storeId, snapshotDate, units, prevByStk);
@@ -147,6 +146,20 @@ export async function ingestInventoryExport(opts: {
     d_srp: u.d_srp,
     d_p: u.d_p,
     d_ph: u.d_ph,
+    vin: u.vin,
+    year: u.year,
+    make: u.make,
+    model: u.model,
+    trim: u.trim,
+    odometer: u.odometer,
+    ctm_pct: u.ctm_pct,
+    pt_align: u.pt_align,
+    markup: u.markup,
+    site_srp: u.site_srp,
+    site_vdp: u.site_vdp,
+    bb_retail: u.bb_retail,
+    market_price: u.market_price,
+    raw: u.raw,
   }));
 
   // Batch insert units

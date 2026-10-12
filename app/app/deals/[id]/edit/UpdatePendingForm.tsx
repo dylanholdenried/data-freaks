@@ -97,6 +97,8 @@ interface Props {
   initialDrivetrain: string | null;
   initialOdometer: number | null;
   initialAcquisitionSource: string | null;
+  /** Inventory Command source for this stock # (Pre-Owned only); pre-fills a blank source. */
+  inventorySuggestedSource: { source: string; origin: "manual" | "auto" } | null;
   initialFinanceType: string | null;
   initialFinanceManagerId: string | null;
   initialFrontProfit: number | null;
@@ -260,6 +262,7 @@ export default function UpdatePendingForm({
   initialDrivetrain,
   initialOdometer,
   initialAcquisitionSource,
+  inventorySuggestedSource,
   initialFinanceType,
   initialFinanceManagerId,
   initialFrontProfit,
@@ -392,8 +395,15 @@ export default function UpdatePendingForm({
   const [bodyStyle, setBodyStyle] = useState(initialBodyStyle ?? "");
   const [drivetrain, setDrivetrain] = useState(initialDrivetrain ?? "");
   const [odometer, setOdometer] = useState(numStr(initialOdometer));
+  const prefillSource =
+    !initialAcquisitionSource?.trim() &&
+    !readOnly &&
+    !["closed", "unwound", "dead"].includes(initialDealStatus) &&
+    inventorySuggestedSource
+      ? inventorySuggestedSource.source
+      : null;
   const [acquisitionSource, setAcquisitionSource] = useState(
-    initialAcquisitionSource ?? ""
+    initialAcquisitionSource ?? prefillSource ?? ""
   );
 
   const departmentIds = useMemo(
@@ -585,7 +595,6 @@ export default function UpdatePendingForm({
       }
       setDisplayModel(decoded.model);
 
-      setTrim(decoded.trim);
       if (decoded.bodyStyle) setBodyStyle(decoded.bodyStyle);
       if (decoded.drivetrain) setDrivetrain(decoded.drivetrain);
 
@@ -1930,6 +1939,21 @@ export default function UpdatePendingForm({
                   </option>
                 ))}
               </select>
+              {inventorySuggestedSource ? (
+                prefillSource && acquisitionSource === prefillSource ? (
+                  <p className="text-xs text-muted-foreground">
+                    Pre-filled from Inventory Command (
+                    {inventorySuggestedSource.origin === "manual" ? "manual tag" : "stock # rule"}).
+                    Save to keep it.
+                  </p>
+                ) : acquisitionSource &&
+                  acquisitionSource.trim().toLowerCase() !==
+                    inventorySuggestedSource.source.trim().toLowerCase() ? (
+                  <p className="text-xs text-amber-500">
+                    Inventory tagged this unit as {inventorySuggestedSource.source}.
+                  </p>
+                ) : null
+              ) : null}
             </div>
             <div className="space-y-1">
               <label className={LBL}>Finance Type</label>

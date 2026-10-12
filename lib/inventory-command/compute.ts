@@ -95,10 +95,12 @@ export type PrevUnitLite = {
   cost: number | null;
 };
 
-export function attachDeltas(
-  units: Omit<InvUnitRow, "d_vdp" | "d_srp" | "d_p" | "d_ph">[],
+type UnitDeltas = Pick<InvUnitRow, "d_vdp" | "d_srp" | "d_p" | "d_ph">;
+
+export function attachDeltas<T extends Omit<InvUnitRow, keyof UnitDeltas>>(
+  units: T[],
   prevByStk: Map<string, PrevUnitLite>
-): InvUnitRow[] {
+): Array<T & UnitDeltas> {
   return units.map((u) => {
     const prev = prevByStk.get(u.stk);
     if (!prev) {

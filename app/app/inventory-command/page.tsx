@@ -6,14 +6,25 @@ import {
 import { getEffectiveEntitlements } from "@/lib/entitlements";
 import { getAccessibleStores } from "@/lib/store-access";
 import { canAccessInventoryCommand } from "@/lib/plan-access";
-import { isStoreViewer } from "@/lib/roles";
+import { isAppViewOnly } from "@/lib/impersonation";
+import { isPlatformStaff, isStoreViewer } from "@/lib/roles";
 import { redirect } from "next/navigation";
 import type {
   InvDailyMetrics,
   InvMovement,
   InvPriceAction,
-  InvUnitRow,
+  InvUnitDetailRow,
 } from "@/lib/inventory-command/types";
+import type { SoldDeal } from "@/lib/inventory-command/acq-source";
+import {
+  INV_UNIT_DETAIL_SELECT,
+  isoDaysBefore,
+  loadRecentMovements,
+  loadSoldDeals,
+  loadStoreSourceContext,
+  SOLD_LOOKBACK_DAYS,
+  toDetailUnits,
+} from "@/lib/inventory-command/inventory-tab-data";
 import type { DhPurchaseOverlay } from "@/lib/inventory-command/dh-purchases";
 import { ACQ_STAGES, type AcqPurchaseStage } from "@/lib/acquire/types";
 import { countTtlFails } from "@/lib/inventory-command/compute";
@@ -103,23 +114,13 @@ export default async function InventoryCommandPage({
   const snapshotId = latestSnapIdByStore[initialStoreId];
   const snapshotDate = latestByStore[initialStoreId];
 
-  let units: InvUnitRow[] = [];
+  let units: InvUnitDetailRow[] = [];
   if (snapshotId) {
     const { data: unitRows } = await supabase
       .from("inv_units")
-      .select(
-        "stk,veh,body,age,ph,cost,price,pom,dsr,srp,vdp,vr,mmr,jd,pt,disp,d_vdp,d_srp,d_p,d_ph"
-      )
+      .select(INV_UNIT_DETAIL_SELECT)
       .eq("snapshot_id", snapshotId);
-    units = (unitRows ?? []).map((u) => ({
-      ...u,
-      disp:
-        u.disp === "subprime"
-          ? "subprime"
-          : u.disp === "wholesale"
-            ? "wholesale"
-            : "retail",
-    })) as InvUnitRow[];
+    units = toDetailUnits((unitRows ?? []) as unknown as Record<string, unknown>[]);
   }
 
   let metrics: InvDailyMetrics | null = null;
@@ -192,6 +193,23 @@ export default async function InventoryCommandPage({
     }));
   }
 
+  const sourceContexts = await loadStoreSourceContext(supabase, [initialStoreId]);
+  const sourceContext = sourceContexts[initialStoreId]!;
+  let recentMovements: InvMovement[] = [];
+  let soldDeals: SoldDeal[] = [];
+  if (snapshotDate) {
+    [recentMovements, soldDeals] = await Promise.all([
+      loadRecentMovements(supabase, [initialStoreId], isoDaysBefore(snapshotDate, 30)),
+      loadSoldDeals(
+        supabase,
+        sourceContext.preOwnedDeptIds,
+        isoDaysBefore(snapshotDate, SOLD_LOOKBACK_DAYS)
+      ),
+    ]);
+  }
+
+  const canTagSources = isPlatformStaff(profile.role) && !(await isAppViewOnly(profile.role));
+
   return (
     <InventoryCommandClient
       stores={stores}
@@ -204,6 +222,13 @@ export default async function InventoryCommandPage({
       priceActions={priceActions}
       latestByStore={latestByStore}
       dhPurchases={dhPurchases}
+      inventoryTab={{
+        sourceNames: sourceContext.sourceNames,
+        tags: sourceContext.tags,
+        recentMovements,
+        soldDeals,
+        canTagSources,
+      }}
     />
   );
 }

@@ -11,6 +11,13 @@ import SelectAutoGroupEmptyState from "../../../SelectAutoGroupEmptyState";
 import {
   flattenAcquisitionSourceDepartmentLinks,
 } from "@/lib/acquisition-sources";
+import { isPreOwnedDepartment } from "@/lib/buy-box/sale-books";
+import {
+  manualTagMap,
+  normStk,
+  preOwnedSourceNames,
+  resolveAcqSource,
+} from "@/lib/inventory-command/acq-source";
 import { safeDealsReturnTo } from "@/lib/deals/registry-url";
 
 type DealRow = {
@@ -226,6 +233,26 @@ export default async function EditDealPage({
     allAcquisitionSources
   );
   const departments = (deptResult.data ?? []) as DeptOption[];
+
+  let inventorySuggestedSource: { source: string; origin: "manual" | "auto" } | null = null;
+  const dealDeptName = departments.find((d) => d.id === deal.department_id)?.name;
+  const stockKey = normStk(deal.stock_number);
+  if (stockKey && isPreOwnedDepartment(dealDeptName)) {
+    const { data: tagRows } = await supabase
+      .from("inv_acq_tags")
+      .select("stk,source")
+      .eq("store_id", deal.store_id)
+      .eq("stk", stockKey);
+    const resolved = resolveAcqSource(
+      stockKey,
+      manualTagMap((tagRows ?? []) as { stk: string; source: string }[]),
+      preOwnedSourceNames(allAcquisitionSources, acquisitionSourceDepartments, departments)
+    );
+    if (resolved.source && resolved.origin) {
+      inventorySuggestedSource = { source: resolved.source, origin: resolved.origin };
+    }
+  }
+
   const financeManagers = (fmResult.data ?? []) as { id: string; name: string }[];
 
   const dealSalespeople = (spResult.data ?? []) as SpRow[];
@@ -367,6 +394,7 @@ export default async function EditDealPage({
       initialDrivetrain={deal.drivetrain}
       initialOdometer={deal.odometer}
       initialAcquisitionSource={deal.acquisition_source}
+      inventorySuggestedSource={inventorySuggestedSource}
       initialFinanceType={deal.finance_type}
       initialFinanceManagerId={deal.finance_manager_id}
       initialFrontProfit={deal.front_profit}

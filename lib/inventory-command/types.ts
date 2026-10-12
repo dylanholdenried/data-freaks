@@ -23,6 +23,25 @@ export type InvUnitRow = {
   d_ph: number | null;
 };
 
+/** Extra vAuto export fields shown on the Inventory tab (null on snapshots before they were captured). */
+export type InvUnitDetailFields = {
+  vin: string | null;
+  year: number | null;
+  make: string | null;
+  model: string | null;
+  trim: string | null;
+  odometer: number | null;
+  ctm_pct: number | null;
+  pt_align: string | null;
+  markup: number | null;
+  site_srp: number | null;
+  site_vdp: number | null;
+  bb_retail: number | null;
+  market_price: number | null;
+};
+
+export type InvUnitDetailRow = InvUnitRow & InvUnitDetailFields;
+
 export type InvDailyMetrics = {
   store_id: string;
   snapshot_date: string;
@@ -64,6 +83,7 @@ export type InvPriceAction = {
 
 export type InventoryCommandTab =
   | "overview"
+  | "inventory"
   | "dh"
   | "trends"
   | "hot"

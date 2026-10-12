@@ -15,10 +15,12 @@ import {
   storeAccent,
   storeShortLabel,
 } from "@/lib/inventory-command/midmo";
+import { manualTagMap, resolveAcqSource } from "@/lib/inventory-command/acq-source";
 import type { InventoryCommandTab } from "@/lib/inventory-command/types";
-import type { InvDailyMetrics, InvUnitRow } from "@/lib/inventory-command/types";
+import type { InvDailyMetrics, InvUnitDetailRow } from "@/lib/inventory-command/types";
 import type { InvMovement, InvPriceAction } from "@/lib/inventory-command/types";
 import OverviewTab from "./tabs/OverviewTab";
+import InventoryTab, { type InventoryTabData } from "./tabs/InventoryTab";
 import DhPurchasesTab from "./tabs/DhPurchasesTab";
 import TrendsTab from "./tabs/TrendsTab";
 import HotListTab from "./tabs/HotListTab";
@@ -35,17 +37,19 @@ export type InventoryCommandClientProps = {
   stores: StoreOption[];
   initialStoreId: string;
   snapshotDate: string | null;
-  units: InvUnitRow[];
+  units: InvUnitDetailRow[];
   metrics: InvDailyMetrics | null;
   metricsHistory: InvDailyMetrics[];
   movements: InvMovement[];
   priceActions: InvPriceAction[];
   latestByStore: Record<string, string | null>;
   dhPurchases?: DhPurchaseOverlay[];
+  inventoryTab: InventoryTabData;
 };
 
 const TABS: { id: InventoryCommandTab; label: string }[] = [
   { id: "overview", label: "Overview" },
+  { id: "inventory", label: "Inventory" },
   { id: "dh", label: "DH Purchases" },
   { id: "trends", label: "Trends" },
   { id: "hot", label: "Hot List" },
@@ -66,6 +70,7 @@ export default function InventoryCommandClient({
   priceActions,
   latestByStore,
   dhPurchases = [],
+  inventoryTab,
 }: InventoryCommandClientProps) {
   const [storeId, setStoreId] = useState(initialStoreId);
   const [tab, setTab] = useState<InventoryCommandTab>("overview");
@@ -89,6 +94,13 @@ export default function InventoryCommandClient({
     () => collectDhUnitsForStore(units, storeId, storeName, dhPurchases).length,
     [units, storeId, storeName, dhPurchases]
   );
+
+  const untaggedCount = useMemo(() => {
+    const manual = manualTagMap(inventoryTab.tags);
+    return units.filter(
+      (u) => !resolveAcqSource(u.stk, manual, inventoryTab.sourceNames).source
+    ).length;
+  }, [units, inventoryTab.tags, inventoryTab.sourceNames]);
 
   const totalCost = useMemo(
     () => units.reduce((s, u) => s + (u.cost || 0), 0),
@@ -170,7 +182,9 @@ export default function InventoryCommandClient({
               ? `Hot List (${hotCount})`
               : t.id === "dh"
                 ? `DH Purchases (${dhCount})`
-                : t.label;
+                : t.id === "inventory" && untaggedCount > 0
+                  ? `Inventory (${untaggedCount} untagged)`
+                  : t.label;
           return (
             <button
               key={t.id}
@@ -205,6 +219,16 @@ export default function InventoryCommandClient({
           <>
             {tab === "overview" ? (
               <OverviewTab units={units} snapshotDate={snapshotDate} />
+            ) : null}
+            {tab === "inventory" && snapshotDate ? (
+              <InventoryTab
+                units={units}
+                storeId={storeId}
+                storeName={storeName}
+                storeCount={stores.length}
+                snapshotDate={snapshotDate}
+                data={inventoryTab}
+              />
             ) : null}
             {tab === "dh" ? (
               <DhPurchasesTab

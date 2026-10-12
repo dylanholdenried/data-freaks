@@ -15,13 +15,38 @@ export type IcCol<T> = {
   sortValue?: (row: T) => string | number | null | undefined;
 };
 
-export function IcTable<T extends { stk?: string }>({
+function renderCell<T>(c: IcCol<T>, row: T, isFooter: boolean) {
+  const raw = (row as unknown as Record<string, unknown>)[c.key];
+  const content = c.render ? c.render(row) : raw == null || raw === "" ? "—" : String(raw);
+  return (
+    <td
+      key={c.key}
+      style={{
+        padding: "7px 8px",
+        textAlign: c.right ? "right" : "left",
+        whiteSpace: "nowrap",
+        borderBottom: `1px solid ${IC.line}`,
+        borderTop: isFooter ? `1px solid ${IC.border}` : undefined,
+        color: c.color?.(row) || "inherit",
+        fontWeight: c.bold || isFooter ? 600 : 400,
+        fontVariantNumeric: "tabular-nums",
+      }}
+    >
+      {content}
+    </td>
+  );
+}
+
+export function IcTable<T extends object>({
   cols,
   rows,
   defaultSort,
   defaultDir = "desc",
   maxH = 420,
   rowKey,
+  onRowClick,
+  isRowActive,
+  footer,
 }: {
   cols: IcCol<T>[];
   rows: T[];
@@ -29,6 +54,10 @@ export function IcTable<T extends { stk?: string }>({
   defaultDir?: "asc" | "desc";
   maxH?: number;
   rowKey?: (row: T, i: number) => string;
+  onRowClick?: (row: T) => void;
+  isRowActive?: (row: T) => boolean;
+  /** Pinned summary row (e.g. totals), not sorted. */
+  footer?: T;
 }) {
   const [sortKey, setSortKey] = useState(defaultSort ?? cols[0]?.key);
   const [dir, setDir] = useState<"asc" | "desc">(defaultDir);
@@ -112,34 +141,28 @@ export function IcTable<T extends { stk?: string }>({
           </tr>
         </thead>
         <tbody>
-          {sorted.map((row, i) => (
-            <tr
-              key={rowKey?.(row, i) ?? `${row.stk ?? "r"}-${i}`}
-              style={{ background: i % 2 ? IC.rowAlt : "transparent" }}
-            >
-              {cols.map((c) => {
-                const raw = (row as unknown as Record<string, unknown>)[c.key];
-                const content = c.render ? c.render(row) : raw == null || raw === "" ? "—" : String(raw);
-                return (
-                  <td
-                    key={c.key}
-                    style={{
-                      padding: "7px 8px",
-                      textAlign: c.right ? "right" : "left",
-                      whiteSpace: "nowrap",
-                      borderBottom: `1px solid ${IC.line}`,
-                      color: c.color?.(row) || "inherit",
-                      fontWeight: c.bold ? 600 : 400,
-                      fontVariantNumeric: "tabular-nums",
-                    }}
-                  >
-                    {content}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
+          {sorted.map((row, i) => {
+            const active = isRowActive?.(row) ?? false;
+            return (
+              <tr
+                key={rowKey?.(row, i) ?? `${(row as { stk?: string }).stk ?? "r"}-${i}`}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                style={{
+                  background: active ? IC.border : i % 2 ? IC.rowAlt : "transparent",
+                  cursor: onRowClick ? "pointer" : undefined,
+                  boxShadow: active ? `inset 3px 0 0 ${IC.yellow}` : undefined,
+                }}
+              >
+                {cols.map((c) => renderCell(c, row, false))}
+              </tr>
+            );
+          })}
         </tbody>
+        {footer ? (
+          <tfoot style={{ position: "sticky", bottom: 0, background: IC.panel, zIndex: 1 }}>
+            <tr>{cols.map((c) => renderCell(c, footer, true))}</tr>
+          </tfoot>
+        ) : null}
       </table>
     </div>
   );
