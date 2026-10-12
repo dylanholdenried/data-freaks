@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { IC } from "@/lib/inventory-command/midmo";
 import {
@@ -11,9 +11,13 @@ import {
   type AcqBuyer,
   type AcqSourceType,
 } from "@/lib/acquire/types";
-import { createAcquirePurchase } from "../actions";
+import {
+  createAcquirePurchase,
+  findAcquirePurchasesByVin,
+  type AcqDuplicateVinMatch,
+} from "../actions";
 import { decodeVin, VinDecodeError } from "@/lib/vehicle";
-import { X, Loader2 } from "lucide-react";
+import { X, Loader2, AlertTriangle } from "lucide-react";
 import AcquireVehicleFields, {
   normalizeDrivetrain,
   type VehicleCatalogMake,
@@ -26,6 +30,9 @@ export default function AddPurchaseModal({
   vehicleMakes,
   vehicleModels,
   defaultStoreId,
+  hidden = false,
+  canViewPurchase,
+  onViewExisting,
   onClose,
 }: {
   stores: { id: string; name: string }[];
@@ -33,6 +40,10 @@ export default function AddPurchaseModal({
   vehicleMakes: VehicleCatalogMake[];
   vehicleModels: VehicleCatalogModel[];
   defaultStoreId: string;
+  /** Keeps form state mounted while another overlay (e.g. existing purchase) is shown. */
+  hidden?: boolean;
+  canViewPurchase?: (purchaseId: string) => boolean;
+  onViewExisting?: (purchaseId: string) => void;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -47,6 +58,43 @@ export default function AddPurchaseModal({
   const [color, setColor] = useState("");
   const [bodyStyle, setBodyStyle] = useState("");
   const [drivetrain, setDrivetrain] = useState("");
+  const [duplicates, setDuplicates] = useState<AcqDuplicateVinMatch[] | null>(null);
+  const [duplicateVin, setDuplicateVin] = useState("");
+  const [acknowledgedVin, setAcknowledgedVin] = useState<string | null>(null);
+  const pendingSubmitRef = useRef<FormData | null>(null);
+  const lastCheckedVinRef = useRef<string | null>(null);
+
+  const storeNameById = Object.fromEntries(stores.map((s) => [s.id, s.name]));
+
+  async function checkDuplicateVin(v: string) {
+    if (v.length !== 17 || v === acknowledgedVin || v === lastCheckedVinRef.current) return;
+    lastCheckedVinRef.current = v;
+    const res = await findAcquirePurchasesByVin(v);
+    if (res.ok && res.matches.length) {
+      pendingSubmitRef.current = null;
+      setDuplicateVin(v);
+      setDuplicates(res.matches);
+    }
+  }
+
+  function confirmDuplicate() {
+    setAcknowledgedVin(duplicateVin);
+    setDuplicates(null);
+    const fd = pendingSubmitRef.current;
+    pendingSubmitRef.current = null;
+    if (fd) {
+      fd.set("allow_duplicate_vin", "true");
+      submitPurchase(fd);
+    }
+  }
+
+  function rejectDuplicate() {
+    setDuplicates(null);
+    pendingSubmitRef.current = null;
+    lastCheckedVinRef.current = null;
+    setAcknowledgedVin(null);
+    setVin("");
+  }
 
   async function handleDecode() {
     const v = vin.trim().toUpperCase();
@@ -71,10 +119,30 @@ export default function AddPurchaseModal({
     }
   }
 
+  function submitPurchase(fd: FormData) {
+    setError(null);
+    startTransition(async () => {
+      const res = await createAcquirePurchase(fd);
+      if (!res.ok) {
+        if (res.duplicateVin?.length) {
+          pendingSubmitRef.current = fd;
+          setDuplicateVin(String(fd.get("vin") ?? ""));
+          setDuplicates(res.duplicateVin);
+        } else {
+          setError(res.error);
+        }
+      } else {
+        router.refresh();
+        onClose();
+      }
+    });
+  }
+
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    fd.set("vin", vin.trim().toUpperCase());
+    const v = vin.trim().toUpperCase();
+    fd.set("vin", v);
     fd.set("vehicle_year", year);
     fd.set("vehicle_make", make);
     fd.set("vehicle_model", model);
@@ -82,15 +150,8 @@ export default function AddPurchaseModal({
     fd.set("color", color);
     fd.set("body_style", bodyStyle);
     fd.set("drivetrain", drivetrain);
-    setError(null);
-    startTransition(async () => {
-      const res = await createAcquirePurchase(fd);
-      if (!res.ok) setError(res.error);
-      else {
-        router.refresh();
-        onClose();
-      }
-    });
+    fd.set("allow_duplicate_vin", v && v === acknowledgedVin ? "true" : "");
+    submitPurchase(fd);
   }
 
   const inputStyle = {
@@ -102,7 +163,11 @@ export default function AddPurchaseModal({
   const activeBuyers = buyers.filter((b) => b.active);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+    <div
+      className={`fixed inset-0 z-50 items-center justify-center p-4 ${hidden ? "hidden" : "flex"}`}
+      role="dialog"
+      aria-modal="true"
+    >
       <button type="button" className="absolute inset-0 bg-black/60" aria-label="Close" onClick={onClose} />
       <div
         className="relative max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-xl border p-4 shadow-2xl"
@@ -160,7 +225,11 @@ export default function AddPurchaseModal({
                   value={vin}
                   onChange={(e) => setVin(e.target.value.toUpperCase())}
                   onBlur={() => {
-                    if (vin.trim().length === 17) void handleDecode();
+                    const v = vin.trim().toUpperCase();
+                    if (v.length === 17) {
+                      void handleDecode();
+                      void checkDuplicateVin(v);
+                    }
                   }}
                   maxLength={17}
                   className="w-full rounded-md border px-2 py-1.5 text-sm uppercase"
@@ -176,6 +245,11 @@ export default function AddPurchaseModal({
                   {decoding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Decode"}
                 </button>
               </div>
+              {acknowledgedVin && acknowledgedVin === vin.trim().toUpperCase() ? (
+                <span className="mt-1 block text-[10px]" style={{ color: IC.yellow }}>
+                  Duplicate VIN — override approved
+                </span>
+              ) : null}
             </label>
           </div>
 
@@ -284,6 +358,95 @@ export default function AddPurchaseModal({
           </div>
         </form>
       </div>
+
+      {duplicates ? (
+        <div className="absolute inset-0 z-10 flex items-center justify-center p-4" role="alertdialog" aria-modal="true">
+          <div className="absolute inset-0 bg-black/50" aria-hidden />
+          <div
+            className="relative w-full max-w-md rounded-xl border p-4 shadow-2xl"
+            style={{ background: IC.panel, borderColor: IC.yellow, color: IC.text }}
+          >
+            <div className="mb-2 flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" style={{ color: IC.yellow }} />
+              <div>
+                <h3 className="text-sm font-bold">
+                  This VIN already exists as a purchase. Would you like to add it again?
+                </h3>
+                <p className="mt-1 font-mono text-xs" style={{ color: IC.muted }}>
+                  {duplicateVin}
+                </p>
+              </div>
+            </div>
+
+            <ul className="mb-4 space-y-2">
+              {duplicates.map((d) => {
+                const ymm = [d.vehicle_year, d.vehicle_make, d.vehicle_model, d.vehicle_trim]
+                  .filter((x) => x != null && String(x).trim() !== "")
+                  .join(" ");
+                const storeLabel = d.store_id
+                  ? storeNameById[d.store_id] ?? "Another store"
+                  : "Unassigned";
+                const viewable = onViewExisting && (canViewPurchase?.(d.id) ?? true);
+                return (
+                  <li
+                    key={d.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2"
+                    style={{ borderColor: IC.border, background: IC.rowAlt }}
+                  >
+                    <div className="min-w-0 text-xs">
+                      <p className="truncate font-semibold">{ymm || "Vehicle"}</p>
+                      <p className="truncate font-mono text-[11px]" style={{ color: IC.muted }}>
+                        {d.vin}
+                      </p>
+                      <p className="truncate" style={{ color: IC.muted }}>
+                        {[
+                          d.stock_number ? `Stock ${d.stock_number}` : "No stock #",
+                          storeLabel,
+                          ACQ_STAGE_LABELS[d.stage] ?? d.stage,
+                          d.purchase_date ? `Bought ${d.purchase_date}` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                    </div>
+                    {viewable ? (
+                      <button
+                        type="button"
+                        onClick={() => onViewExisting(d.id)}
+                        className="shrink-0 rounded-md border px-2 py-1 text-[11px] font-semibold"
+                        style={{ borderColor: IC.border, color: IC.blue }}
+                      >
+                        View
+                      </button>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={rejectDuplicate}
+                disabled={pending}
+                className="rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-60"
+                style={{ borderColor: IC.border, color: IC.muted }}
+              >
+                No
+              </button>
+              <button
+                type="button"
+                onClick={confirmDuplicate}
+                disabled={pending}
+                className="rounded-lg px-3 py-2 text-xs font-semibold disabled:opacity-60"
+                style={{ background: IC.yellow, color: "#111" }}
+              >
+                Yes, add again
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

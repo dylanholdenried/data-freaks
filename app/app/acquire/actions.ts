@@ -21,9 +21,60 @@ import {
 } from "@/lib/acquire/types";
 import { nudgePurchasesToPendingSale } from "@/lib/acquire/pending-sale";
 
+export type AcqDuplicateVinMatch = Pick<
+  AcqPurchase,
+  | "id"
+  | "vin"
+  | "stock_number"
+  | "store_id"
+  | "stage"
+  | "vehicle_year"
+  | "vehicle_make"
+  | "vehicle_model"
+  | "vehicle_trim"
+  | "purchase_date"
+>;
+
 export type AcqActionResult =
   | { ok: true; id?: string; purchase?: AcqPurchase }
-  | { ok: false; error: string };
+  | { ok: false; error: string; duplicateVin?: AcqDuplicateVinMatch[] };
+
+const DUPLICATE_VIN_SELECT =
+  "id, vin, stock_number, store_id, stage, vehicle_year, vehicle_make, vehicle_model, vehicle_trim, purchase_date";
+
+async function findPurchasesWithVin(
+  supabase: AcquireMutatorOk["supabase"],
+  dealerGroupId: string,
+  vin: string
+): Promise<AcqDuplicateVinMatch[]> {
+  const v = vin.trim();
+  if (!v) return [];
+  let q = supabase
+    .from("acq_purchases")
+    .select(DUPLICATE_VIN_SELECT)
+    .eq("dealer_group_id", dealerGroupId);
+  // ilike for case-insensitive match; only safe when the VIN has no LIKE wildcards.
+  q = /^[A-Za-z0-9]+$/.test(v) ? q.ilike("vin", v) : q.eq("vin", v);
+  const { data, error } = await q.order("created_at", { ascending: false }).limit(10);
+  if (error) {
+    console.error("findPurchasesWithVin", error);
+    return [];
+  }
+  return (data ?? []) as AcqDuplicateVinMatch[];
+}
+
+export async function findAcquirePurchasesByVin(
+  vin: string
+): Promise<{ ok: true; matches: AcqDuplicateVinMatch[] } | { ok: false; error: string }> {
+  try {
+    const ctx = await requireAcquireMutator();
+    if (!ctx.ok) return { ok: false, error: ctx.error };
+    const matches = await findPurchasesWithVin(ctx.supabase, ctx.dealerGroupId, vin);
+    return { ok: true, matches };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "VIN lookup failed" };
+  }
+}
 
 type AcquireMutatorOk = {
   ok: true;
@@ -176,6 +227,21 @@ export async function createAcquirePurchase(
       updated_by: ctx.profile.id,
     };
 
+    let duplicateVinOverride = false;
+    if (payload.vin) {
+      const matches = await findPurchasesWithVin(ctx.supabase, ctx.dealerGroupId, payload.vin);
+      if (matches.length) {
+        if (!parseBool(formData.get("allow_duplicate_vin"))) {
+          return {
+            ok: false,
+            error: "This VIN already exists as a purchase.",
+            duplicateVin: matches,
+          };
+        }
+        duplicateVinOverride = true;
+      }
+    }
+
     const is_incoming = computeIsIncoming(payload);
 
     const { data, error } = await ctx.supabase
@@ -194,7 +260,7 @@ export async function createAcquirePurchase(
       from_stage: null,
       to_stage: payload.stage,
       actor_profile_id: ctx.profile.id,
-      note: "Created",
+      note: duplicateVinOverride ? "Created (duplicate VIN override)" : "Created",
     });
 
     if (payload.stock_number && payload.store_id) {

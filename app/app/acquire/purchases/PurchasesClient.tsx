@@ -68,6 +68,8 @@ export default function PurchasesClient({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [flipOrigin, setFlipOrigin] = useState<CardOriginRect | null>(null);
   const [adding, setAdding] = useState(false);
+  /** Existing purchase opened from the duplicate-VIN prompt; Log purchase modal stays mounted underneath. */
+  const [viewingFromAdd, setViewingFromAdd] = useState(false);
   const [bulkUploading, setBulkUploading] = useState(false);
   /** Optimistic + post-save list until server props catch up. */
   const [localPurchases, setLocalPurchases] = useState(purchases);
@@ -114,6 +116,7 @@ export default function PurchasesClient({
   function handleOverlayClose() {
     setSelectedId(null);
     setFlipOrigin(null);
+    setViewingFromAdd(false);
     if (pendingBucketRef.current) {
       setPill(pendingBucketRef.current);
       pendingBucketRef.current = null;
@@ -181,9 +184,23 @@ export default function PurchasesClient({
     [storePurchases]
   );
 
+  // Look up across all loaded purchases so a duplicate-VIN match outside the store filter can still open.
   const selected = selectedId
-    ? storePurchases.find((p) => p.id === selectedId) ?? null
+    ? localPurchases.find((p) => p.id === selectedId) ?? null
     : null;
+
+  function viewExistingFromAdd(purchaseId: string) {
+    const width = 240;
+    const height = 320;
+    setFlipOrigin({
+      width,
+      height,
+      left: (window.innerWidth - width) / 2,
+      top: (window.innerHeight - height) / 2,
+    });
+    setSelectedId(purchaseId);
+    setViewingFromAdd(true);
+  }
 
   const stageCounts = ACQ_STAGES.map((stage) => ({
     stage,
@@ -600,6 +617,9 @@ export default function PurchasesClient({
           vehicleMakes={vehicleMakes}
           vehicleModels={vehicleModels}
           defaultStoreId={defaultCreateStoreId}
+          hidden={viewingFromAdd}
+          canViewPurchase={(id) => localPurchases.some((p) => p.id === id)}
+          onViewExisting={viewExistingFromAdd}
           onClose={() => setAdding(false)}
         />
       ) : null}
