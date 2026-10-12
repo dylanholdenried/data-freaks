@@ -335,6 +335,28 @@ export async function updateAcquirePurchase(
 
     const seller = emptyToNull(formData.get("seller_name"));
     const hasTrade = parseBool(formData.get("has_trade"));
+    const exitStrategy = parseExitStrategy(formData.get("exit_strategy"));
+    const isTransfer = exitStrategy === "internal_transfer";
+    let retailStoreId: string | null = null;
+    if (isTransfer) {
+      retailStoreId = emptyToNull(formData.get("retail_store_id"));
+      if (retailStoreId) {
+        if (retailStoreId === nextStoreId) {
+          return {
+            ok: false,
+            error: "Retail store has to be a different store in this auto group.",
+          };
+        }
+        const { data: retailStore } = await ctx.supabase
+          .from("stores")
+          .select("id, dealer_group_id")
+          .eq("id", retailStoreId)
+          .maybeSingle();
+        if (!retailStore || retailStore.dealer_group_id !== ctx.dealerGroupId) {
+          return { ok: false, error: "Retail store does not belong to this auto group." };
+        }
+      }
+    }
     const onHold = formData.has("on_hold")
       ? parseBool(formData.get("on_hold"))
       : undefined;
@@ -387,8 +409,10 @@ export async function updateAcquirePurchase(
         if (front == null && back == null) return null;
         return (front ?? 0) + (back ?? 0);
       })(),
-      next_store_profit: parseNum(formData.get("next_store_profit")),
-      exit_strategy: parseExitStrategy(formData.get("exit_strategy")),
+      next_store_profit: isTransfer ? parseNum(formData.get("next_store_profit")) : null,
+      retail_store_id: retailStoreId,
+      retail_sold_date: isTransfer ? emptyToNull(formData.get("retail_sold_date")) : null,
+      exit_strategy: exitStrategy,
       has_trade: hasTrade,
       trade_stock_number: hasTrade ? emptyToNull(formData.get("trade_stock_number")) : null,
       trade_vin: hasTrade ? emptyToNull(formData.get("trade_vin")) : null,
@@ -437,8 +461,36 @@ export async function updateAcquirePurchase(
       }
     }
 
+    let reportedEconomics: {
+      reported_front_gross: number | null;
+      reported_back_gross: number | null;
+      pack_amount: number | null;
+      buy_fee: number | null;
+    } | null = null;
+    if (formData.has("reported_front_gross")) {
+      reportedEconomics = {
+        reported_front_gross: parseNum(formData.get("reported_front_gross")),
+        reported_back_gross: parseNum(formData.get("reported_back_gross")),
+        pack_amount: parseNum(formData.get("pack_amount")),
+        buy_fee: parseNum(formData.get("buy_fee")),
+      };
+      const { error: reportedError } = await ctx.supabase.from("acq_purchase_reported").upsert({
+        purchase_id: purchaseId,
+        ...reportedEconomics,
+        updated_at: new Date().toISOString(),
+      });
+      if (reportedError) {
+        console.error("updateAcquirePurchase reported", reportedError);
+        return { ok: false, error: reportedError.message };
+      }
+    }
+
     revalidateAcquire();
-    return { ok: true, id: purchaseId, purchase: updated as AcqPurchase };
+    return {
+      ok: true,
+      id: purchaseId,
+      purchase: { ...(updated as AcqPurchase), ...(reportedEconomics ?? {}) },
+    };
   } catch (e) {
     return {
       ok: false,

@@ -50,6 +50,8 @@ export type AcqActionItemKey =
   | "back_gross"
   | "total_gross"
   | "next_store_profit"
+  | "retail_store_id"
+  | "retail_sold_date"
   | "trade_stock_number"
   | "trade_vin"
   | "trade_year"
@@ -183,8 +185,16 @@ export function missingAcquireActionItems(p: AcqPurchase): AcqActionItem[] {
     if (isBlank(p.front_gross)) push(missing, "front_gross", "Front profit", "Exit");
     if (isBlank(p.back_gross)) push(missing, "back_gross", "Back profit", "Exit");
     // Total profit is derived from front + back — not a separate action item.
-    if (p.exit_strategy === "internal_transfer" && isBlank(p.next_store_profit)) {
-      push(missing, "next_store_profit", "Next store profit", "Exit");
+    if (p.exit_strategy === "internal_transfer") {
+      if (isBlank(p.retail_store_id)) {
+        push(missing, "retail_store_id", "Retail store", "Exit");
+      }
+      if (isBlank(p.retail_sold_date)) {
+        push(missing, "retail_sold_date", "Retail store sold date", "Exit");
+      }
+      if (isBlank(p.next_store_profit)) {
+        push(missing, "next_store_profit", "Next store gross", "Exit");
+      }
     }
     if (p.has_trade) {
       if (isBlank(p.trade_stock_number)) {

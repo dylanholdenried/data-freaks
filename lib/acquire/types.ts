@@ -210,6 +210,15 @@ export type AcqPurchase = {
   front_gross: number | null;
   back_gross: number | null;
   total_gross: number | null;
+  /** Reported payable inputs. Visible only to platform and owner admins. */
+  reported_front_gross: number | null;
+  reported_back_gross: number | null;
+  pack_amount: number | null;
+  buy_fee: number | null;
+  /** Destination store for an internal transfer. */
+  retail_store_id: string | null;
+  /** Date the retail store sold an internal transfer. */
+  retail_sold_date: string | null;
   next_store_profit: number | null;
   exit_strategy: AcqExitStrategy | string | null;
   has_trade: boolean;

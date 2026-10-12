@@ -30,6 +30,7 @@ export default function PurchaseFlipOverlay({
   vehicleMakes,
   vehicleModels,
   canEdit,
+  canViewReported,
   origin,
   onClose,
   onSaved,
@@ -41,6 +42,7 @@ export default function PurchaseFlipOverlay({
   vehicleMakes: VehicleCatalogMake[];
   vehicleModels: VehicleCatalogModel[];
   canEdit: boolean;
+  canViewReported: boolean;
   origin: CardOriginRect;
   onClose: () => void;
   onSaved?: (updated: AcqPurchase) => void;
@@ -149,6 +151,7 @@ export default function PurchaseFlipOverlay({
               vehicleMakes={vehicleMakes}
               vehicleModels={vehicleModels}
               canEdit={canEdit}
+              canViewReported={canViewReported}
               onClose={requestClose}
               onSaved={handleSaved}
             />

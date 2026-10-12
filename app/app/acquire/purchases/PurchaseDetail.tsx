@@ -34,6 +34,7 @@ import {
   type AcqActionItemKey,
 } from "@/lib/acquire/action-items";
 import { updateAcquirePurchase } from "../actions";
+import { reportedCommission, totalPayableGross } from "@/lib/acquire/reported";
 import { decodeVin, VinDecodeError } from "@/lib/vehicle";
 import { Loader2, X } from "lucide-react";
 import AcquireVehicleFields, {
@@ -49,6 +50,7 @@ const TABS = [
   "Recon",
   "Merchandising",
   "Exit",
+  "Reported",
 ] as const;
 
 type Tab = (typeof TABS)[number];
@@ -198,6 +200,7 @@ export default function PurchaseDetail({
   vehicleMakes,
   vehicleModels,
   canEdit,
+  canViewReported,
   onClose,
   onSaved,
 }: {
@@ -208,6 +211,8 @@ export default function PurchaseDetail({
   vehicleMakes: VehicleCatalogMake[];
   vehicleModels: VehicleCatalogModel[];
   canEdit: boolean;
+  /** Platform admin and owner admin. Hides the Reported tab from everyone else. */
+  canViewReported: boolean;
   onClose: () => void;
   /** Called after a successful save, before the flip-close animation. */
   onSaved?: (updated: AcqPurchase) => void;
@@ -283,6 +288,20 @@ export default function PurchaseDetail({
   const [nextStoreProfit, setNextStoreProfit] = useState(
     purchase.next_store_profit != null ? String(purchase.next_store_profit) : ""
   );
+  const [retailStoreId, setRetailStoreId] = useState(purchase.retail_store_id ?? "");
+  const [retailSoldDate, setRetailSoldDate] = useState(purchase.retail_sold_date ?? "");
+  const [reportedFrontGross, setReportedFrontGross] = useState(
+    purchase.reported_front_gross != null ? String(purchase.reported_front_gross) : ""
+  );
+  const [reportedBackGross, setReportedBackGross] = useState(
+    purchase.reported_back_gross != null ? String(purchase.reported_back_gross) : ""
+  );
+  const [packAmount, setPackAmount] = useState(
+    purchase.pack_amount != null ? String(purchase.pack_amount) : ""
+  );
+  const [buyFee, setBuyFee] = useState(
+    purchase.buy_fee != null ? String(purchase.buy_fee) : ""
+  );
   const [tradeStock, setTradeStock] = useState(purchase.trade_stock_number ?? "");
   const [tradeAcv, setTradeAcv] = useState(
     purchase.trade_acv != null ? String(purchase.trade_acv) : ""
@@ -309,6 +328,17 @@ export default function PurchaseDetail({
       : null;
   const totalGrossValue =
     computedTotalGross != null ? String(computedTotalGross) : "";
+  const payableGross = totalPayableGross({
+    reported_front_gross: parseDraftNum(reportedFrontGross),
+    reported_back_gross: parseDraftNum(reportedBackGross),
+    pack_amount: parseDraftNum(packAmount),
+    buy_fee: parseDraftNum(buyFee),
+  });
+  const commission = reportedCommission(payableGross);
+  const retailStoreChoices = stores.filter((s) => s.id !== storeId);
+  const retailStoreValue = retailStoreChoices.some((s) => s.id === retailStoreId)
+    ? retailStoreId
+    : "";
 
   const age = headerAgeDays(purchase);
   const soldAge = daysBetween(purchase.purchase_date, purchase.sold_date);
@@ -365,7 +395,11 @@ export default function PurchaseDetail({
       front_gross: draftFrontGross,
       back_gross: draftBackGross,
       total_gross: computedTotalGross,
-      next_store_profit: parseDraftNum(nextStoreProfit),
+      next_store_profit:
+        exitStrategy === "internal_transfer" ? parseDraftNum(nextStoreProfit) : null,
+      retail_store_id: exitStrategy === "internal_transfer" ? retailStoreValue || null : null,
+      retail_sold_date:
+        exitStrategy === "internal_transfer" ? retailSoldDate.trim() || null : null,
       trade_stock_number: tradeStock.trim() || null,
       trade_acv: parseDraftNum(tradeAcv),
       trade_allowance: parseDraftNum(tradeAllowance),
@@ -414,6 +448,8 @@ export default function PurchaseDetail({
     draftBackGross,
     computedTotalGross,
     nextStoreProfit,
+    retailStoreValue,
+    retailSoldDate,
     tradeStock,
     tradeAcv,
     tradeAllowance,
@@ -545,7 +581,11 @@ export default function PurchaseDetail({
                 name="store_id"
                 value={storeId}
                 disabled={!canEdit}
-                onChange={(e) => setStoreId(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setStoreId(next);
+                  if (retailStoreId === next) setRetailStoreId("");
+                }}
                 className="mt-1 block w-full rounded-md border px-2 py-1.5 text-left text-sm font-medium normal-case tracking-normal"
                 style={{ background: "#0f141c", borderColor: IC.border, color: IC.text }}
               >
@@ -707,8 +747,8 @@ export default function PurchaseDetail({
         ) : null}
 
         <div className="flex shrink-0 gap-1 overflow-x-auto border-b px-2 py-2" style={{ borderColor: IC.border }}>
-          {TABS.map((t) => {
-            const count = tabCounts[t];
+          {TABS.filter((t) => canViewReported || t !== "Reported").map((t) => {
+            const count = t === "Reported" ? 0 : tabCounts[t];
             const hasActions = count > 0;
             return (
               <button
@@ -906,18 +946,45 @@ export default function PurchaseDetail({
                 <input type="hidden" name="total_gross" value={totalGrossValue} />
               </div>
               {exitStrategy === "internal_transfer" ? (
-                <Field
-                  label="Next store profit"
-                  name="next_store_profit"
-                  type="number"
-                  step="0.01"
-                  value={nextStoreProfit}
-                  onChange={setNextStoreProfit}
-                  readOnly={!canEdit}
-                  alert={isAlert("next_store_profit")}
-                />
+                <>
+                  <SelectField
+                    label="Retail store"
+                    name="retail_store_id"
+                    value={retailStoreValue}
+                    onChange={setRetailStoreId}
+                    disabled={!canEdit}
+                    alert={isAlert("retail_store_id")}
+                    options={[
+                      { value: "", label: "—" },
+                      ...retailStoreChoices.map((s) => ({ value: s.id, label: s.name })),
+                    ]}
+                  />
+                  <Field
+                    label="Retail store sold date"
+                    name="retail_sold_date"
+                    type="date"
+                    value={retailSoldDate}
+                    onChange={setRetailSoldDate}
+                    readOnly={!canEdit}
+                    alert={isAlert("retail_sold_date")}
+                  />
+                  <Field
+                    label="Next store gross"
+                    name="next_store_profit"
+                    type="number"
+                    step="0.01"
+                    value={nextStoreProfit}
+                    onChange={setNextStoreProfit}
+                    readOnly={!canEdit}
+                    alert={isAlert("next_store_profit")}
+                  />
+                </>
               ) : (
-                <input type="hidden" name="next_store_profit" value={nextStoreProfit} />
+                <>
+                  <input type="hidden" name="retail_store_id" value="" />
+                  <input type="hidden" name="retail_sold_date" value="" />
+                  <input type="hidden" name="next_store_profit" value="" />
+                </>
               )}
             </div>
             <ReadRow label="Sold age" value={soldAge != null ? `${soldAge}d` : "—"} />
@@ -982,6 +1049,63 @@ export default function PurchaseDetail({
             </div>
           </div>
 
+          {canViewReported ? (
+            <div className={tab === "Reported" ? "space-y-3" : "hidden"}>
+              <p className="text-xs leading-relaxed" style={{ color: IC.muted }}>
+                Payable gross is reported front, reported back, pack, and buy fee added together.
+                Commission is 10% of that total.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <Field
+                  label="Reported Front Gross"
+                  name="reported_front_gross"
+                  type="number"
+                  step="0.01"
+                  value={reportedFrontGross}
+                  onChange={setReportedFrontGross}
+                  readOnly={!canEdit}
+                />
+                <Field
+                  label="Reported Back Gross"
+                  name="reported_back_gross"
+                  type="number"
+                  step="0.01"
+                  value={reportedBackGross}
+                  onChange={setReportedBackGross}
+                  readOnly={!canEdit}
+                />
+                <Field
+                  label="Pack"
+                  name="pack_amount"
+                  type="number"
+                  step="0.01"
+                  value={packAmount}
+                  onChange={setPackAmount}
+                  readOnly={!canEdit}
+                />
+                <Field
+                  label="Buy Fee"
+                  name="buy_fee"
+                  type="number"
+                  step="0.01"
+                  value={buyFee}
+                  onChange={setBuyFee}
+                  readOnly={!canEdit}
+                />
+              </div>
+              <ReadRow
+                label="Total Payable Gross"
+                value={formatMoneyExact(payableGross)}
+                tone={payableGross == null ? IC.muted : payableGross >= 0 ? IC.green : IC.red}
+              />
+              <ReadRow
+                label="Commission"
+                value={formatMoneyExact(commission)}
+                tone={commission == null ? IC.muted : commission >= 0 ? IC.green : IC.red}
+              />
+            </div>
+          ) : null}
+
           {/* Persist fields across tabs */}
           {tab !== "Overview" ? (
             <>
@@ -1033,7 +1157,21 @@ export default function PurchaseDetail({
               <input type="hidden" name="front_gross" value={frontGross} />
               <input type="hidden" name="back_gross" value={backGross} />
               <input type="hidden" name="total_gross" value={totalGrossValue} />
-              <input type="hidden" name="next_store_profit" value={nextStoreProfit} />
+              <input
+                type="hidden"
+                name="retail_store_id"
+                value={exitStrategy === "internal_transfer" ? retailStoreValue : ""}
+              />
+              <input
+                type="hidden"
+                name="retail_sold_date"
+                value={exitStrategy === "internal_transfer" ? retailSoldDate : ""}
+              />
+              <input
+                type="hidden"
+                name="next_store_profit"
+                value={exitStrategy === "internal_transfer" ? nextStoreProfit : ""}
+              />
               <input type="hidden" name="has_trade" value={hasTrade ? "true" : "false"} />
               <input type="hidden" name="trade_stock_number" value={tradeStock} />
               <input type="hidden" name="trade_vin" value={tradeVin} />

@@ -29,7 +29,7 @@ import {
 } from "@/lib/acquire/cost";
 import { countAcquireActionItems, needsTransportScheduled } from "@/lib/acquire/action-items";
 import { storesQueryString } from "@/lib/acquire/store-labels";
-import { computeMonthlyPurchaseSalesVolume } from "@/lib/acquire/monthly-volume";
+import { computeMonthlyPurchaseSalesVolume, type InboundTransferCredit } from "@/lib/acquire/monthly-volume";
 import AcquireStorePills from "../AcquireStorePills";
 import PurchaseCard, { type CardOriginRect } from "./PurchaseCard";
 import PurchaseFlipOverlay from "./PurchaseFlipOverlay";
@@ -46,7 +46,9 @@ export default function PurchasesClient({
   vehicleModels,
   initialStoreIds,
   purchases,
+  inboundTransferCredits,
   canEdit,
+  canViewReported,
 }: {
   stores: { id: string; name: string }[];
   buyers: AcqBuyer[];
@@ -54,7 +56,9 @@ export default function PurchasesClient({
   vehicleModels: VehicleCatalogModel[];
   initialStoreIds: string[];
   purchases: AcqPurchase[];
+  inboundTransferCredits: InboundTransferCredit[];
   canEdit: boolean;
+  canViewReported: boolean;
 }) {
   const router = useRouter();
   const allIds = stores.map((s) => s.id);
@@ -93,8 +97,13 @@ export default function PurchasesClient({
   }, [localPurchases, selectedStoreIds]);
 
   const monthlyVolume = useMemo(
-    () => computeMonthlyPurchaseSalesVolume(storePurchases),
-    [storePurchases]
+    () =>
+      computeMonthlyPurchaseSalesVolume(
+        localPurchases,
+        selectedStoreIds,
+        inboundTransferCredits
+      ),
+    [localPurchases, selectedStoreIds, inboundTransferCredits]
   );
 
   function applyPurchaseUpdate(updated: AcqPurchase, opts?: { switchBucketNow?: boolean }) {
@@ -604,6 +613,7 @@ export default function PurchasesClient({
           vehicleMakes={vehicleMakes}
           vehicleModels={vehicleModels}
           canEdit={canEdit}
+          canViewReported={canViewReported}
           origin={flipOrigin}
           onClose={handleOverlayClose}
           onSaved={handleDetailSaved}
