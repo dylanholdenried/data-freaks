@@ -47,33 +47,6 @@ export async function createStore(formData: FormData) {
   revalidatePath("/app/setup");
 }
 
-export async function createDepartment(formData: FormData) {
-  const supabase = createSupabaseServerClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, dealer_group_id, role")
-    .or(profileMatchAuthUserId(user.id))
-    .maybeSingle();
-
-  await assertCanMutateAppData(profile?.role);
-
-  const storeId = String(formData.get("store_id") || "").trim();
-  if (!(await assertStoreAccess(supabase, profile, storeId))) {
-    throw new Error("Store not allowed");
-  }
-
-  await supabase.from("departments").insert({
-    store_id: storeId,
-    name: String(formData.get("department_name"))
-  });
-  revalidatePath("/app/setup");
-}
-
 export async function createSalesperson(formData: FormData) {
   const supabase = createSupabaseServerClient();
   const {
@@ -124,6 +97,16 @@ export async function createSource(formData: FormData) {
   }
   if (!departmentId) {
     throw new Error("Department is required");
+  }
+  const { data: department } = await supabase
+    .from("departments")
+    .select("id")
+    .eq("id", departmentId)
+    .eq("store_id", storeId)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (!department) {
+    throw new Error("Department not available");
   }
 
   const { data: createdSource, error: sourceError } = await supabase

@@ -82,7 +82,7 @@ interface Props {
   customerLastName: string;
   initialSaleDate: string;
   initialDepartmentId: string;
-  departments: { id: string; name: string }[];
+  departments: { id: string; name: string; is_active?: boolean }[];
   // Read-only context
   vehicleYear: number;
   vehicleMake: string;
@@ -1580,11 +1580,14 @@ export default function UpdatePendingForm({
                 className={cn(SEL, emptyCls(departmentId, isLocked))}
               >
                 <option value="">Select department</option>
-                {departments.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
+                {departments
+                  .filter((d) => d.is_active !== false || d.id === initialDepartmentId)
+                  .map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                      {d.is_active === false ? " (inactive)" : ""}
+                    </option>
+                  ))}
               </select>
             </div>
             <div className="space-y-1">

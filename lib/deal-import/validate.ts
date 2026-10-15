@@ -4,7 +4,7 @@ import type { NormalizedDealImportRow } from "./csv-schema";
 import type { ParsedCsvRow } from "./parse";
 
 export type StoreReferenceData = {
-  departments: { id: string; name: string }[];
+  departments: { id: string; name: string; is_active?: boolean }[];
   salespeople: { id: string; name: string }[];
   financeManagers: { id: string; name: string }[];
   acquisitionSources: { id: string; name: string }[];
@@ -96,6 +96,10 @@ export function validateImportRows(
     if (!department) {
       errors.push(
         `department "${n.department}" not found on this store (create the department first)`
+      );
+    } else if (department.is_active === false) {
+      errors.push(
+        `department "${department.name}" is inactive (reactivate it in Setup to import into it)`
       );
     } else if (
       !isMakeAllowedForDepartment(n.vehicle_make, department.id, refs.departmentMakes)

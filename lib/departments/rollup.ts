@@ -44,6 +44,25 @@ export function rollupSegmentLabel(
   return dept.name;
 }
 
+/**
+ * Active departments, plus inactive ones that still have activity in the period
+ * (deals or goals), plus the rollup parents those need for their card.
+ */
+export function departmentsVisibleForPeriod<
+  T extends { id: string; is_active?: boolean | null; rolls_up_to_department_id: string | null },
+>(departments: T[], idsWithActivity: Iterable<string>): T[] {
+  const withActivity = new Set(idsWithActivity);
+  const keep = new Set(
+    departments.filter((d) => d.is_active !== false || withActivity.has(d.id)).map((d) => d.id)
+  );
+  for (const dept of departments) {
+    if (keep.has(dept.id) && dept.rolls_up_to_department_id) {
+      keep.add(dept.rolls_up_to_department_id);
+    }
+  }
+  return departments.filter((d) => keep.has(d.id));
+}
+
 export function mapDealToCardDepartmentId(
   departmentId: string,
   departments: DeptRollup[]

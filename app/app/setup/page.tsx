@@ -3,7 +3,7 @@ import { profileMatchAuthUserId } from "@/lib/supabase/profile-match";
 import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import { getAccessibleStores } from "@/lib/store-access";
 import { getCentralTimeParts } from "@/lib/dashboard/pace";
-import { isStoreViewer } from "@/lib/roles";
+import { isPlatformStaff, isStoreViewer } from "@/lib/roles";
 import { isAppViewOnly } from "@/lib/impersonation";
 import { redirect } from "next/navigation";
 import SetupClient from "./SetupClient";
@@ -16,6 +16,7 @@ type DeptRow = {
   name: string;
   store_id: string;
   rolls_up_to_department_id: string | null;
+  is_active: boolean;
 };
 type PersonRow = { id: string; name: string; store_id: string; active: boolean };
 type SourceRow = { id: string; name: string; store_id: string; active: boolean };
@@ -55,6 +56,7 @@ export default async function SetupPage({
   }
 
   const readOnly = await isAppViewOnly(profile?.role);
+  const canManageDepartments = isPlatformStaff(profile?.role) && !readOnly;
   const dealerGroupId = await getEffectiveDealerGroupId(profile);
 
   if (!dealerGroupId || !profile) {
@@ -91,6 +93,7 @@ export default async function SetupPage({
         onboardingChecklist={onboardingChecklist}
         showOnboardingChecklist={showOnboardingChecklist}
         readOnly={readOnly}
+        canManageDepartments={canManageDepartments}
       />
     );
   }
@@ -99,7 +102,7 @@ export default async function SetupPage({
   const [deptRes, spRes, srcRes, fmRes, buyersRes] = await Promise.all([
     supabase
       .from("departments")
-      .select("id,name,store_id,rolls_up_to_department_id")
+      .select("id,name,store_id,rolls_up_to_department_id,is_active")
       .in("store_id", storeIds)
       .order("name"),
     supabase
@@ -166,6 +169,7 @@ export default async function SetupPage({
       onboardingChecklist={onboardingChecklist}
       showOnboardingChecklist={showOnboardingChecklist}
       readOnly={readOnly}
+      canManageDepartments={canManageDepartments}
     />
   );
 }

@@ -43,7 +43,12 @@ export default async function NewDealPage() {
 
   const [deptResult, spResult, vMakesResult, vModelsResult, deptMakesResult] = await Promise.all([
     storeIds.length > 0
-      ? supabase.from("departments").select("id,name,store_id").in("store_id", storeIds).order("name")
+      ? supabase
+          .from("departments")
+          .select("id,name,store_id")
+          .in("store_id", storeIds)
+          .eq("is_active", true)
+          .order("name")
       : Promise.resolve({ data: [] as ItemRow[] }),
     storeIds.length > 0
       ? supabase.from("salespeople").select("id,name,store_id").in("store_id", storeIds).eq("active", true).order("name")

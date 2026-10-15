@@ -204,7 +204,7 @@ export async function createBatchFromCsv(input: {
 
     const [deptsResult, spResult, fmResult, srcResult, deptMakesResult, dealsResult] =
       await Promise.all([
-      supabase.from("departments").select("id,name").eq("store_id", storeId),
+      supabase.from("departments").select("id,name,is_active").eq("store_id", storeId),
       supabase.from("salespeople").select("id,name").eq("store_id", storeId),
       supabase.from("finance_managers").select("id,name").eq("store_id", storeId),
       supabase
@@ -234,7 +234,7 @@ export async function createBatchFromCsv(input: {
     }>;
 
     const validated = validateImportRows(parsedRows, {
-      departments: (deptsResult.data ?? []) as { id: string; name: string }[],
+      departments: (deptsResult.data ?? []) as { id: string; name: string; is_active: boolean }[],
       salespeople: (spResult.data ?? []) as { id: string; name: string }[],
       financeManagers: (fmResult.data ?? []) as { id: string; name: string }[],
       acquisitionSources: rawSources.map(({ acquisition_source_departments: _d, ...source }) => source),

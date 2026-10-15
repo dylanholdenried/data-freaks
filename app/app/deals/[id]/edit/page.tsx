@@ -72,7 +72,7 @@ type SpRow = { salesperson_id: string; share_percent: number };
 type SalespersonOption = { id: string; name: string };
 type VehicleMakeRow = { id: string; name: string };
 type VehicleModelRow = { id: string; name: string; make_id: string };
-type DeptOption = { id: string; name: string };
+type DeptOption = { id: string; name: string; is_active: boolean };
 
 type TradeRow = {
   id: string;
@@ -176,7 +176,7 @@ export default async function EditDealPage({
         .order("name"),
       supabase
         .from("departments")
-        .select("id,name")
+        .select("id,name,is_active")
         .eq("store_id", deal.store_id)
         .order("name"),
       supabase

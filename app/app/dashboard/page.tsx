@@ -5,6 +5,7 @@ import { getEffectiveDealerGroupId } from "@/lib/dealer-group-context";
 import { getAccessibleStores } from "@/lib/store-access";
 import { getCentralTimeParts } from "@/lib/dashboard/pace";
 import { isAppViewOnly } from "@/lib/impersonation";
+import { departmentsVisibleForPeriod } from "@/lib/departments/rollup";
 import DashboardClient from "./DashboardClient";
 import SelectAutoGroupEmptyState from "../SelectAutoGroupEmptyState";
 
@@ -25,6 +26,7 @@ type Department = {
   name: string;
   store_id: string;
   rolls_up_to_department_id: string | null;
+  is_active: boolean;
 };
 type CalendarDay = { date: string; is_working_day: boolean; store_id: string };
 type Goal = { department_id: string; volume_goal: number };
@@ -114,7 +116,7 @@ export default async function DashboardPage({
     ),
     supabase
       .from("departments")
-      .select("id,name,store_id,rolls_up_to_department_id")
+      .select("id,name,store_id,rolls_up_to_department_id,is_active")
       .in("store_id", storeIds)
       .order("name"),
     supabase
@@ -126,11 +128,11 @@ export default async function DashboardPage({
   ]);
 
   const deals = dealsRes.data;
-  const departments = (deptsRes.data ?? []) as unknown as Department[];
+  const allDepartments = (deptsRes.data ?? []) as unknown as Department[];
   const calendarDays = (calRes.data ?? []) as unknown as CalendarDay[];
 
-  const deptIds = departments.map((d) => d.id);
-  let goals: Goal[] = [];
+  const deptIds = allDepartments.map((d) => d.id);
+  let allGoals: Goal[] = [];
 
   if (deptIds.length > 0) {
     const { data: goalsData } = await supabase
@@ -139,8 +141,15 @@ export default async function DashboardPage({
       .in("department_id", deptIds)
       .eq("year", year)
       .eq("month", month);
-    goals = (goalsData ?? []) as unknown as Goal[];
+    allGoals = (goalsData ?? []) as unknown as Goal[];
   }
+
+  const departments = departmentsVisibleForPeriod(allDepartments, [
+    ...deals.map((d) => d.department_id),
+    ...allGoals.filter((g) => g.volume_goal > 0).map((g) => g.department_id),
+  ]);
+  const visibleDeptIds = new Set(departments.map((d) => d.id));
+  const goals = allGoals.filter((g) => visibleDeptIds.has(g.department_id));
 
   return (
     <DashboardClient

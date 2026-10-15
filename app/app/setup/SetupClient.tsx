@@ -1,24 +1,21 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { isRolledUpDepartment } from "@/lib/departments/rollup";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CheckCircle2, PlusCircle, Building2, UserMinus, UserCheck } from "lucide-react";
+import { CheckCircle2, PlusCircle, UserMinus, UserCheck } from "lucide-react";
 import { updateOnboardingChecklist } from "@/app/app/onboarding-actions";
 import { createAcquireBuyer, toggleAcquireBuyer } from "./acquire-buyer-actions";
+import DepartmentsSection from "./DepartmentsSection";
+import type { ManagedDepartment } from "./department-actions";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type StoreRow = { id: string; name: string };
-type DeptRow = {
-  id: string;
-  name: string;
-  store_id: string;
-  rolls_up_to_department_id: string | null;
-};
+type DeptRow = ManagedDepartment;
 type PersonRow = { id: string; name: string; store_id: string; active: boolean };
 type SourceRow = { id: string; name: string; store_id: string; active: boolean };
 type SourceDepartmentLink = {
@@ -48,6 +45,8 @@ interface Props {
   showOnboardingChecklist?: boolean;
   /** Impersonation / store_viewer — browse only, no writes. */
   readOnly?: boolean;
+  /** Platform / owner admins only. */
+  canManageDepartments?: boolean;
 }
 
 // ── Style constants (matches NewDealForm) ─────────────────────────────────────
@@ -70,6 +69,7 @@ const MONTH_NAMES = [
 
 interface GoalsSectionProps {
   stores: StoreRow[];
+  selectedStoreId: string;
   departments: DeptRow[];
   initialGoals: GoalRow[];
   initialYear: number;
@@ -79,6 +79,7 @@ interface GoalsSectionProps {
 
 function GoalsSection({
   stores,
+  selectedStoreId,
   departments,
   initialGoals,
   initialYear,
@@ -86,8 +87,12 @@ function GoalsSection({
   readOnly = false,
 }: GoalsSectionProps) {
   const goalDepartments = useMemo(
-    () => departments.filter((d) => !isRolledUpDepartment(d)),
+    () => departments.filter((d) => !isRolledUpDepartment(d) && d.is_active),
     [departments]
+  );
+  const visibleGoalDepartments = useMemo(
+    () => goalDepartments.filter((dept) => dept.store_id === selectedStoreId),
+    [goalDepartments, selectedStoreId]
   );
   const [year, setYear] = useState(initialYear);
   const [month, setMonth] = useState(initialMonth);
@@ -105,17 +110,24 @@ function GoalsSection({
     return map;
   });
 
-  async function loadGoals(y: number, m: number) {
+  async function loadGoals(y: number, m: number, storeId: string) {
     setLoadingMonth(true);
     setBanner(null);
-    const supabase = createSupabaseBrowserClient();
-    const deptIds = goalDepartments.map((d) => d.id);
+    const deptIds = goalDepartments
+      .filter((dept) => dept.store_id === storeId)
+      .map((dept) => dept.id);
+    const deptIdSet = new Set(deptIds);
     if (deptIds.length === 0) {
-      setGoals([]);
-      setDrafts({});
+      setGoals((prev) => prev.filter((goal) => !deptIdSet.has(goal.department_id)));
+      setDrafts((prev) => {
+        const next = { ...prev };
+        for (const id of deptIds) delete next[id];
+        return next;
+      });
       setLoadingMonth(false);
       return;
     }
+    const supabase = createSupabaseBrowserClient();
     const { data, error } = await supabase
       .from("department_goals")
       .select("department_id,year,month,volume_goal")
@@ -126,24 +138,41 @@ function GoalsSection({
       setBanner({ kind: "err", msg: `Failed to load goals: ${error.message}` });
     } else {
       const rows = (data ?? []) as GoalRow[];
-      setGoals(rows);
-      const map: Record<string, string> = {};
-      for (const g of rows) {
-        map[g.department_id] = String(g.volume_goal);
-      }
-      setDrafts(map);
+      setGoals((prev) => [
+        ...prev.filter(
+          (goal) =>
+            !(goal.year === y && goal.month === m && deptIdSet.has(goal.department_id))
+        ),
+        ...rows,
+      ]);
+      setDrafts((prev) => {
+        const next = { ...prev };
+        for (const id of deptIds) delete next[id];
+        for (const goal of rows) next[goal.department_id] = String(goal.volume_goal);
+        return next;
+      });
     }
     setLoadingMonth(false);
   }
 
+  const skipInitialGoalLoad = useRef(true);
+  useEffect(() => {
+    if (skipInitialGoalLoad.current) {
+      skipInitialGoalLoad.current = false;
+      return;
+    }
+    if (!selectedStoreId) return;
+    void loadGoals(year, month, selectedStoreId);
+    // Reload only when the visible store or period changes. Initial data is already loaded.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedStoreId, year, month]);
+
   function handleYearChange(y: number) {
     setYear(y);
-    loadGoals(y, month);
   }
 
   function handleMonthChange(m: number) {
     setMonth(m);
-    loadGoals(year, m);
   }
 
   async function handleSave() {
@@ -155,6 +184,7 @@ function GoalsSection({
     setBanner(null);
 
     const rows = goalDepartments
+      .filter((d) => d.store_id === selectedStoreId)
       .map((d) => {
         const raw = drafts[d.id] ?? "";
         const val = parseInt(raw, 10);
@@ -257,25 +287,24 @@ function GoalsSection({
           </div>
         )}
 
-        {goalDepartments.length === 0 ? (
+        {visibleGoalDepartments.length === 0 ? (
           <p className="text-sm text-muted-foreground">No departments configured yet.</p>
         ) : (
           <div className="space-y-6">
-            {stores.map((store) => {
+            {stores
+              .filter((store) => store.id === selectedStoreId)
+              .map((store) => {
               const depts = deptsByStore.get(store.id) ?? [];
               if (depts.length === 0) return null;
               return (
                 <div key={store.id}>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    {store.name}
-                  </p>
                   <div className="space-y-2">
                     {depts.map((dept) => (
                       <div key={dept.id} className="flex min-w-0 flex-wrap items-center gap-3">
                         <label className="min-w-0 flex-1 basis-40 text-sm text-foreground sm:flex-none sm:basis-auto sm:w-40 sm:shrink-0">
                           {dept.name}
                           {departments.some(
-                            (d) => d.rolls_up_to_department_id === dept.id
+                            (d) => d.rolls_up_to_department_id === dept.id && d.is_active
                           ) ? (
                             <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
                               includes fleet
@@ -304,14 +333,14 @@ function GoalsSection({
           </div>
         )}
 
-        {goalDepartments.length > 0 && !readOnly ? (
+        {visibleGoalDepartments.length > 0 && !readOnly ? (
           <div className="flex justify-end pt-2">
             <Button onClick={handleSave} disabled={saving || loadingMonth} className="min-w-[120px]">
               {saving ? "Saving…" : "Save Goals"}
             </Button>
           </div>
         ) : null}
-        {goalDepartments.length > 0 && readOnly ? (
+        {visibleGoalDepartments.length > 0 && readOnly ? (
           <p className="pt-2 text-xs text-muted-foreground">View only — goals cannot be changed.</p>
         ) : null}
       </CardContent>
@@ -323,6 +352,7 @@ function GoalsSection({
 
 interface AcquisitionSourcesSectionProps {
   stores: StoreRow[];
+  selectedStoreId: string;
   departments: DeptRow[];
   initialSources: SourceRow[];
   initialLinks: SourceDepartmentLink[];
@@ -331,6 +361,7 @@ interface AcquisitionSourcesSectionProps {
 
 function AcquisitionSourcesSection({
   stores,
+  selectedStoreId,
   departments,
   initialSources,
   initialLinks,
@@ -339,9 +370,14 @@ function AcquisitionSourcesSection({
   const [sources, setSources] = useState<SourceRow[]>(initialSources);
   const [links, setLinks] = useState<SourceDepartmentLink[]>(initialLinks);
   const [addName, setAddName] = useState("");
-  const [addStoreId, setAddStoreId] = useState(stores.length === 1 ? stores[0].id : "");
+  const [addStoreId, setAddStoreId] = useState(selectedStoreId);
   const [addDepartmentId, setAddDepartmentId] = useState("");
   const [adding, setAdding] = useState(false);
+
+  useEffect(() => {
+    setAddStoreId(selectedStoreId);
+    setAddDepartmentId("");
+  }, [selectedStoreId]);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [banner, setBanner] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
 
@@ -351,7 +387,7 @@ function AcquisitionSourcesSection({
     [departments]
   );
   const departmentsForStore = addStoreId
-    ? goalDepartments.filter((d) => d.store_id === addStoreId)
+    ? goalDepartments.filter((d) => d.store_id === addStoreId && d.is_active)
     : [];
 
   async function handleAdd() {
@@ -361,6 +397,15 @@ function AcquisitionSourcesSection({
     }
     const name = addName.trim();
     if (!name || !addStoreId || !addDepartmentId) return;
+    const department = departmentsForStore.find((d) => d.id === addDepartmentId);
+    if (
+      addStoreId !== selectedStoreId ||
+      !stores.some((store) => store.id === addStoreId) ||
+      !department
+    ) {
+      setBanner({ kind: "err", msg: "Choose a department for this store." });
+      return;
+    }
     setAdding(true);
     setBanner(null);
 
@@ -397,7 +442,6 @@ function AcquisitionSourcesSection({
       { acquisition_source_id: newSource.id, department_id: addDepartmentId },
     ]);
     setAddName("");
-    if (stores.length > 1) setAddStoreId("");
     setAddDepartmentId("");
     setBanner({
       kind: "ok",
@@ -434,7 +478,8 @@ function AcquisitionSourcesSection({
   }
 
   const sourceById = new Map(sources.map((s) => [s.id, s]));
-  const activeCount = sources.filter((s) => s.active).length;
+  const visibleSources = sources.filter((source) => source.store_id === selectedStoreId);
+  const activeCount = visibleSources.filter((source) => source.active).length;
 
   return (
     <Card className="app-panel border-border shadow-none">
@@ -469,26 +514,6 @@ function AcquisitionSourcesSection({
 
         {!readOnly ? (
           <div className="flex flex-wrap items-end gap-2">
-            {stores.length > 1 && (
-              <div className="space-y-1">
-                <label className={LBL}>Store</label>
-                <select
-                  value={addStoreId}
-                  onChange={(e) => {
-                    setAddStoreId(e.target.value);
-                    setAddDepartmentId("");
-                  }}
-                  className={SEL}
-                >
-                  <option value="">Select store</option>
-                  {stores.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
             <div className="space-y-1">
               <label className={LBL}>Department</label>
               <select
@@ -527,27 +552,27 @@ function AcquisitionSourcesSection({
           <p className="text-xs text-muted-foreground">View only — sources cannot be changed.</p>
         )}
 
-        {sources.length === 0 ? (
+        {visibleSources.length === 0 ? (
           <p className="text-sm text-muted-foreground">No acquisition sources yet. Add one above.</p>
         ) : (
           <div className="space-y-4">
-            {stores.map((store) => {
+            {stores
+              .filter((store) => store.id === selectedStoreId)
+              .map((store) => {
               const storeDepts = goalDepartments.filter((d) => d.store_id === store.id);
               if (storeDepts.length === 0) return null;
               return (
                 <div key={store.id}>
-                  {stores.length > 1 && (
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      {store.name}
-                    </p>
-                  )}
                   <div className="space-y-3">
                     {storeDepts.map((dept) => {
                       const deptLinks = links.filter((l) => l.department_id === dept.id);
                       if (deptLinks.length === 0) return null;
                       return (
                         <div key={dept.id}>
-                          <p className="mb-1.5 text-xs font-medium text-muted-foreground">{dept.name}</p>
+                          <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+                            {dept.name}
+                            {!dept.is_active ? " (inactive)" : ""}
+                          </p>
                           <div className="divide-y divide-border rounded-xl border border-border">
                             {deptLinks.map((link) => {
                               const item = sourceById.get(link.acquisition_source_id);
@@ -612,6 +637,7 @@ interface RosterSectionProps {
   title: string;
   table: string;
   stores: StoreRow[];
+  selectedStoreId: string;
   initialItems: PersonRow[];
   emptyMessage?: string;
   hasActive?: boolean; // false for acquisition_sources (no active column)
@@ -622,6 +648,7 @@ function RosterSection({
   title,
   table,
   stores,
+  selectedStoreId,
   initialItems,
   emptyMessage,
   hasActive = true,
@@ -629,10 +656,14 @@ function RosterSection({
 }: RosterSectionProps) {
   const [items, setItems] = useState<PersonRow[]>(initialItems);
   const [addName, setAddName] = useState("");
-  const [addStoreId, setAddStoreId] = useState(stores.length === 1 ? stores[0].id : "");
+  const [addStoreId, setAddStoreId] = useState(selectedStoreId);
   const [adding, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [banner, setBanner] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
+
+  useEffect(() => {
+    setAddStoreId(selectedStoreId);
+  }, [selectedStoreId]);
 
   const storeById = new Map(stores.map((s) => [s.id, s.name]));
 
@@ -643,6 +674,10 @@ function RosterSection({
     }
     const name = addName.trim();
     if (!name || !addStoreId) return;
+    if (addStoreId !== selectedStoreId || !stores.some((store) => store.id === addStoreId)) {
+      setBanner({ kind: "err", msg: "That store is not available." });
+      return;
+    }
     setSaving(true);
     setBanner(null);
 
@@ -662,7 +697,6 @@ function RosterSection({
       const newItem = data as unknown as PersonRow;
       setItems((prev) => [...prev, newItem].sort((a, b) => a.name.localeCompare(b.name)));
       setAddName("");
-      if (stores.length > 1) setAddStoreId("");
       setBanner({ kind: "ok", msg: `${name} added to ${storeById.get(addStoreId) ?? "store"}.` });
     }
     setSaving(false);
@@ -700,15 +734,10 @@ function RosterSection({
     setTogglingId(null);
   }
 
-  // Group by store for display
-  const byStore = new Map<string, PersonRow[]>();
-  for (const item of items) {
-    const arr = byStore.get(item.store_id) ?? [];
-    arr.push(item);
-    byStore.set(item.store_id, arr);
-  }
-
-  const activeCount = hasActive ? items.filter((i) => i.active).length : items.length;
+  const visibleItems = items.filter((item) => item.store_id === selectedStoreId);
+  const activeCount = hasActive
+    ? visibleItems.filter((item) => item.active).length
+    : visibleItems.length;
 
   return (
     <Card className="app-panel border-border shadow-none">
@@ -744,23 +773,6 @@ function RosterSection({
         {/* Add form */}
         {!readOnly ? (
         <div className="flex flex-wrap items-end gap-2">
-          {stores.length > 1 && (
-            <div className="space-y-1">
-              <label className={LBL}>Store</label>
-              <select
-                value={addStoreId}
-                onChange={(e) => setAddStoreId(e.target.value)}
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="">Select store</option>
-                {stores.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
           <div className="min-w-[200px] flex-1 space-y-1">
             <label className={LBL}>Name</label>
             <Input
@@ -784,68 +796,53 @@ function RosterSection({
         )}
 
         {/* List */}
-        {items.length === 0 ? (
+        {visibleItems.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             {emptyMessage ?? `No ${title.toLowerCase()} yet. Add one above.`}
           </p>
         ) : (
-          <div className="space-y-4">
-            {stores.map((store) => {
-              const storeItems = byStore.get(store.id) ?? [];
-              if (storeItems.length === 0) return null;
+          <div className="divide-y divide-border rounded-xl border border-border">
+            {visibleItems.map((item) => {
+              const isActive = !hasActive || item.active;
               return (
-                <div key={store.id}>
-                  {stores.length > 1 && (
-                    <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      {store.name}
-                    </p>
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between gap-3 px-4 py-2.5"
+                >
+                  <span
+                    className={`text-sm font-medium ${
+                      isActive ? "text-foreground" : "text-muted-foreground line-through"
+                    }`}
+                  >
+                    {item.name}
+                  </span>
+                  {hasActive && !readOnly && (
+                    <button
+                      type="button"
+                      disabled={togglingId === item.id}
+                      onClick={() => handleToggleActive(item)}
+                      className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
+                        isActive
+                          ? "text-muted-foreground hover:bg-[color-mix(in_srgb,var(--da-red)_12%,transparent)] hover:text-red-600"
+                          : "text-emerald-600 hover:bg-[color-mix(in_srgb,var(--da-green)_12%,transparent)]"
+                      }`}
+                    >
+                      {isActive ? (
+                        <>
+                          <UserMinus className="h-3.5 w-3.5" />
+                          Deactivate
+                        </>
+                      ) : (
+                        <>
+                          <UserCheck className="h-3.5 w-3.5" />
+                          Reactivate
+                        </>
+                      )}
+                    </button>
                   )}
-                  <div className="divide-y divide-border rounded-xl border border-border">
-                    {storeItems.map((item) => {
-                      const isActive = !hasActive || item.active;
-                      return (
-                        <div
-                          key={item.id}
-                          className="flex items-center justify-between gap-3 px-4 py-2.5"
-                        >
-                          <span
-                            className={`text-sm font-medium ${
-                              isActive ? "text-foreground" : "text-muted-foreground line-through"
-                            }`}
-                          >
-                            {item.name}
-                          </span>
-                          {hasActive && !readOnly && (
-                            <button
-                              type="button"
-                              disabled={togglingId === item.id}
-                              onClick={() => handleToggleActive(item)}
-                              className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
-                                isActive
-                                  ? "text-muted-foreground hover:bg-[color-mix(in_srgb,var(--da-red)_12%,transparent)] hover:text-red-600"
-                                  : "text-emerald-600 hover:bg-[color-mix(in_srgb,var(--da-green)_12%,transparent)]"
-                              }`}
-                            >
-                              {isActive ? (
-                                <>
-                                  <UserMinus className="h-3.5 w-3.5" />
-                                  Deactivate
-                                </>
-                              ) : (
-                                <>
-                                  <UserCheck className="h-3.5 w-3.5" />
-                                  Reactivate
-                                </>
-                              )}
-                            </button>
-                          )}
-                          {hasActive && readOnly && !isActive ? (
-                            <span className="text-xs text-muted-foreground">Inactive</span>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </div>
+                  {hasActive && readOnly && !isActive ? (
+                    <span className="text-xs text-muted-foreground">Inactive</span>
+                  ) : null}
                 </div>
               );
             })}
@@ -958,6 +955,39 @@ function AcquireBuyersSection({
   );
 }
 
+function StorePills({
+  stores,
+  selectedId,
+  onSelect,
+}: {
+  stores: StoreRow[];
+  selectedId: string;
+  onSelect: (storeId: string) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5" role="group" aria-label="Stores">
+      {stores.map((store) => {
+        const active = store.id === selectedId;
+        return (
+          <button
+            key={store.id}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onSelect(store.id)}
+            className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+              active
+                ? "bg-[var(--da-blue)] text-white"
+                : "bg-muted text-muted-foreground hover:bg-[var(--da-line)]"
+            }`}
+          >
+            {store.name}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Main SetupClient ──────────────────────────────────────────────────────────
 
 export default function SetupClient({
@@ -975,8 +1005,25 @@ export default function SetupClient({
   onboardingChecklist = {},
   showOnboardingChecklist = false,
   readOnly = false,
+  canManageDepartments = false,
 }: Props) {
   const [pending, startTransition] = useTransition();
+  const [departmentRows, setDepartmentRows] = useState<DeptRow[]>(departments);
+
+  function handleDepartmentSaved(saved: DeptRow) {
+    setDepartmentRows((prev) => {
+      const next = prev.some((d) => d.id === saved.id)
+        ? prev.map((d) => (d.id === saved.id ? saved : d))
+        : [...prev, saved];
+      return next.sort((a, b) => a.name.localeCompare(b.name));
+    });
+  }
+  // Selection is limited to stores the server already authorized for this user.
+  const [selectedStoreId, setSelectedStoreId] = useState(() => stores[0]?.id ?? "");
+  const selectedStore = useMemo(
+    () => stores.find((store) => store.id === selectedStoreId) ?? stores[0] ?? null,
+    [stores, selectedStoreId]
+  );
   const inferred = useMemo(
     () => ({
       salespeople: salespeople.some((s) => s.active !== false) || Boolean(onboardingChecklist.salespeople),
@@ -1013,9 +1060,24 @@ export default function SetupClient({
         <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">Setup & Config</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {readOnly
-            ? "Browse stores, goals, and roster settings. Changes are disabled in this session."
-            : "Manage stores, monthly goals, salespeople, acquisition sources, and finance managers."}
+            ? "Select a store to browse its departments, goals, and roster. Changes are disabled in this session."
+            : canManageDepartments
+              ? "Select a store to manage its departments, goals, salespeople, acquisition sources, and finance managers."
+              : "Select a store to manage its goals, salespeople, acquisition sources, and finance managers."}
         </p>
+        {stores.length > 0 && selectedStore ? (
+          <div className="mt-4">
+            <StorePills
+              stores={stores}
+              selectedId={selectedStore.id}
+              onSelect={setSelectedStoreId}
+            />
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-muted-foreground">
+            No stores configured. Contact support to add a store.
+          </p>
+        )}
       </section>
 
       {showOnboardingChecklist && !allDone && !readOnly ? (
@@ -1057,61 +1119,49 @@ export default function SetupClient({
         </Card>
       ) : null}
 
-      {/* Section 1: Stores (read-only) */}
-      <Card className="app-panel border-border shadow-none">
-        <CardHeader className="border-border">
-          <CardTitle className="text-lg">Stores</CardTitle>
-        </CardHeader>
-        <CardContent className="pt-4">
-          {stores.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No stores configured. Contact support to add a store.</p>
-          ) : (
-            <div className="divide-y divide-border rounded-xl border border-border">
-              {stores.map((store) => (
-                <div key={store.id} className="flex items-center gap-3 px-4 py-3">
-                  <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span className="text-sm font-medium text-foreground">{store.name}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {selectedStore ? (
+        <DepartmentsSection
+          selectedStoreId={selectedStore.id}
+          departments={departmentRows}
+          canManage={canManageDepartments}
+          onSaved={handleDepartmentSaved}
+        />
+      ) : null}
 
-      {/* Section 2: Monthly Department Goals */}
       <GoalsSection
         stores={stores}
-        departments={departments}
+        selectedStoreId={selectedStore?.id ?? ""}
+        departments={departmentRows}
         initialGoals={initialGoals}
         initialYear={initialYear}
         initialMonth={initialMonth}
         readOnly={readOnly}
       />
 
-      {/* Section 3: Salespeople */}
       <RosterSection
         title="Salespeople"
         table="salespeople"
         stores={stores}
+        selectedStoreId={selectedStore?.id ?? ""}
         initialItems={salespeople}
         hasActive
         readOnly={readOnly}
       />
 
-      {/* Section 4: Acquisition Sources */}
       <AcquisitionSourcesSection
         stores={stores}
-        departments={departments}
+        selectedStoreId={selectedStore?.id ?? ""}
+        departments={departmentRows}
         initialSources={acquisitionSources}
         initialLinks={acquisitionSourceDepartments}
         readOnly={readOnly}
       />
 
-      {/* Section 5: Finance Managers */}
       <RosterSection
         title="Finance Managers"
         table="finance_managers"
         stores={stores}
+        selectedStoreId={selectedStore?.id ?? ""}
         initialItems={financeManagers}
         emptyMessage="No finance managers yet. Add one above to enable F&I tracking on deals."
         hasActive

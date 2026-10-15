@@ -8,6 +8,7 @@ import {
   type CalendarDay,
 } from "@/lib/dashboard/pace";
 import { isAppViewOnly } from "@/lib/impersonation";
+import { departmentsVisibleForPeriod } from "@/lib/departments/rollup";
 import SelectAutoGroupEmptyState from "../SelectAutoGroupEmptyState";
 import CalendarClient from "./CalendarClient";
 
@@ -84,9 +85,8 @@ export default async function CalendarPage({
     storeIds.length
       ? supabase
           .from("departments")
-          .select("id,name,store_id,rolls_up_to_department_id")
+          .select("id,name,store_id,rolls_up_to_department_id,is_active")
           .in("store_id", storeIds)
-          .eq("is_active", true)
           .order("name")
       : Promise.resolve({
           data: [] as {
@@ -94,6 +94,7 @@ export default async function CalendarPage({
             name: string;
             store_id: string;
             rolls_up_to_department_id: string | null;
+            is_active: boolean;
           }[],
         }),
     storeIds.length
@@ -114,14 +115,6 @@ export default async function CalendarPage({
   ]);
 
   const calendarDays = (calendarRes.data ?? []) as CalendarDay[];
-  const departments = (deptsRes.data ?? [])
-    .filter((d) => !isFiDepartment(d.name))
-    .map((d) => ({
-      id: d.id,
-      name: d.name,
-      store_id: d.store_id,
-      rolls_up_to_department_id: d.rolls_up_to_department_id ?? null,
-    }));
 
   const deals = (dealsRes.data ?? [])
     .filter((d) => isBooked(d.status))
@@ -129,6 +122,21 @@ export default async function CalendarPage({
       store_id: d.store_id,
       department_id: d.department_id,
       sale_date: d.sale_date,
+    }));
+
+  const departments = departmentsVisibleForPeriod(
+    (deptsRes.data ?? []).map((d) => ({
+      ...d,
+      rolls_up_to_department_id: d.rolls_up_to_department_id ?? null,
+    })),
+    deals.map((d) => d.department_id)
+  )
+    .filter((d) => !isFiDepartment(d.name))
+    .map((d) => ({
+      id: d.id,
+      name: d.name,
+      store_id: d.store_id,
+      rolls_up_to_department_id: d.rolls_up_to_department_id,
     }));
 
   return (
