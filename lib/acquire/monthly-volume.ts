@@ -1,4 +1,5 @@
 import { effectiveGross, num } from "./cost";
+import { totalPayableGross } from "./reported";
 import { ACQ_COMPLETED_STAGES, type AcqPurchase, type AcqPurchaseStage } from "./types";
 
 export type MonthlyVolumeRow = {
@@ -12,6 +13,11 @@ export type MonthlyVolumeRow = {
   salesCount: number;
   /** Sum of effective gross for sold units in the month (by sold_date). */
   grossTotal: number;
+  /**
+   * Sum of Total Payable Gross (reported front + back + pack + buy fee)
+   * for sold units in the month (by sold_date).
+   */
+  reportedGrossTotal: number;
 };
 
 /**
@@ -42,7 +48,12 @@ function monthLabel(yyyyMm: string): string {
 }
 
 function hasMonthData(row: MonthlyVolumeRow): boolean {
-  return row.purchaseCount > 0 || row.salesCount > 0 || row.grossTotal !== 0;
+  return (
+    row.purchaseCount > 0 ||
+    row.salesCount > 0 ||
+    row.grossTotal !== 0 ||
+    row.reportedGrossTotal !== 0
+  );
 }
 
 /** Last 12 calendar months (oldest → newest). */
@@ -91,13 +102,13 @@ function transferCreditsRetailStore(
 }
 
 /**
- * Purchase / sales unit volume and total gross profit for the last 12 months.
- * Empty months (no purchases, sales, or gross) are omitted.
+ * Purchase / sales unit volume, total gross, and reported (payable) gross for
+ * the last 12 months. Empty months are omitted.
  *
- * A car's own purchase, sale, and front/back gross stay on the buying store.
- * An internal transfer also counts as a sale on the retail store in the month
- * of its retail sold date (falling back to the buying store's sold date), and
- * that store's gross bar includes next-store gross.
+ * A car's own purchase, sale, front/back gross, and reported payable gross stay
+ * on the buying store. An internal transfer also counts as a sale on the retail
+ * store in the month of its retail sold date (falling back to the buying store's
+ * sold date), and that store's total gross bar includes next-store gross.
  */
 export function computeMonthlyPurchaseSalesVolume(
   purchases: AcqPurchase[],
@@ -118,6 +129,7 @@ export function computeMonthlyPurchaseSalesVolume(
       salesTotal: 0,
       salesCount: 0,
       grossTotal: 0,
+      reportedGrossTotal: 0,
     });
   }
 
@@ -143,6 +155,8 @@ export function computeMonthlyPurchaseSalesVolume(
           row.salesTotal += num(p.sold_price);
           const g = effectiveGross(p);
           if (g != null) row.grossTotal += g;
+          const reported = totalPayableGross(p);
+          if (reported != null) row.reportedGrossTotal += reported;
         }
       }
     }

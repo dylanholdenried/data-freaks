@@ -42,6 +42,8 @@ import AcquireVehicleFields, {
   type VehicleCatalogMake,
   type VehicleCatalogModel,
 } from "./AcquireVehicleFields";
+import { storeCardLabel } from "@/lib/acquire/store-labels";
+import CopyableText from "./CopyableText";
 
 const TABS = [
   "Overview",
@@ -310,8 +312,9 @@ export default function PurchaseDetail({
     purchase.trade_allowance != null ? String(purchase.trade_allowance) : ""
   );
 
-  const headerStoreName =
-    (storeId && stores.find((s) => s.id === storeId)?.name) || storeName || "Unassigned";
+  const headerStoreName = storeCardLabel(
+    (storeId && stores.find((s) => s.id === storeId)?.name) || storeName || "Unassigned"
+  );
 
   function parseDraftNum(v: string): number | null {
     const s = v.trim().replace(/[$,]/g, "");
@@ -536,14 +539,17 @@ export default function PurchaseDetail({
       const res = await updateAcquirePurchase(purchase.id, fd);
       if (!res.ok) setError(res.error);
       else {
+        const stageChanged = (res.purchase?.stage ?? stage) !== purchase.stage;
         const saved: AcqPurchase = {
           ...purchase,
           ...(res.purchase ?? {}),
           // Stage change resets dwell time until server refresh recalculates.
-          days_in_step:
-            (res.purchase?.stage ?? stage) !== purchase.stage
-              ? 0
-              : (res.purchase?.days_in_step ?? purchase.days_in_step ?? 0),
+          days_in_step: stageChanged
+            ? 0
+            : (res.purchase?.days_in_step ?? purchase.days_in_step ?? 0),
+          stage_entered_at: stageChanged
+            ? new Date().toISOString()
+            : (purchase.stage_entered_at ?? null),
         };
         onSaved?.(saved);
         onClose();
@@ -569,11 +575,42 @@ export default function PurchaseDetail({
               className="mt-1 truncate text-2xl font-bold leading-tight"
               style={{ fontFamily: "var(--ic-font-display), Barlow Condensed, sans-serif" }}
             >
-              {purchase.stock_number || "—"} · {year || purchase.vehicle_year || "—"} {make || purchase.vehicle_make || ""}{" "}
+              <CopyableText
+                value={purchase.stock_number?.trim() || ""}
+                label="Stock #"
+                className="inline max-w-full truncate align-baseline text-2xl font-bold leading-tight"
+                style={{ fontFamily: "var(--ic-font-display), Barlow Condensed, sans-serif" }}
+                title={
+                  purchase.stock_number?.trim()
+                    ? `Click to copy stock # ${purchase.stock_number.trim()}`
+                    : undefined
+                }
+              >
+                {purchase.stock_number || "—"}
+              </CopyableText>{" "}
+              · {year || purchase.vehicle_year || "—"} {make || purchase.vehicle_make || ""}{" "}
               {model || purchase.vehicle_model || ""}
             </h2>
             <p className="mt-1 text-xs" style={{ color: IC.muted }}>
               {isCompletedStage(stage) ? "Sold age" : "Age"} {age != null ? `${age}d` : "—"}
+            </p>
+            <p className="mt-1 truncate font-mono text-xs tracking-wide" style={{ color: IC.muted }}>
+              <span className="mr-1.5 font-sans text-[10px] font-semibold uppercase tracking-[0.08em]">
+                VIN
+              </span>
+              <CopyableText
+                value={(vin || purchase.vin)?.trim() || ""}
+                label="VIN"
+                className="inline max-w-full truncate align-baseline font-mono text-xs tracking-wide"
+                style={{ color: IC.muted }}
+                title={
+                  (vin || purchase.vin)?.trim()
+                    ? `Click to copy VIN ${(vin || purchase.vin)?.trim()}`
+                    : undefined
+                }
+              >
+                {(vin || purchase.vin)?.trim() || "—"}
+              </CopyableText>
             </p>
             <label className="mt-2 block max-w-xs text-[10px] font-semibold uppercase tracking-wide">
               <span style={{ color: IC.muted }}>Dealership</span>

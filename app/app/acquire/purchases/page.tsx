@@ -127,10 +127,14 @@ export default async function AcquirePurchasesPage({
     }
     const enteredAt = stageEnteredAtByPurchase(basePurchases, eventRows ?? []);
     const now = new Date();
-    purchases = basePurchases.map((p) => ({
-      ...p,
-      days_in_step: daysInStep(enteredAt[p.id] ?? p.created_at, now),
-    }));
+    purchases = basePurchases.map((p) => {
+      const stageEnteredAt = enteredAt[p.id] ?? p.created_at;
+      return {
+        ...p,
+        stage_entered_at: stageEnteredAt,
+        days_in_step: daysInStep(stageEnteredAt, now),
+      };
+    });
   }
 
   if (canViewReported && purchases.length) {

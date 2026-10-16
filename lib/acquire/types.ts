@@ -239,6 +239,11 @@ export type AcqPurchase = {
    * acq_stage_events). Enriched on the purchases page — not a DB column.
    */
   days_in_step?: number | null;
+  /**
+   * ISO timestamp when the purchase entered its current stage. Enriched on
+   * the purchases page for Time in Step (DDHHMM) — not a DB column.
+   */
+  stage_entered_at?: string | null;
 };
 
 export function isCompletedStage(stage: AcqPurchaseStage): boolean {

@@ -95,6 +95,27 @@ export function daysInStep(enteredAt: string | null | undefined, now = new Date(
 }
 
 /**
+ * Time in current stage as DDHHMM with unit labels, e.g. "02d 14h 05m".
+ * Days are at least two digits; hours and minutes are always two digits.
+ */
+export function formatTimeInStep(
+  enteredAt: string | null | undefined,
+  now = new Date()
+): string | null {
+  if (!enteredAt) return null;
+  const start = new Date(enteredAt);
+  if (Number.isNaN(start.getTime())) return null;
+  const totalMinutes = Math.max(0, Math.floor((now.getTime() - start.getTime()) / (1000 * 60)));
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+  const dd = String(days).padStart(2, "0");
+  const hh = String(hours).padStart(2, "0");
+  const mm = String(minutes).padStart(2, "0");
+  return `${dd}d ${hh}h ${mm}m`;
+}
+
+/**
  * Resolve when each purchase entered its current stage from stage events
  * (newest first). Falls back to purchase.created_at.
  */

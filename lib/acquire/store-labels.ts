@@ -1,3 +1,16 @@
+/**
+ * Card / header store label: Jim Butler stores → last word only
+ * (e.g. "Jim Butler Centralia" → "Centralia"). Otherwise full name.
+ */
+export function storeCardLabel(name: string): string {
+  const n = name.trim();
+  if (/^jim\s+butler\b/i.test(n)) {
+    const parts = n.split(/\s+/).filter(Boolean);
+    return parts[parts.length - 1] ?? n;
+  }
+  return n;
+}
+
 /** Compact store labels for Acquire pills (e.g. Jim Butler Centralia → JB CENTRALIA). */
 export function shortStoreLabel(name: string): string {
   const n = name.trim();

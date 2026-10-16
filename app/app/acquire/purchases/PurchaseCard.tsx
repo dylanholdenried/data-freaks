@@ -8,6 +8,7 @@ import {
   effectiveGross,
   formatMoney,
   formatMoneyExact,
+  formatTimeInStep,
   headerAgeDays,
   markup,
   merchCost,
@@ -27,6 +28,8 @@ import { cn } from "@/lib/utils";
 import { updateAcquirePurchaseStage } from "../actions";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { storeCardLabel } from "@/lib/acquire/store-labels";
+import CopyableText from "./CopyableText";
 
 function MetricRow({
   label,
@@ -93,8 +96,9 @@ export function PurchaseCardFace({
   const vehicleAge = isSold
     ? daysBetween(purchase.purchase_date, purchase.sold_date)
     : headerAgeDays(purchase);
-  const daysInStep = purchase.days_in_step;
+  const timeInStep = formatTimeInStep(purchase.stage_entered_at);
   const saleDateLabel = formatSaleDate(purchase.sold_date);
+  const storeLabel = storeCardLabel(storeName);
   const actionItemLabels = missingAcquireActionItems(purchase).map((i) => i.label);
   const actionItems = actionItemLabels.length;
   const cost = merchCost(purchase);
@@ -125,6 +129,7 @@ export function PurchaseCardFace({
           ...purchase,
           ...res.purchase,
           days_in_step: 0,
+          stage_entered_at: new Date().toISOString(),
         });
       } else {
         router.refresh();
@@ -154,17 +159,19 @@ export function PurchaseCardFace({
       <div className="flex w-full min-w-0 flex-col gap-1.5 px-2.5 pb-2.5 pt-3">
         <div className="flex min-w-0 items-start justify-between gap-2">
           <div className="flex min-w-0 max-w-[55%] flex-col items-start gap-1">
-            <div
+            <CopyableText
+              value={stock === "—" ? "" : stock}
+              label="Stock #"
               className="flex min-h-9 max-w-full items-center justify-center break-all rounded-md px-1.5 py-1 text-center text-sm font-bold leading-tight tracking-wide"
               style={{
                 background: colors.badge,
                 color: IC.text,
                 fontFamily: "var(--ic-font-display), Barlow Condensed, sans-serif",
               }}
-              title={stock}
+              title={stock === "—" ? stock : `Click to copy stock # ${stock}`}
             >
               {stock}
-            </div>
+            </CopyableText>
             <p
               className="text-[10px] font-semibold uppercase tracking-[0.08em]"
               style={{ color: IC.muted }}
@@ -197,34 +204,36 @@ export function PurchaseCardFace({
               style={{ color: IC.muted }}
               title={storeName}
             >
-              {storeName}
+              {storeLabel}
             </p>
             <p
               className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]"
               style={{ color: IC.muted }}
             >
-              {isSold ? "Sale Date" : "Days in step"}
+              {isSold ? "Sale Date" : "Time in Step"}
             </p>
             <div
               className="mt-0.5 inline-flex items-center justify-center rounded-md px-2 py-0.5"
               style={{ background: colors.badge, boxShadow: `inset 0 0 0 1px ${colors.stripe}55` }}
-              title={isSold ? saleDateLabel : undefined}
+              title={
+                isSold
+                  ? saleDateLabel
+                  : timeInStep
+                    ? "Days, hours, and minutes in the current step"
+                    : undefined
+              }
             >
               <span
                 className={cn(
                   "font-bold leading-none tabular-nums",
-                  isSold ? "text-sm" : "text-base"
+                  isSold ? "text-sm" : "text-xs sm:text-sm"
                 )}
                 style={{
                   fontFamily: "var(--ic-font-display), Barlow Condensed, sans-serif",
                   color: IC.text,
                 }}
               >
-                {isSold
-                  ? saleDateLabel
-                  : daysInStep != null
-                    ? `${daysInStep}d`
-                    : "—"}
+                {isSold ? saleDateLabel : timeInStep ?? "—"}
               </span>
             </div>
             <p
@@ -262,13 +271,15 @@ export function PurchaseCardFace({
           <p className="break-words text-sm font-semibold leading-snug" title={ymm}>
             {ymm}
           </p>
-          <p
-            className="mt-0.5 truncate font-mono text-[11px] tracking-wide"
+          <CopyableText
+            value={vin === "—" ? "" : vin}
+            label="VIN"
+            className="mt-0.5 block max-w-full truncate font-mono text-[11px] tracking-wide"
             style={{ color: IC.muted }}
-            title={vin}
+            title={vin === "—" ? vin : `Click to copy VIN ${vin}`}
           >
             {vin}
-          </p>
+          </CopyableText>
         </div>
 
         {purchase.on_hold ? (

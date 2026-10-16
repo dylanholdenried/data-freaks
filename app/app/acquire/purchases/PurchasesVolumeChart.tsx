@@ -17,6 +17,8 @@ import { IC } from "@/lib/inventory-command/midmo";
 
 /** Dark green for total gross profit bars. */
 const GROSS_GREEN = "#0D5C38";
+/** Teal for reported (payable) gross bars. */
+const REPORTED_GROSS = "#1F8A7A";
 
 function countLabel(value: unknown): string {
   const n = typeof value === "number" ? value : Number(value);
@@ -74,6 +76,9 @@ function VolumeTooltip({
         <p style={{ color: IC.green }}>Sales: {unitsLabel(row.salesCount)}</p>
         <p style={{ color: GROSS_GREEN }}>
           Total gross: {formatMoney(row.grossTotal)}
+        </p>
+        <p style={{ color: REPORTED_GROSS }}>
+          Reported Gross: {formatMoney(row.reportedGrossTotal)}
         </p>
       </div>
     </div>
@@ -171,6 +176,21 @@ export default function PurchasesVolumeChart({ data }: { data: MonthlyVolumeRow[
             >
               <LabelList
                 dataKey="grossTotal"
+                position="top"
+                formatter={grossLabel}
+                style={{ fill: IC.muted, fontSize: 9 }}
+              />
+            </Bar>
+            <Bar
+              yAxisId="gross"
+              dataKey="reportedGrossTotal"
+              name="Reported Gross"
+              fill={REPORTED_GROSS}
+              radius={[3, 3, 0, 0]}
+              maxBarSize={24}
+            >
+              <LabelList
+                dataKey="reportedGrossTotal"
                 position="top"
                 formatter={grossLabel}
                 style={{ fill: IC.muted, fontSize: 9 }}
