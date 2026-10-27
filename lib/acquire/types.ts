@@ -13,7 +13,11 @@ export const ACQ_PIPELINE_STAGES = [
   "arbitration",
 ] as const;
 
-export const ACQ_COMPLETED_STAGES = ["sold", "arbitration_complete"] as const;
+export const ACQ_COMPLETED_STAGES = [
+  "sold",
+  "arbitration_complete",
+  "seller_unwind",
+] as const;
 
 /** Active queue includes Demo (not a completed exit). */
 export const ACQ_ACTIVE_STAGES = [...ACQ_PIPELINE_STAGES, "demo"] as const;
@@ -28,6 +32,17 @@ export const ACQ_STAGES = [
 export type AcqPurchaseStage = (typeof ACQ_STAGES)[number];
 
 export const ACQ_EXIT_STAGES = ACQ_COMPLETED_STAGES;
+
+/**
+ * Stages not expected on the daily inventory export — missing-from-inventory
+ * flags skip these (plus On Hold cars).
+ */
+export const ACQ_INVENTORY_EXPORT_EXEMPT_STAGES = [
+  "sold",
+  "arbitration_complete",
+  "seller_unwind",
+  "wholesale",
+] as const;
 
 export const ACQ_EXIT_STRATEGIES = [
   "prime",
@@ -61,6 +76,7 @@ export const ACQ_STAGE_LABELS: Record<AcqPurchaseStage, string> = {
   arbitration: "Arbitration",
   sold: "Sold",
   arbitration_complete: "Arbitration Complete",
+  seller_unwind: "Seller Unwind",
   demo: "Demo",
 };
 
@@ -129,6 +145,7 @@ export const ACQ_STAGE_COLORS: Record<AcqPurchaseStage, AcqCardTheme> = {
   arbitration: { stripe: "#EF4444", glow: "#2a1414", badge: "#7a2a2a" },
   sold: { stripe: "#1FA96A", glow: "#0c1f16", badge: "#0d5c38" },
   arbitration_complete: { stripe: "#71717a", glow: "#0c0c0e", badge: "#27272a" },
+  seller_unwind: { stripe: "#A78BFA", glow: "#1a1428", badge: "#4c3a7a" },
   demo: { stripe: "#A1A1AA", glow: "#0c0c0e", badge: "#27272a" },
 };
 

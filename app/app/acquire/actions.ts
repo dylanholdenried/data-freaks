@@ -20,6 +20,11 @@ import {
   type AcqSourceType,
 } from "@/lib/acquire/types";
 import { nudgePurchasesToPendingSale } from "@/lib/acquire/pending-sale";
+import {
+  buildPriceHistoryEvents,
+  type PriceHistoryEvent,
+  type PriceHistoryPoint,
+} from "@/lib/acquire/price-history";
 
 export type AcqDuplicateVinMatch = Pick<
   AcqPurchase,
@@ -896,6 +901,130 @@ export async function bulkUploadAcquirePurchasesAction(
     return {
       ok: false,
       error: e instanceof Error ? e.message : "Bulk upload failed",
+    };
+  }
+}
+
+/**
+ * Cost / website-price history for a purchase, reconstructed from daily
+ * inventory snapshots for its store + stock number.
+ */
+export async function getAcquirePurchasePriceHistory(
+  purchaseId: string
+): Promise<
+  | { ok: true; events: PriceHistoryEvent[]; stockNumber: string | null; storeId: string | null }
+  | { ok: false; error: string }
+> {
+  const supabase = createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in" };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, dealer_group_id, role, status")
+    .or(profileMatchAuthUserId(user.id))
+    .maybeSingle();
+  if (!profile || profile.status !== "active") {
+    return { ok: false, error: "Profile inactive" };
+  }
+
+  const { data: purchase, error: purchaseError } = await supabase
+    .from("acq_purchases")
+    .select("id, store_id, stock_number, dealer_group_id")
+    .eq("id", purchaseId)
+    .maybeSingle();
+  if (purchaseError) return { ok: false, error: purchaseError.message };
+  if (!purchase) return { ok: false, error: "Purchase not found" };
+
+  // Purchase SELECT already enforces store/group RLS — no extra store scan needed.
+
+  const stock = (purchase.stock_number ?? "").trim();
+  if (!purchase.store_id || !stock) {
+    return {
+      ok: true,
+      events: [],
+      stockNumber: purchase.stock_number,
+      storeId: purchase.store_id,
+    };
+  }
+
+  try {
+    const stockKey = stock.toUpperCase();
+    const storeId = purchase.store_id;
+
+    // 1) Pull this stock's unit rows (indexed) — do NOT filter on embedded
+    //    snapshot columns in PostgREST (that path hung in the browser).
+    const stockVariants = Array.from(new Set([stock, stockKey, stock.toLowerCase()]));
+    const { data: unitRows, error: unitsError } = await supabase
+      .from("inv_units")
+      .select("snapshot_id, stk, cost, price")
+      .in("stk", stockVariants)
+      .limit(500);
+    if (unitsError) return { ok: false, error: unitsError.message };
+
+    const matchedUnits = (unitRows ?? []).filter(
+      (u) => (u.stk ?? "").trim().toUpperCase() === stockKey
+    );
+    if (!matchedUnits.length) {
+      return {
+        ok: true,
+        events: [],
+        stockNumber: purchase.stock_number,
+        storeId: purchase.store_id,
+      };
+    }
+
+    // 2) Resolve snapshot dates for those rows, scoped to this store.
+    const snapIds = Array.from(new Set(matchedUnits.map((u) => u.snapshot_id as string)));
+    const { data: snaps, error: snapError } = await supabase
+      .from("inv_snapshots")
+      .select("id, store_id, snapshot_date, created_at")
+      .eq("store_id", storeId)
+      .in("id", snapIds)
+      .order("snapshot_date", { ascending: true })
+      .order("created_at", { ascending: true });
+    if (snapError) return { ok: false, error: snapError.message };
+
+    const snapById = new Map(
+      (snaps ?? []).map((s) => [
+        s.id as string,
+        {
+          date: String(s.snapshot_date).slice(0, 10),
+          created_at: String(s.created_at ?? ""),
+        },
+      ])
+    );
+
+    const dated: { date: string; created_at: string; cost: number | null; price: number | null }[] =
+      [];
+    for (const u of matchedUnits) {
+      const snap = snapById.get(u.snapshot_id as string);
+      if (!snap) continue; // other store or inaccessible snapshot
+      dated.push({
+        date: snap.date,
+        created_at: snap.created_at,
+        cost: u.cost == null ? null : Number(u.cost),
+        price: u.price == null ? null : Number(u.price),
+      });
+    }
+    dated.sort(
+      (a, b) => a.date.localeCompare(b.date) || a.created_at.localeCompare(b.created_at)
+    );
+
+    return {
+      ok: true,
+      events: buildPriceHistoryEvents(
+        dated.map((p) => ({ date: p.date, cost: p.cost, price: p.price }))
+      ),
+      stockNumber: purchase.stock_number,
+      storeId: purchase.store_id,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Price history failed to load",
     };
   }
 }

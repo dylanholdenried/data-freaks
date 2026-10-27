@@ -190,9 +190,9 @@ export default function PerformanceClient({
 
       <IcPanel
         title="Reconditioning by store"
-        note="Units with actual recon entered · variance = actual − estimate"
+        note="Blank recon/frontline fields omitted from averages (e.g. wholesale exits)"
       >
-        <div className="mb-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="mb-3 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
           <IcKpi
             label="Avg recon / unit"
             value={formatMoney(recon.total.avgRecon)}
@@ -219,9 +219,27 @@ export default function PerformanceClient({
             label="Over / under estimate"
             value={`${recon.total.overCount} / ${recon.total.underCount}`}
           />
+          <IcKpi
+            label="Avg days in recon"
+            value={
+              recon.total.avgDaysInRecon != null
+                ? `${recon.total.avgDaysInRecon.toFixed(1)}d`
+                : "—"
+            }
+            sub={`${recon.total.daysInReconCount} units with delivery + frontline`}
+          />
+          <IcKpi
+            label="Avg time to line"
+            value={
+              recon.total.avgTimeToLine != null
+                ? `${recon.total.avgTimeToLine.toFixed(1)}d`
+                : "—"
+            }
+            sub={`${recon.total.timeToLineCount} units with purchase + frontline`}
+          />
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left text-xs">
+          <table className="w-full min-w-[900px] text-left text-xs">
             <thead>
               <tr style={{ color: IC.muted }}>
                 <th className="px-2 py-2 font-semibold">Store</th>
@@ -234,13 +252,15 @@ export default function PerformanceClient({
                 <th className="px-2 py-2 font-semibold">Avg vs est</th>
                 <th className="px-2 py-2 font-semibold">Avg vs est %</th>
                 <th className="px-2 py-2 font-semibold">Over / Under</th>
+                <th className="px-2 py-2 font-semibold">Avg days recon</th>
+                <th className="px-2 py-2 font-semibold">Avg time to line</th>
               </tr>
             </thead>
             <tbody>
               {recon.rows.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-2 py-6 text-center" style={{ color: IC.muted }}>
-                    No actual recon costs entered yet.
+                  <td colSpan={12} className="px-2 py-6 text-center" style={{ color: IC.muted }}>
+                    No recon costs or frontline dates entered yet.
                   </td>
                 </tr>
               ) : (
@@ -277,6 +297,12 @@ export default function PerformanceClient({
                       </td>
                       <td className="px-2 py-2 tabular-nums">
                         {row.overCount} / {row.underCount}
+                      </td>
+                      <td className="px-2 py-2 tabular-nums">
+                        {row.avgDaysInRecon != null ? `${row.avgDaysInRecon.toFixed(1)}d` : "—"}
+                      </td>
+                      <td className="px-2 py-2 tabular-nums">
+                        {row.avgTimeToLine != null ? `${row.avgTimeToLine.toFixed(1)}d` : "—"}
                       </td>
                     </tr>
                   );

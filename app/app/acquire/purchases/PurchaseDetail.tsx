@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { IC } from "@/lib/inventory-command/midmo";
 import {
   ACQ_EXIT_STRATEGIES,
@@ -32,8 +32,10 @@ import {
   actionItemCountsByTab,
   missingAcquireActionItems,
   type AcqActionItemKey,
+  type AcqActionItemTab,
 } from "@/lib/acquire/action-items";
-import { updateAcquirePurchase } from "../actions";
+import { getAcquirePurchasePriceHistory, updateAcquirePurchase } from "../actions";
+import type { PriceHistoryEvent } from "@/lib/acquire/price-history";
 import { reportedCommission, totalPayableGross } from "@/lib/acquire/reported";
 import { decodeVin, VinDecodeError } from "@/lib/vehicle";
 import { Loader2, X } from "lucide-react";
@@ -52,10 +54,107 @@ const TABS = [
   "Recon",
   "Merchandising",
   "Exit",
+  "Price History",
   "Reported",
 ] as const;
 
+const ACTION_ITEM_TABS = new Set<string>([
+  "Overview",
+  "Acquisition",
+  "Books",
+  "Recon",
+  "Merchandising",
+  "Exit",
+] satisfies AcqActionItemTab[]);
+
 type Tab = (typeof TABS)[number];
+
+/** Format ISO date (YYYY-MM-DD) as MM/DD/YYYY. */
+function formatHistoryDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso.trim());
+  if (!m) return "—";
+  return `${m[2]}/${m[3]}/${m[1]}`;
+}
+
+function PriceHistoryTable({
+  title,
+  events,
+  field,
+}: {
+  title: string;
+  events: PriceHistoryEvent[];
+  field: "cost" | "price";
+}) {
+  return (
+    <div>
+      <p
+        className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em]"
+        style={{ color: IC.muted }}
+      >
+        {title}
+      </p>
+      {!events.length ? (
+        <p
+          className="rounded-lg border px-3 py-4 text-center text-xs"
+          style={{ borderColor: IC.border, color: IC.muted }}
+        >
+          No {field === "cost" ? "cost" : "website price"} changes yet.
+        </p>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border" style={{ borderColor: IC.border }}>
+          <table className="w-full min-w-[360px] text-left text-xs">
+            <thead>
+              <tr style={{ color: IC.muted, background: IC.rowAlt }}>
+                <th className="px-3 py-2 font-semibold">Date</th>
+                <th className="px-3 py-2 font-semibold">From</th>
+                <th className="px-3 py-2 font-semibold">To</th>
+                <th className="px-3 py-2 font-semibold">Change</th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.map((ev, idx) => {
+                const tone =
+                  ev.delta == null || ev.delta === 0
+                    ? IC.muted
+                    : field === "cost"
+                      ? ev.delta > 0
+                        ? IC.red
+                        : IC.green
+                      : ev.delta > 0
+                        ? IC.green
+                        : IC.orange;
+                return (
+                  <tr
+                    key={`${ev.date}-${ev.field}-${idx}`}
+                    style={{ borderTop: `1px solid ${IC.line}` }}
+                  >
+                    <td className="px-3 py-2 tabular-nums whitespace-nowrap">
+                      {formatHistoryDate(ev.date)}
+                    </td>
+                    <td className="px-3 py-2 tabular-nums">
+                      {ev.from == null ? "—" : formatMoney(ev.from)}
+                    </td>
+                    <td className="px-3 py-2 tabular-nums font-semibold">
+                      {ev.to == null ? "—" : formatMoney(ev.to)}
+                    </td>
+                    <td className="px-3 py-2 tabular-nums font-semibold" style={{ color: tone }}>
+                      {ev.from == null && ev.to != null
+                        ? "Set"
+                        : ev.delta == null
+                          ? "—"
+                          : formatDelta(ev.delta)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Field({
   label,
@@ -223,6 +322,9 @@ export default function PurchaseDetail({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [decoding, setDecoding] = useState(false);
+  const [priceHistory, setPriceHistory] = useState<PriceHistoryEvent[] | null>(null);
+  const [priceHistoryError, setPriceHistoryError] = useState<string | null>(null);
+  const [priceHistoryLoading, setPriceHistoryLoading] = useState(false);
   const [storeId, setStoreId] = useState(purchase.store_id ?? "");
   const [vin, setVin] = useState(purchase.vin ?? "");
   const [year, setYear] = useState(purchase.vehicle_year != null ? String(purchase.vehicle_year) : "");
@@ -479,6 +581,38 @@ export default function PurchaseDetail({
     () => new Set<AcqActionItemKey>(missingItems.map((i) => i.key)),
     [missingItems]
   );
+
+  useEffect(() => {
+    if (tab !== "Price History") return;
+
+    let cancelled = false;
+    setPriceHistory(null);
+    setPriceHistoryLoading(true);
+    setPriceHistoryError(null);
+
+    void getAcquirePurchasePriceHistory(purchase.id)
+      .then((res) => {
+        if (cancelled) return;
+        if (!res.ok) {
+          setPriceHistoryError(res.error);
+          setPriceHistory([]);
+          return;
+        }
+        setPriceHistory(res.events);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setPriceHistoryError(e instanceof Error ? e.message : "Price history failed to load");
+        setPriceHistory([]);
+      })
+      .finally(() => {
+        if (!cancelled) setPriceHistoryLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, purchase.id]);
   const isAlert = (key: AcqActionItemKey) => alertKeys.has(key);
 
   async function handleDecode(target: "vehicle" | "trade") {
@@ -785,7 +919,9 @@ export default function PurchaseDetail({
 
         <div className="flex shrink-0 gap-1 overflow-x-auto border-b px-2 py-2" style={{ borderColor: IC.border }}>
           {TABS.filter((t) => canViewReported || t !== "Reported").map((t) => {
-            const count = t === "Reported" ? 0 : tabCounts[t];
+            const count = ACTION_ITEM_TABS.has(t)
+              ? tabCounts[t as AcqActionItemTab]
+              : 0;
             const hasActions = count > 0;
             return (
               <button
@@ -1084,6 +1220,61 @@ export default function PurchaseDetail({
                 </div>
               ) : null}
             </div>
+          </div>
+
+          <div className={tab === "Price History" ? "space-y-4" : "hidden"}>
+            <p className="text-xs leading-relaxed" style={{ color: IC.muted }}>
+              Cost and website price from each daily inventory upload. Use this to spot unexpected
+              cost adds or price moves.
+            </p>
+            <div
+              className="grid grid-cols-2 gap-2 rounded-lg border px-3 py-2"
+              style={{ borderColor: IC.border, background: IC.rowAlt }}
+            >
+              <div>
+                <p className="text-[10px] uppercase tracking-wide" style={{ color: IC.muted }}>
+                  Current cost
+                </p>
+                <p className="text-sm font-semibold tabular-nums">{formatMoney(merchCost(purchase))}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wide" style={{ color: IC.muted }}>
+                  Current website price
+                </p>
+                <p className="text-sm font-semibold tabular-nums">
+                  {formatMoney(websitePrice(purchase))}
+                </p>
+              </div>
+            </div>
+            {priceHistoryLoading ? (
+              <p className="flex items-center gap-2 py-6 text-sm" style={{ color: IC.muted }}>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading price history…
+              </p>
+            ) : priceHistoryError ? (
+              <p className="py-6 text-center text-sm" style={{ color: IC.red }}>
+                {priceHistoryError}
+              </p>
+            ) : !priceHistory?.length ? (
+              <p className="py-6 text-center text-sm" style={{ color: IC.muted }}>
+                {!purchase.store_id || !purchase.stock_number?.trim()
+                  ? "Assign a store and stock number to track inventory cost and price history."
+                  : "No cost or website price changes found in inventory uploads for this stock."}
+              </p>
+            ) : (
+              <div className="space-y-4">
+                <PriceHistoryTable
+                  title="Website price changes"
+                  events={priceHistory.filter((ev) => ev.field === "price")}
+                  field="price"
+                />
+                <PriceHistoryTable
+                  title="Cost changes"
+                  events={priceHistory.filter((ev) => ev.field === "cost")}
+                  field="cost"
+                />
+              </div>
+            )}
           </div>
 
           {canViewReported ? (

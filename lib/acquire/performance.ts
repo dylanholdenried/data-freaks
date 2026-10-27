@@ -1,6 +1,5 @@
-import { allInCost, effectiveGross, num } from "./cost";
+import { allInCost, daysBetween, effectiveGross, num } from "./cost";
 import {
-  ACQ_COMPLETED_STAGES,
   ACQ_EXIT_STRATEGIES,
   ACQ_EXIT_STRATEGY_LABELS,
   ACQ_SOURCE_LABELS,
@@ -71,6 +70,12 @@ export type ReconStoreRow = {
   avgVariancePct: number | null;
   overCount: number;
   underCount: number;
+  /** Units with delivery + frontline dates (blank wholesale exits omitted) */
+  daysInReconCount: number;
+  avgDaysInRecon: number | null;
+  /** Units with purchase + frontline dates (blank wholesale exits omitted) */
+  timeToLineCount: number;
+  avgTimeToLine: number | null;
 };
 
 export type AcquirePerformance = {
@@ -270,6 +275,7 @@ function reconRow(
   storeName: string,
   list: AcqPurchase[]
 ): ReconStoreRow {
+  // Blank recon/frontline fields are omitted — wholesale exits often leave these empty.
   const actuals = list
     .filter((p) => p.recon_cost != null)
     .map((p) => num(p.recon_cost));
@@ -280,6 +286,12 @@ function reconRow(
   const variancePcts = compared
     .filter((p) => num(p.recon_estimate) > 0)
     .map((p) => (num(p.recon_cost) - num(p.recon_estimate)) / num(p.recon_estimate));
+  const daysInRecon = list
+    .map((p) => daysBetween(p.delivery_date, p.frontline_date))
+    .filter((d): d is number => d != null);
+  const timeToLine = list
+    .map((p) => daysBetween(p.purchase_date, p.frontline_date))
+    .filter((d): d is number => d != null);
   return {
     storeId,
     storeName,
@@ -293,12 +305,16 @@ function reconRow(
     avgVariancePct: avg(variancePcts),
     overCount: variances.filter((v) => v > 0).length,
     underCount: variances.filter((v) => v < 0).length,
+    daysInReconCount: daysInRecon.length,
+    avgDaysInRecon: avg(daysInRecon),
+    timeToLineCount: timeToLine.length,
+    avgTimeToLine: avg(timeToLine),
   };
 }
 
 /**
- * Recon cost by store: average actual recon, and how actuals compare to the
- * acquisition-time estimate. Returns per-store rows plus an all-stores total.
+ * Recon cost and time by store. Blank recon costs / frontline dates are left out
+ * of averages (wholesale exits may omit them). Returns per-store rows plus total.
  */
 export function computeReconByStore(
   purchases: AcqPurchase[],
@@ -319,7 +335,9 @@ export function computeReconByStore(
   if (unassigned?.length) rows.push(reconRow(null, "Unassigned", unassigned));
 
   return {
-    rows: rows.filter((r) => r.reconCount > 0),
+    rows: rows.filter(
+      (r) => r.reconCount > 0 || r.daysInReconCount > 0 || r.timeToLineCount > 0
+    ),
     total: reconRow(null, "All selected stores", purchases),
   };
 }

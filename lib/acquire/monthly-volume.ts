@@ -1,6 +1,6 @@
 import { effectiveGross, num } from "./cost";
 import { totalPayableGross } from "./reported";
-import { ACQ_COMPLETED_STAGES, type AcqPurchase, type AcqPurchaseStage } from "./types";
+import type { AcqPurchase, AcqPurchaseStage } from "./types";
 
 export type MonthlyVolumeRow = {
   /** YYYY-MM */
@@ -79,8 +79,9 @@ function creditTransferSale(
   if (nextStoreGross != null) row.grossTotal += num(nextStoreGross);
 }
 
+/** Stages that count as sales / gross on the volume chart (not seller unwind). */
 function isSoldStage(stage: AcqPurchaseStage | string): boolean {
-  return (ACQ_COMPLETED_STAGES as readonly string[]).includes(stage);
+  return stage === "sold" || stage === "arbitration_complete";
 }
 
 function transferCreditsRetailStore(

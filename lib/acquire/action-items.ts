@@ -80,6 +80,7 @@ export const STAGE_RANK: Record<AcqPurchaseStage, number> = {
   demo: 5,
   sold: 7,
   arbitration_complete: 7,
+  seller_unwind: 7,
 };
 
 function isBlank(v: string | number | null | undefined): boolean {
@@ -102,12 +103,22 @@ function push(
 }
 
 /**
+ * Wholesale queue, arbitration queue, and wholesale-exit sales do not require
+ * recon / frontline fields. Blank values on those cars are omitted from
+ * recon cost and time averages (see computeReconByStore).
+ */
+export function skipsAcquireReconFields(p: Pick<AcqPurchase, "stage" | "exit_strategy">): boolean {
+  if (p.stage === "wholesale" || p.stage === "arbitration") return true;
+  return p.exit_strategy === "wholesale";
+}
+
+/**
  * Returns action items still expected for this purchase's stage that are empty.
  * Order is stable for tooltips / debugging.
  */
 export function missingAcquireActionItems(p: AcqPurchase): AcqActionItem[] {
-  // Arbitration complete has no required fields — exit audit does not apply.
-  if (p.stage === "arbitration_complete") return [];
+  // Exit stages with no required fields — exit audit does not apply.
+  if (p.stage === "arbitration_complete" || p.stage === "seller_unwind") return [];
 
   const rank = STAGE_RANK[p.stage] ?? 0;
   const missing: AcqActionItem[] = [];
@@ -131,7 +142,7 @@ export function missingAcquireActionItems(p: AcqPurchase): AcqActionItem[] {
   if (isBlank(p.purchase_price)) push(missing, "purchase_price", "Purchase price", "Acquisition");
   if (isBlank(p.auction_fees)) push(missing, "auction_fees", "Auction fees", "Acquisition");
   // Recon estimate / Recon-tab fields are not required for Wholesale or Arbitration.
-  const skipsRecon = p.stage === "wholesale" || p.stage === "arbitration";
+  const skipsRecon = skipsAcquireReconFields(p);
   if (!skipsRecon && isBlank(p.recon_estimate)) {
     push(missing, "recon_estimate", "Estimate recon", "Acquisition");
   }

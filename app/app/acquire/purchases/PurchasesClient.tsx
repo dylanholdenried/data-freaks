@@ -30,6 +30,7 @@ import {
 import { countAcquireActionItems, needsTransportScheduled } from "@/lib/acquire/action-items";
 import { storesQueryString } from "@/lib/acquire/store-labels";
 import { computeMonthlyPurchaseSalesVolume, type InboundTransferCredit } from "@/lib/acquire/monthly-volume";
+import { isMissingFromInventoryExport } from "@/lib/acquire/sync-inventory";
 import AcquireStorePills from "../AcquireStorePills";
 import PurchaseCard, { type CardOriginRect } from "./PurchaseCard";
 import PurchaseFlipOverlay from "./PurchaseFlipOverlay";
@@ -66,7 +67,7 @@ export default function PurchasesClient({
     initialStoreIds.length ? initialStoreIds : allIds
   );
   const [pill, setPill] = useState<
-    AcqPurchaseStage | "on_hold" | "needs_transport" | "action_items"
+    AcqPurchaseStage | "on_hold" | "needs_transport" | "action_items" | "missing_inventory"
   >("frontline");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -144,6 +145,9 @@ export default function PurchasesClient({
         if (pill === "action_items") {
           return countAcquireActionItems(p) > 0;
         }
+        if (pill === "missing_inventory") {
+          return isMissingFromInventoryExport(p);
+        }
         if (pill === "on_hold") {
           if (!p.on_hold) return false;
         } else if (pill === "needs_transport") {
@@ -168,8 +172,13 @@ export default function PurchasesClient({
       return hay.includes(q);
     });
 
-    if ((pill === "action_items" || pill === "frontline") && !q) {
-      // Action items / Frontline: oldest inventory age first
+    if (
+      (pill === "action_items" ||
+        pill === "frontline" ||
+        pill === "missing_inventory") &&
+      !q
+    ) {
+      // Action items / Frontline / Missing inventory: oldest inventory age first
       return list.sort((a, b) => {
         const ageA = headerAgeDays(a) ?? -1;
         const ageB = headerAgeDays(b) ?? -1;
@@ -217,6 +226,7 @@ export default function PurchasesClient({
   }));
   const onHoldCount = storePurchases.filter((p) => p.on_hold).length;
   const needsTransportCount = storePurchases.filter((p) => needsTransportScheduled(p)).length;
+  const missingFromInventoryCount = storePurchases.filter(isMissingFromInventoryExport).length;
 
   const now = new Date();
   const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -418,7 +428,9 @@ export default function PurchasesClient({
         note={
           pill === "action_items" && !query.trim()
             ? `${filtered.length} with open action items · oldest first`
-            : `${filtered.length} cards`
+            : pill === "missing_inventory" && !query.trim()
+              ? `${filtered.length} missing from inventory · oldest first`
+              : `${filtered.length} cards`
         }
       >
         <div id="acq-collection" className="mb-4 space-y-3">
@@ -497,6 +509,22 @@ export default function PurchasesClient({
               >
                 Action items{actionItemVehicleCount ? ` (${actionItemVehicleCount})` : ""}
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery("");
+                  setPill("missing_inventory");
+                }}
+                className="rounded-full px-3 py-1 text-[11px] font-semibold"
+                style={{
+                  background: pill === "missing_inventory" ? IC.orange : IC.rowAlt,
+                  color: pill === "missing_inventory" ? "#fff" : IC.muted,
+                  border: `1px solid ${pill === "missing_inventory" ? IC.orange : IC.border}`,
+                }}
+              >
+                Missing Inventory
+                {missingFromInventoryCount ? ` (${missingFromInventoryCount})` : ""}
+              </button>
             </div>
           </div>
 
@@ -572,6 +600,8 @@ export default function PurchasesClient({
                 ? "No vehicles with open action items — you're caught up."
                 : pill === "needs_transport"
                   ? "All Need to Stock In+ cars have transport scheduled."
+                  : pill === "missing_inventory"
+                    ? "All expected cars are on the latest inventory export."
                 : canEdit
                   ? "No purchase cars in this view. Log a purchase to start the collection."
                   : "No purchase cars in this view."}

@@ -4,7 +4,25 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { ACQ_ACTIVE_STAGES } from "./types";
+import {
+  ACQ_ACTIVE_STAGES,
+  ACQ_INVENTORY_EXPORT_EXEMPT_STAGES,
+  type AcqPurchase,
+} from "./types";
+
+/**
+ * True when a purchase should appear on the latest inventory export but
+ * `live_matched` is false after sync. Skips On Hold and exit/wholesale stages.
+ */
+export function isMissingFromInventoryExport(
+  p: Pick<AcqPurchase, "stage" | "on_hold" | "live_matched">
+): boolean {
+  if (p.on_hold) return false;
+  if ((ACQ_INVENTORY_EXPORT_EXEMPT_STAGES as readonly string[]).includes(p.stage)) {
+    return false;
+  }
+  return !p.live_matched;
+}
 
 type InvUnit = {
   stk: string | null;
