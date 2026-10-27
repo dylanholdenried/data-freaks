@@ -33,6 +33,7 @@ const SECTIONS: { title: string; links: NavItem[] }[] = [
       { href: "/app/pricing-discipline", label: "Pricing Discipline" },
       { href: "/app/trades", label: "Trades" },
       { href: "/app/inventory-command", label: "Inventory Command" },
+      { href: "/app/sold-vs-stock", label: "Sold vs Stock" },
     ],
   },
   {

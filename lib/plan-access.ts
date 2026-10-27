@@ -36,6 +36,7 @@ const ANALYZE_HREFS = new Set([
   "/app/trades",
   "/app/inventory-command",
   "/app/pricing-discipline",
+  "/app/sold-vs-stock",
 ]);
 
 /** Nav hrefs that require Acquire addon */
@@ -57,7 +58,14 @@ export function requiredProductForHref(
   href: string
 ): "analyze" | "acquire" | null {
   if (isAcquireNavHref(href)) return "acquire";
-  if (ANALYZE_HREFS.has(href) || href.startsWith("/app/profit-center") || href.startsWith("/app/trades") || href.startsWith("/app/inventory-command") || href.startsWith("/app/pricing-discipline")) {
+  if (
+    ANALYZE_HREFS.has(href) ||
+    href.startsWith("/app/profit-center") ||
+    href.startsWith("/app/trades") ||
+    href.startsWith("/app/inventory-command") ||
+    href.startsWith("/app/pricing-discipline") ||
+    href.startsWith("/app/sold-vs-stock")
+  ) {
     return "analyze";
   }
   return null;
@@ -74,7 +82,8 @@ export function canAccessAppNav(
     href.startsWith("/app/profit-center") ||
     href.startsWith("/app/trades") ||
     href.startsWith("/app/inventory-command") ||
-    href.startsWith("/app/pricing-discipline")
+    href.startsWith("/app/pricing-discipline") ||
+    href.startsWith("/app/sold-vs-stock")
   ) {
     return canAccessProfitCenter(plan);
   }

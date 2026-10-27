@@ -18,6 +18,7 @@ import {
   BarChart3,
   CreditCard,
   Tag,
+  Scale,
 } from "lucide-react";
 import { navAccessState, requiredProductForHref, type PlanTier } from "@/lib/plan-access";
 import { isAdminOnlyNavHref, isViewerNavHref } from "@/lib/roles";
@@ -87,6 +88,12 @@ const ANALYZE_LINKS: NavItem[] = [
     label: "Inventory Command",
     icon: Package,
     match: (p) => p.startsWith("/app/inventory-command"),
+  },
+  {
+    href: "/app/sold-vs-stock",
+    label: "Sold vs Stock",
+    icon: Scale,
+    match: (p) => p.startsWith("/app/sold-vs-stock"),
   },
 ];
 
