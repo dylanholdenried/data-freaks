@@ -17,6 +17,8 @@ import {
   type AcqDuplicateVinMatch,
 } from "../actions";
 import { decodeVin, VinDecodeError } from "@/lib/vehicle";
+import { adoptCatalogVehicle } from "@/lib/vehicle-catalog";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { X, Loader2, AlertTriangle } from "lucide-react";
 import AcquireVehicleFields, {
   normalizeDrivetrain,
@@ -58,6 +60,8 @@ export default function AddPurchaseModal({
   const [color, setColor] = useState("");
   const [bodyStyle, setBodyStyle] = useState("");
   const [drivetrain, setDrivetrain] = useState("");
+  const [addedModels, setAddedModels] = useState<VehicleCatalogModel[]>([]);
+  const catalogModels = [...vehicleModels, ...addedModels];
   const [duplicates, setDuplicates] = useState<AcqDuplicateVinMatch[] | null>(null);
   const [duplicateVin, setDuplicateVin] = useState("");
   const [acknowledgedVin, setAcknowledgedVin] = useState<string | null>(null);
@@ -106,9 +110,24 @@ export default function AddPurchaseModal({
     setError(null);
     try {
       const d = await decodeVin(v);
+      const applied = await adoptCatalogVehicle(
+        createSupabaseBrowserClient(),
+        d.make,
+        d.model,
+        vehicleMakes,
+        catalogModels,
+        d.trim
+      );
+      if (applied.added) {
+        setAddedModels((prev) =>
+          prev.some((model) => model.id === applied.added!.id)
+            ? prev
+            : [...prev, applied.added!]
+        );
+      }
       if (d.year != null) setYear(String(d.year));
-      if (d.make) setMake(d.make);
-      if (d.model) setModel(d.model);
+      setMake(applied.makeName);
+      setModel(applied.modelName);
       if (d.trim) setTrim(d.trim);
       if (d.bodyStyle) setBodyStyle(d.bodyStyle);
       if (d.drivetrain) setDrivetrain(normalizeDrivetrain(d.drivetrain));
@@ -255,7 +274,7 @@ export default function AddPurchaseModal({
 
           <AcquireVehicleFields
             vehicleMakes={vehicleMakes}
-            vehicleModels={vehicleModels}
+            vehicleModels={catalogModels}
             canEdit
             compact
             year={year}

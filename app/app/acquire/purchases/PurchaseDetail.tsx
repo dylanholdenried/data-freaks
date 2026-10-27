@@ -38,6 +38,8 @@ import { getAcquirePurchasePriceHistory, updateAcquirePurchase } from "../action
 import type { PriceHistoryEvent } from "@/lib/acquire/price-history";
 import { reportedCommission, totalPayableGross } from "@/lib/acquire/reported";
 import { decodeVin, VinDecodeError } from "@/lib/vehicle";
+import { adoptCatalogVehicle } from "@/lib/vehicle-catalog";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Loader2, X } from "lucide-react";
 import AcquireVehicleFields, {
   normalizeDrivetrain,
@@ -327,6 +329,8 @@ export default function PurchaseDetail({
   const [priceHistoryLoading, setPriceHistoryLoading] = useState(false);
   const [storeId, setStoreId] = useState(purchase.store_id ?? "");
   const [vin, setVin] = useState(purchase.vin ?? "");
+  const [addedModels, setAddedModels] = useState<VehicleCatalogModel[]>([]);
+  const catalogModels = [...vehicleModels, ...addedModels];
   const [year, setYear] = useState(purchase.vehicle_year != null ? String(purchase.vehicle_year) : "");
   const [make, setMake] = useState(purchase.vehicle_make ?? "");
   const [model, setModel] = useState(purchase.vehicle_model ?? "");
@@ -625,17 +629,32 @@ export default function PurchaseDetail({
     setError(null);
     try {
       const d = await decodeVin(raw);
+      const applied = await adoptCatalogVehicle(
+        createSupabaseBrowserClient(),
+        d.make,
+        d.model,
+        vehicleMakes,
+        catalogModels,
+        d.trim
+      );
+      if (applied.added) {
+        setAddedModels((prev) =>
+          prev.some((model) => model.id === applied.added!.id)
+            ? prev
+            : [...prev, applied.added!]
+        );
+      }
       if (target === "vehicle") {
         if (d.year != null) setYear(String(d.year));
-        if (d.make) setMake(d.make);
-        if (d.model) setModel(d.model);
+        setMake(applied.makeName);
+        setModel(applied.modelName);
         if (d.trim) setTrim(d.trim);
         if (d.bodyStyle) setBodyStyle(d.bodyStyle);
         if (d.drivetrain) setDrivetrain(normalizeDrivetrain(d.drivetrain));
       } else {
         if (d.year != null) setTradeYear(String(d.year));
-        if (d.make) setTradeMake(d.make);
-        if (d.model) setTradeModel(d.model);
+        setTradeMake(applied.makeName);
+        setTradeModel(applied.modelName);
       }
     } catch (e) {
       setError(e instanceof VinDecodeError ? e.message : "VIN decode failed");
@@ -978,7 +997,7 @@ export default function PurchaseDetail({
             </div>
             <AcquireVehicleFields
               vehicleMakes={vehicleMakes}
-              vehicleModels={vehicleModels}
+              vehicleModels={catalogModels}
               canEdit={canEdit}
               year={year}
               make={make}

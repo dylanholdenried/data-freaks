@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { IC } from "@/lib/inventory-command/midmo";
 import { BODY_STYLES, COLORS, DRIVETRAINS } from "@/lib/vehicle";
+import { resolveCatalogMake, resolveCatalogModel } from "@/lib/vehicle-catalog";
 
 export type VehicleCatalogMake = { id: string; name: string };
 export type VehicleCatalogModel = { id: string; name: string; make_id: string };
@@ -29,23 +30,17 @@ export function resolveCatalogMakeId(
   makeName: string,
   makes: VehicleCatalogMake[]
 ): string {
-  const needle = makeName.trim().toLowerCase();
-  if (!needle) return "";
-  return makes.find((m) => m.name.trim().toLowerCase() === needle)?.id ?? "";
+  return resolveCatalogMake(makeName, makes)?.id ?? "";
 }
 
 export function resolveCatalogModelId(
   modelName: string,
   makeId: string,
-  models: VehicleCatalogModel[]
+  models: VehicleCatalogModel[],
+  trimHint = ""
 ): string {
-  const needle = modelName.trim().toLowerCase();
-  if (!needle || !makeId) return "";
-  return (
-    models.find(
-      (m) => m.make_id === makeId && m.name.trim().toLowerCase() === needle
-    )?.id ?? ""
-  );
+  const resolved = resolveCatalogModel(modelName, makeId, models, trimHint);
+  return resolved.status === "matched" ? resolved.model.id : "";
 }
 
 /** Normalize drivetrain from VIN decode into DRIVETRAINS list. */
@@ -121,10 +116,12 @@ export default function AcquireVehicleFields({
     [vehicleModels, effectiveMakeId]
   );
 
-  const matchedModelId = useMemo(
-    () => resolveCatalogModelId(model, effectiveMakeId, vehicleModels),
-    [model, effectiveMakeId, vehicleModels]
+  const modelResolution = useMemo(
+    () => resolveCatalogModel(model, effectiveMakeId, vehicleModels, trim, vehicleMakes),
+    [model, effectiveMakeId, vehicleModels, trim, vehicleMakes]
   );
+  const matchedModelId =
+    modelResolution.status === "matched" ? modelResolution.model.id : "";
   const [modelId, setModelId] = useState(matchedModelId);
   const [modelIsManual, setModelIsManual] = useState(
     Boolean(model.trim()) && !matchedModelId
@@ -149,6 +146,13 @@ export default function AcquireVehicleFields({
       setModelId("");
     }
   }, [model, matchedModelId, effectiveMakeId]);
+
+  useEffect(() => {
+    if (!canEdit || modelResolution.status !== "matched" || modelResolution.via !== "alias") {
+      return;
+    }
+    if (modelResolution.model.name !== model) onModelChange(modelResolution.model.name);
+  }, [canEdit, model, modelResolution, onModelChange]);
 
   const style = canEdit ? inputStyle : readOnlyStyle;
   const grid = compact ? "grid grid-cols-2 gap-2" : "grid grid-cols-2 gap-3";

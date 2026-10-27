@@ -9,6 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CheckCircle2, Info, Loader2, PlusCircle, Trash2, XCircle } from "lucide-react";
 import { COLORS, BODY_STYLES, DRIVETRAINS, decodeVin, VinDecodeError } from "@/lib/vehicle";
+import {
+  adoptCatalogVehicle,
+  catalogFieldsForStored,
+  type CatalogModel,
+} from "@/lib/vehicle-catalog";
 import { canClose } from "@/lib/can-close";
 import {
   classifyStockMatches,
@@ -176,23 +181,14 @@ function resolveTradeMakeModel(
   vehicleMakes: { id: string; name: string }[],
   vehicleModels: { id: string; name: string; make_id: string }[]
 ) {
-  const matchedMake = vehicleMakes.find(
-    (m) => m.name.toLowerCase() === make.toLowerCase()
-  );
-  const makeId = matchedMake?.id ?? "";
-  const makeIsManual = Boolean(make) && !matchedMake;
-  const matchedModel = matchedMake
-    ? vehicleModels.find(
-        (m) =>
-          m.make_id === matchedMake.id &&
-          m.name.toLowerCase() === model.toLowerCase()
-      )
-    : undefined;
+  const fields = catalogFieldsForStored(make, model, vehicleMakes, vehicleModels);
   return {
-    makeId,
-    makeIsManual,
-    modelId: matchedModel?.id ?? "",
-    modelIsManual: Boolean(model) && !matchedModel,
+    makeId: fields.makeId,
+    makeIsManual: fields.makeIsManual,
+    modelId: fields.modelId,
+    modelIsManual: fields.modelIsManual,
+    make: fields.makeIsManual ? make : fields.makeName || make,
+    model: fields.modelId ? fields.modelName : model,
   };
 }
 
@@ -208,8 +204,6 @@ function toEditableTrade(
     id: t.id,
     vin: t.vin ?? "",
     year: numStr(t.year),
-    make,
-    model,
     ...resolveTradeMakeModel(make, model, vehicleMakes, vehicleModels),
     acv: numStr(t.acv),
     allowance: numStr(t.allowance),
@@ -341,47 +335,26 @@ export default function UpdatePendingForm({
   const [tradeDecoded, setTradeDecoded] = useState<Record<string, boolean>>({});
 
   // ── Decoded vehicle identity (saved via buildPayload) ─────────────────────────
+  const storedVehicle = catalogFieldsForStored(
+    vehicleMake,
+    vehicleModel,
+    vehicleMakes,
+    vehicleModels,
+    initialTrim ?? ""
+  );
   const [displayYear, setDisplayYear] = useState<number>(vehicleYear);
-  const [displayMake, setDisplayMake] = useState(vehicleMake);
-  const [displayModel, setDisplayModel] = useState(vehicleModel);
+  const [displayMake, setDisplayMake] = useState(storedVehicle.makeName || vehicleMake);
+  const [displayModel, setDisplayModel] = useState(
+    storedVehicle.modelId ? storedVehicle.modelName : vehicleModel
+  );
 
   // ── Make/Model dropdown IDs + manual-override flags ───────────────────────────
-  const [makeId, setMakeId] = useState<string>(() => {
-    const found = vehicleMakes.find(
-      (m) => m.name.toLowerCase() === vehicleMake.toLowerCase()
-    );
-    return found?.id ?? "";
-  });
-  const [makeIsManual, setMakeIsManual] = useState<boolean>(() => {
-    if (!vehicleMake) return false;
-    return !vehicleMakes.some(
-      (m) => m.name.toLowerCase() === vehicleMake.toLowerCase()
-    );
-  });
-  const [modelId, setModelId] = useState<string>(() => {
-    const mk = vehicleMakes.find(
-      (m) => m.name.toLowerCase() === vehicleMake.toLowerCase()
-    );
-    if (!mk) return "";
-    const found = vehicleModels.find(
-      (m) =>
-        m.make_id === mk.id &&
-        m.name.toLowerCase() === vehicleModel.toLowerCase()
-    );
-    return found?.id ?? "";
-  });
-  const [modelIsManual, setModelIsManual] = useState<boolean>(() => {
-    if (!vehicleModel) return false;
-    const mk = vehicleMakes.find(
-      (m) => m.name.toLowerCase() === vehicleMake.toLowerCase()
-    );
-    if (!mk) return !!vehicleModel;
-    return !vehicleModels.some(
-      (m) =>
-        m.make_id === mk.id &&
-        m.name.toLowerCase() === vehicleModel.toLowerCase()
-    );
-  });
+  const [makeId, setMakeId] = useState(storedVehicle.makeId);
+  const [makeIsManual, setMakeIsManual] = useState(storedVehicle.makeIsManual);
+  const [modelId, setModelId] = useState(storedVehicle.modelId);
+  const [modelIsManual, setModelIsManual] = useState(storedVehicle.modelIsManual);
+  const [extraModels, setExtraModels] = useState<CatalogModel[]>([]);
+  const catalogModels = [...vehicleModels, ...extraModels];
 
   // ── VIN decode state ──────────────────────────────────────────────────────────
   const [decoding, setDecoding] = useState(false);
@@ -564,44 +537,39 @@ export default function UpdatePendingForm({
 
     try {
       const decoded = await decodeVin(v);
+      const applied = await adoptCatalogVehicle(
+        createSupabaseBrowserClient(),
+        decoded.make,
+        decoded.model,
+        vehicleMakes,
+        catalogModels,
+        decoded.trim
+      );
+      if (applied.added) {
+        setExtraModels((prev) =>
+          prev.some((model) => model.id === applied.added!.id)
+            ? prev
+            : [...prev, applied.added!]
+        );
+      }
 
       if (decoded.year !== null) setDisplayYear(decoded.year);
-
-      const matchedMake = vehicleMakes.find(
-        (m) => m.name.toLowerCase() === decoded.make.toLowerCase()
-      );
-      let resolvedMakeId = "";
-      if (matchedMake) {
-        setMakeId(matchedMake.id);
-        resolvedMakeId = matchedMake.id;
-        setMakeIsManual(false);
-      } else {
-        setMakeId("");
-        setMakeIsManual(true);
-      }
-      setDisplayMake(decoded.make);
-
-      const matchedModel = vehicleModels.find(
-        (m) =>
-          m.make_id === resolvedMakeId &&
-          m.name.toLowerCase() === decoded.model.toLowerCase()
-      );
-      if (matchedModel) {
-        setModelId(matchedModel.id);
-        setModelIsManual(false);
-      } else {
-        setModelId("");
-        setModelIsManual(true);
-      }
-      setDisplayModel(decoded.model);
+      setMakeId(applied.makeId);
+      setMakeIsManual(applied.makeIsManual);
+      setDisplayMake(applied.makeName);
+      setModelId(applied.modelId);
+      setModelIsManual(applied.modelIsManual);
+      setDisplayModel(applied.modelName);
 
       if (decoded.bodyStyle) setBodyStyle(decoded.bodyStyle);
       if (decoded.drivetrain) setDrivetrain(decoded.drivetrain);
 
       const summaryYear = decoded.year ?? displayYear;
-      const summaryParts = [decoded.bodyStyle, decoded.drivetrain].filter(Boolean).join(" · ");
+      const summaryParts = [decoded.bodyStyle, decoded.drivetrain, applied.note]
+        .filter(Boolean)
+        .join(" · ");
       setDecodeMsg(
-        `Decoded from VIN: ${summaryYear} ${decoded.make} ${decoded.model}${
+        `Decoded from VIN: ${summaryYear} ${applied.makeName} ${applied.modelName}${
           summaryParts ? " · " + summaryParts : ""
         }`
       );
@@ -756,16 +724,21 @@ export default function UpdatePendingForm({
 
     try {
       const d = await decodeVin(v);
-      const matchedMake = vehicleMakes.find(
-        (m) => m.name.toLowerCase() === d.make.toLowerCase()
+      const applied = await adoptCatalogVehicle(
+        createSupabaseBrowserClient(),
+        d.make,
+        d.model,
+        vehicleMakes,
+        catalogModels,
+        d.trim
       );
-      const resolvedMakeId = matchedMake?.id ?? "";
-      const makeIsManual = !matchedMake;
-      const matchedModel = vehicleModels.find(
-        (m) =>
-          m.make_id === resolvedMakeId &&
-          m.name.toLowerCase() === d.model.toLowerCase()
-      );
+      if (applied.added) {
+        setExtraModels((prev) =>
+          prev.some((model) => model.id === applied.added!.id)
+            ? prev
+            : [...prev, applied.added!]
+        );
+      }
 
       setTradeRows((prev) =>
         prev.map((t) =>
@@ -773,12 +746,12 @@ export default function UpdatePendingForm({
             ? {
                 ...t,
                 year: d.year !== null ? String(d.year) : t.year,
-                make: d.make || t.make,
-                model: d.model || t.model,
-                makeId: resolvedMakeId,
-                makeIsManual,
-                modelId: matchedModel?.id ?? "",
-                modelIsManual: !matchedModel,
+                make: applied.makeName || t.make,
+                model: applied.modelName || t.model,
+                makeId: applied.makeId,
+                makeIsManual: applied.makeIsManual,
+                modelId: applied.modelId,
+                modelIsManual: applied.modelIsManual,
               }
             : t
         )
@@ -1826,7 +1799,7 @@ export default function UpdatePendingForm({
                   value={modelId}
                   onChange={(e) => {
                     const id = e.target.value;
-                    const found = vehicleModels.find((m) => m.id === id);
+                    const found = catalogModels.find((m) => m.id === id);
                     setModelId(id);
                     setDisplayModel(found?.name ?? "");
                   }}
@@ -1836,7 +1809,7 @@ export default function UpdatePendingForm({
                   <option value="">
                     {makeId ? "Select model" : "Select make first"}
                   </option>
-                  {vehicleModels
+                  {catalogModels
                     .filter((m) => m.make_id === makeId)
                     .map((m) => (
                       <option key={m.id} value={m.id}>
@@ -2219,7 +2192,7 @@ export default function UpdatePendingForm({
                         value={trade.modelId}
                         onChange={(e) => {
                           const id = e.target.value;
-                          const found = vehicleModels.find((m) => m.id === id);
+                          const found = catalogModels.find((m) => m.id === id);
                           patchTrade(trade.clientKey, {
                             modelId: id,
                             model: found?.name ?? "",
@@ -2235,7 +2208,7 @@ export default function UpdatePendingForm({
                         <option value="">
                           {trade.makeId ? "Select model" : "Select make first"}
                         </option>
-                        {vehicleModels
+                        {catalogModels
                           .filter((m) => m.make_id === trade.makeId)
                           .map((m) => (
                             <option key={m.id} value={m.id}>

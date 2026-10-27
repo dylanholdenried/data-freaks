@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createSupabaseBrowserClient, describeError } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,7 +15,17 @@ import {
   isUniqueViolation,
   type DealMatch,
 } from "@/lib/deals/duplicate-checks";
+import {
+  catalogDrivetrain,
+  findInventoryPrefill,
+  type InventoryPrefill,
+} from "@/lib/deals/inventory-prefill";
 import { cn } from "@/lib/utils";
+import {
+  adoptCatalogVehicle,
+  type AdoptedVehicle,
+  type CatalogModel,
+} from "@/lib/vehicle-catalog";
 
 type Store = { id: string; name: string };
 type Department = { id: string; name: string; store_id: string };
@@ -134,6 +144,17 @@ export default function NewDealForm({
   const [vinMatch, setVinMatch] = useState<DealMatch | null>(null);
   const [checkingStock, setCheckingStock] = useState(false);
   const [stockCheckError, setStockCheckError] = useState<string | null>(null);
+  const [inventoryStatus, setInventoryStatus] = useState<"idle" | "found" | "missing">("idle");
+  const [inventoryLabel, setInventoryLabel] = useState<string | null>(null);
+  const appliedKeyRef = useRef<string | null>(null);
+  const inventoryVinRef = useRef<string | null>(null);
+  const [extraModels, setExtraModels] = useState<CatalogModel[]>([]);
+  const extraModelsRef = useRef<CatalogModel[]>([]);
+  extraModelsRef.current = extraModels;
+  const catalogModels = [...vehicleModels, ...extraModels];
+  const [catalogNote, setCatalogNote] = useState<string | null>(null);
+  const catalogsRef = useRef({ vehicleMakes, vehicleModels: catalogModels });
+  catalogsRef.current = { vehicleMakes, vehicleModels: catalogModels };
 
   // ── Derived: filter dropdown options to selected store ───────────────────────
   const storeDepts = departments.filter((d) => d.store_id === storeId);
@@ -152,6 +173,37 @@ export default function NewDealForm({
     setSplits([{ salesperson_id: "", share: "100" }]);
   }
 
+  function rememberModel(added: CatalogModel | null) {
+    if (!added || extraModelsRef.current.some((model) => model.id === added.id)) return;
+    const next = [...extraModelsRef.current, added];
+    extraModelsRef.current = next;
+    setExtraModels(next);
+  }
+
+  async function adoptVehicle(rawMake: string, rawModel: string, trimHint: string) {
+    const supabase = createSupabaseBrowserClient();
+    const applied = await adoptCatalogVehicle(
+      supabase,
+      rawMake,
+      rawModel,
+      catalogsRef.current.vehicleMakes,
+      catalogsRef.current.vehicleModels,
+      trimHint
+    );
+    rememberModel(applied.added);
+    return applied;
+  }
+
+  function applyAdopted(applied: AdoptedVehicle) {
+    setMakeId(applied.makeId);
+    setMakeIsManual(applied.makeIsManual);
+    setVehicleMake(applied.makeName);
+    setModelId(applied.modelId);
+    setModelIsManual(applied.modelIsManual);
+    setVehicleModel(applied.modelName);
+    setCatalogNote(applied.note);
+  }
+
   // ── VIN Decoder ──────────────────────────────────────────────────────────────
   async function handleDecodeVin() {
     const v = vin.trim();
@@ -164,40 +216,11 @@ export default function NewDealForm({
       const d = await decodeVin(v);
 
       if (d.year !== null) setVehicleYear(String(d.year));
-
-      const matchedMake = vehicleMakes.find(
-        (m) => m.name.toLowerCase() === d.make.toLowerCase()
-      );
-      let resolvedMakeId = "";
-      if (matchedMake) {
-        setMakeId(matchedMake.id);
-        resolvedMakeId = matchedMake.id;
-        setMakeIsManual(false);
-      } else {
-        setMakeId("");
-        setMakeIsManual(true);
-      }
-      setVehicleMake(d.make);
-
-      const matchedModel = vehicleModels.find(
-        (m) =>
-          m.make_id === resolvedMakeId &&
-          m.name.toLowerCase() === d.model.toLowerCase()
-      );
-      if (matchedModel) {
-        setModelId(matchedModel.id);
-        setModelIsManual(false);
-      } else {
-        setModelId("");
-        setModelIsManual(true);
-      }
-      setVehicleModel(d.model);
-
-      setTrim(d.trim);
+      const applied = await adoptVehicle(d.make, d.model, d.trim);
+      applyAdopted(applied);
       if (d.bodyStyle) setBodyStyle(d.bodyStyle);
       if (d.drivetrain) setDrivetrain(d.drivetrain);
-
-      setDecoded(true);
+      setDecoded(Boolean(applied.modelId) && !applied.makeIsManual);
     } catch (err) {
       if (err instanceof VinDecodeError) {
         setDecodeError(err.message);
@@ -256,29 +279,19 @@ export default function NewDealForm({
 
     try {
       const d = await decodeVin(v);
-      const matchedMake = vehicleMakes.find(
-        (m) => m.name.toLowerCase() === d.make.toLowerCase()
-      );
-      const resolvedMakeId = matchedMake?.id ?? "";
-      const makeIsManual = !matchedMake;
-      const matchedModel = vehicleModels.find(
-        (m) =>
-          m.make_id === resolvedMakeId &&
-          m.name.toLowerCase() === d.model.toLowerCase()
-      );
-
+      const applied = await adoptVehicle(d.make, d.model, d.trim);
       setTrades((prev) =>
         prev.map((t, i) =>
           i === idx
             ? {
                 ...t,
                 year: d.year !== null ? String(d.year) : t.year,
-                make: d.make || t.make,
-                model: d.model || t.model,
-                makeId: resolvedMakeId,
-                makeIsManual,
-                modelId: matchedModel?.id ?? "",
-                modelIsManual: !matchedModel,
+                make: applied.makeName || t.make,
+                model: applied.modelName || t.model,
+                makeId: applied.makeId,
+                makeIsManual: applied.makeIsManual,
+                modelId: applied.modelId,
+                modelIsManual: applied.modelIsManual,
               }
             : t
         )
@@ -295,13 +308,54 @@ export default function NewDealForm({
     }
   }
 
-  // ── Duplicate lookups (as soon as stock / VIN is entered) ─────────────────────
+  function clearAppliedVehicle() {
+    if (!appliedKeyRef.current) return;
+    appliedKeyRef.current = null;
+    inventoryVinRef.current = null;
+    setVin("");
+    setVehicleYear("");
+    setVehicleMake("");
+    setVehicleModel("");
+    setMakeId("");
+    setMakeIsManual(false);
+    setModelId("");
+    setModelIsManual(false);
+    setTrim("");
+    setBodyStyle("");
+    setDrivetrain("");
+    setDecoded(false);
+    setDecodeError(null);
+    setCatalogNote(null);
+  }
+
+  function applyInventoryPrefill(
+    prefill: InventoryPrefill,
+    lookupKey: string,
+    applied: AdoptedVehicle
+  ) {
+    appliedKeyRef.current = lookupKey;
+    inventoryVinRef.current = prefill.vin || null;
+    setVin(prefill.vin);
+    setVehicleYear(prefill.year);
+    setTrim(prefill.trim);
+    setBodyStyle(prefill.bodyStyle);
+    setDrivetrain("");
+    setDecoded(false);
+    setDecodeError(null);
+    applyAdopted(applied);
+  }
+
+  // ── Duplicate lookups + inventory fill (as soon as stock / VIN is entered) ─
   useEffect(() => {
-    if (!stockNumber.trim()) {
+    const stock = stockNumber.trim();
+    if (!stock) {
       setStockBlockingMatch(null);
       setStockReuseMatch(null);
       setStockCheckError(null);
       setCheckingStock(false);
+      setInventoryStatus("idle");
+      setInventoryLabel(null);
+      clearAppliedVehicle();
       return;
     }
     if (!storeId) {
@@ -309,7 +363,17 @@ export default function NewDealForm({
       setStockReuseMatch(null);
       setStockCheckError("Select a store first to check for duplicate stock numbers.");
       setCheckingStock(false);
+      setInventoryStatus("idle");
+      setInventoryLabel(null);
+      clearAppliedVehicle();
       return;
+    }
+
+    const lookupKey = `${storeId}:${stock}`;
+    if (appliedKeyRef.current && appliedKeyRef.current !== lookupKey) {
+      clearAppliedVehicle();
+      setInventoryStatus("idle");
+      setInventoryLabel(null);
     }
 
     let cancelled = false;
@@ -318,19 +382,52 @@ export default function NewDealForm({
     const timer = window.setTimeout(async () => {
       try {
         const supabase = createSupabaseBrowserClient();
-        const matches = await findStockMatches(supabase, {
-          storeId,
-          stockNumber,
-        });
+        const [matches, prefill] = await Promise.all([
+          findStockMatches(supabase, { storeId, stockNumber: stock }),
+          findInventoryPrefill(supabase, storeId, stock),
+        ]);
         if (cancelled) return;
         const { blockingMatch, reuseMatch } = classifyStockMatches(matches);
         setStockBlockingMatch(blockingMatch);
         setStockReuseMatch(reuseMatch);
         setStockCheckError(null);
+
+        if (!prefill) {
+          clearAppliedVehicle();
+          setInventoryStatus(stock.length >= 4 ? "missing" : "idle");
+          setInventoryLabel(null);
+          return;
+        }
+
+        const alreadyApplied = appliedKeyRef.current === lookupKey;
+        if (!alreadyApplied) {
+          const applied = await adoptVehicle(prefill.make, prefill.model, prefill.trim);
+          if (cancelled) return;
+          applyInventoryPrefill(prefill, lookupKey, applied);
+        }
+        setInventoryStatus("found");
+        setInventoryLabel(prefill.label);
+        if (!cancelled) setCheckingStock(false);
+
+        if (!alreadyApplied && prefill.vin.length === 17) {
+          try {
+            const decodedVin = await decodeVin(prefill.vin);
+            if (cancelled || appliedKeyRef.current !== lookupKey) return;
+            const drive = catalogDrivetrain(decodedVin.drivetrain);
+            if (drive) setDrivetrain((current) => current || drive);
+            if (!prefill.bodyStyle && decodedVin.bodyStyle) {
+              setBodyStyle((current) => current || decodedVin.bodyStyle);
+            }
+          } catch {
+            /* Inventory Command has no drivetrain. Leave it blank for manual entry. */
+          }
+        }
       } catch (err) {
         if (!cancelled) {
           setStockBlockingMatch(null);
           setStockReuseMatch(null);
+          setInventoryStatus("idle");
+          setInventoryLabel(null);
           setStockCheckError(
             err instanceof Error
               ? `Could not check stock number: ${describeError(err, "")}`
@@ -346,6 +443,8 @@ export default function NewDealForm({
       cancelled = true;
       window.clearTimeout(timer);
     };
+    // clearAppliedVehicle / applyInventoryPrefill close over stable setters and refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeId, stockNumber]);
 
   useEffect(() => {
@@ -406,6 +505,13 @@ export default function NewDealForm({
     setVinMatch(null);
     setCheckingStock(false);
     setStockCheckError(null);
+    setInventoryStatus("idle");
+    setInventoryLabel(null);
+    appliedKeyRef.current = null;
+    inventoryVinRef.current = null;
+    setCatalogNote(null);
+    setExtraModels([]);
+    extraModelsRef.current = [];
   }
 
   // ── Validation ───────────────────────────────────────────────────────────────
@@ -448,7 +554,7 @@ export default function NewDealForm({
     setSaving(true);
 
     // Capture display values before state is reset
-    const savedStock = stockNumber.trim();
+    const savedStock = stockNumber.trim().toUpperCase();
     const savedCustomer = customerLastName.trim();
     const savedMake = vehicleMake.trim();
     const shouldFlagMismatch = makeDeptMismatch;
@@ -477,7 +583,7 @@ export default function NewDealForm({
           department_id: departmentId,
           customer_last_name: customerLastName.trim(),
           sale_date: saleDate,
-          stock_number: stockNumber.trim(),
+          stock_number: savedStock,
           vehicle_year: parseInt(vehicleYear, 10),
           vehicle_make: savedMake,
           vehicle_model: vehicleModel.trim(),
@@ -745,8 +851,12 @@ export default function NewDealForm({
               <label className={LBL}>Stock # *</label>
               <Input
                 value={stockNumber}
-                onChange={(e) => setStockNumber(e.target.value)}
+                onChange={(e) => setStockNumber(e.target.value.toUpperCase())}
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
                 className={cn(
+                  "uppercase",
                   emptyCls(stockNumber),
                   stockBlockingMatch &&
                     "border-[var(--da-red)] bg-[color-mix(in_srgb,var(--da-red)_12%,transparent)] focus-visible:ring-[var(--da-red)]"
@@ -755,6 +865,16 @@ export default function NewDealForm({
               />
               {checkingStock && (
                 <p className="text-xs text-muted-foreground">Checking stock number…</p>
+              )}
+              {!checkingStock && inventoryStatus === "found" && inventoryLabel && (
+                <p className="text-xs text-green-700">
+                  Filled from Inventory Command · {inventoryLabel}
+                </p>
+              )}
+              {!checkingStock && inventoryStatus === "missing" && (
+                <p className="text-xs text-muted-foreground">
+                  Not in current inventory for this store. Enter the vehicle manually.
+                </p>
               )}
             </div>
           </div>
@@ -818,7 +938,10 @@ export default function NewDealForm({
                     setDecoded(false);
                   }}
                   onBlur={() => {
-                    if (vin.trim().length === 17) handleDecodeVin();
+                    const current = vin.trim().toUpperCase();
+                    if (current.length === 17 && current !== inventoryVinRef.current) {
+                      handleDecodeVin();
+                    }
                   }}
                   disabled={decoding}
                   className="font-mono"
@@ -914,6 +1037,7 @@ export default function NewDealForm({
                     setModelId("");
                     setVehicleModel("");
                     setModelIsManual(false);
+                    setCatalogNote(null);
                   }}
                   disabled={decoded}
                   className={cn(SEL, emptyCls(makeId))}
@@ -950,15 +1074,16 @@ export default function NewDealForm({
                   value={modelId}
                   onChange={(e) => {
                     const id = e.target.value;
-                    const found = vehicleModels.find((m) => m.id === id);
+                    const found = catalogModels.find((m) => m.id === id);
                     setModelId(id);
                     setVehicleModel(found?.name ?? "");
+                    setCatalogNote(null);
                   }}
                   disabled={decoded || !makeId}
                   className={cn(SEL, emptyCls(modelId))}
                 >
                   <option value="">{makeId ? "Select model" : "Select make first"}</option>
-                  {vehicleModels
+                  {catalogModels
                     .filter((m) => m.make_id === makeId)
                     .map((m) => (
                       <option key={m.id} value={m.id}>
@@ -966,6 +1091,17 @@ export default function NewDealForm({
                       </option>
                     ))}
                 </select>
+              )}
+              {catalogNote && (
+                <p
+                  className={
+                    catalogNote.includes("Pick the model")
+                      ? "text-xs text-amber-700"
+                      : "text-xs text-green-700"
+                  }
+                >
+                  {catalogNote}
+                </p>
               )}
             </div>
 
@@ -1301,7 +1437,7 @@ export default function NewDealForm({
                         value={trade.modelId}
                         onChange={(e) => {
                           const id = e.target.value;
-                          const found = vehicleModels.find((m) => m.id === id);
+                          const found = catalogModels.find((m) => m.id === id);
                           patchTrade(idx, {
                             modelId: id,
                             model: found?.name ?? "",
@@ -1313,7 +1449,7 @@ export default function NewDealForm({
                         <option value="">
                           {trade.makeId ? "Select model" : "Select make first"}
                         </option>
-                        {vehicleModels
+                        {catalogModels
                           .filter((m) => m.make_id === trade.makeId)
                           .map((m) => (
                             <option key={m.id} value={m.id}>

@@ -7,6 +7,11 @@ import type {
 } from "@/lib/profit-center/aggregate";
 import type { DateRange } from "@/lib/profit-center/dateRange";
 import type { ProfitCenterDealBundle } from "@/lib/profit-center/dealBundle";
+import {
+  catalogFieldsForStored,
+  type CatalogMake,
+  type CatalogModel,
+} from "@/lib/vehicle-catalog";
 
 export type { ProfitCenterDealBundle };
 
@@ -15,6 +20,40 @@ type RpcBundle = {
   trades?: ProfitTrade[] | null;
   deal_salespeople?: ProfitDealSalesperson[] | null;
 };
+
+/**
+ * Profit Center groups by the saved make/model text. Spellings like Sierra + trim
+ * 1500, Transit 350, and CHEV never join Sierra 1500, Transit, or Chevrolet.
+ * Resolve those here. Closed-deal updates also rerun inventory pricing, so the
+ * stored row is left alone.
+ */
+async function canonicalizeDeals(
+  supabase: SupabaseClient,
+  deals: ProfitDeal[]
+): Promise<ProfitDeal[]> {
+  if (deals.length === 0) return deals;
+  const [makesRes, modelsRes] = await Promise.all([
+    supabase.from("vehicle_makes").select("id,name").eq("active", true),
+    supabase.from("vehicle_models").select("id,name,make_id").eq("active", true),
+  ]);
+  if (makesRes.error || modelsRes.error || !makesRes.data?.length) return deals;
+  const makes = makesRes.data as CatalogMake[];
+  const models = (modelsRes.data ?? []) as CatalogModel[];
+  return deals.map((deal) => {
+    const fields = catalogFieldsForStored(
+      deal.vehicle_make ?? "",
+      deal.vehicle_model ?? "",
+      makes,
+      models,
+      deal.trim ?? ""
+    );
+    return {
+      ...deal,
+      vehicle_make: fields.makeName || deal.vehicle_make,
+      vehicle_model: fields.modelName || deal.vehicle_model,
+    };
+  });
+}
 
 function normalizeDeal(d: ProfitDeal): ProfitDeal {
   return {
@@ -102,7 +141,7 @@ async function loadProfitCenterDealsPaged(
     throw new Error(dealsRes.error.message);
   }
 
-  deals = deals.map(normalizeDeal);
+  deals = await canonicalizeDeals(supabase, deals.map(normalizeDeal));
 
   const dealIds = deals.map((d) => d.id);
   const [tradesRes, dspRes] = await Promise.all([
@@ -160,7 +199,7 @@ export async function loadProfitCenterDeals(
 
   const bundle = (data ?? {}) as RpcBundle;
   return {
-    deals: (bundle.deals ?? []).map(normalizeDeal),
+    deals: await canonicalizeDeals(supabase, (bundle.deals ?? []).map(normalizeDeal)),
     trades: bundle.trades ?? [],
     dealSalespeople: bundle.deal_salespeople ?? [],
   };
