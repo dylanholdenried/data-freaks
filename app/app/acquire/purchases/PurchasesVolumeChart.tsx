@@ -15,10 +15,17 @@ import { formatMoney } from "@/lib/acquire/cost";
 import type { MonthlyVolumeRow } from "@/lib/acquire/monthly-volume";
 import { IC } from "@/lib/inventory-command/midmo";
 
-/** Dark green for total gross profit bars. */
-const GROSS_GREEN = "#0D5C38";
-/** Teal for reported (payable) gross bars. */
-const REPORTED_GROSS = "#1F8A7A";
+/** Pending Sale pink for Sales unit bars. */
+const SALES_PINK = "#F472B6";
+/** Seller Unwind purple for Reported Gross bars. */
+const REPORTED_GROSS_PURPLE = "#A78BFA";
+
+const LEGEND_ORDER = [
+  "Purchases",
+  "Sales",
+  "Total gross",
+  "Reported Gross",
+] as const;
 
 function countLabel(value: unknown): string {
   const n = typeof value === "number" ? value : Number(value);
@@ -73,11 +80,11 @@ function VolumeTooltip({
       </p>
       <div className="space-y-1">
         <p style={{ color: IC.blue }}>Purchases: {unitsLabel(row.purchaseCount)}</p>
-        <p style={{ color: IC.green }}>Sales: {unitsLabel(row.salesCount)}</p>
-        <p style={{ color: GROSS_GREEN }}>
+        <p style={{ color: SALES_PINK }}>Sales: {unitsLabel(row.salesCount)}</p>
+        <p style={{ color: IC.green }}>
           Total gross: {formatMoney(row.grossTotal)}
         </p>
-        <p style={{ color: REPORTED_GROSS }}>
+        <p style={{ color: REPORTED_GROSS_PURPLE }}>
           Reported Gross: {formatMoney(row.reportedGrossTotal)}
         </p>
       </div>
@@ -132,9 +139,39 @@ export default function PurchasesVolumeChart({ data }: { data: MonthlyVolumeRow[
             />
             <Legend
               wrapperStyle={{ fontSize: 12, color: IC.muted, paddingTop: 4 }}
-              formatter={(value) => (
-                <span style={{ color: IC.muted }}>{value}</span>
-              )}
+              content={({ payload }) => {
+                const byValue = new Map(
+                  (payload ?? []).map((entry) => [String(entry.value), entry])
+                );
+                const ordered = LEGEND_ORDER.map((name) => byValue.get(name)).filter(
+                  (entry): entry is NonNullable<typeof payload>[number] => Boolean(entry)
+                );
+                return (
+                  <ul
+                    className="flex flex-wrap justify-center gap-x-4 gap-y-1"
+                    style={{ paddingTop: 4, margin: 0, listStyle: "none" }}
+                  >
+                    {ordered.map((entry) => (
+                      <li
+                        key={String(entry.value)}
+                        className="inline-flex items-center gap-1.5"
+                      >
+                        <span
+                          aria-hidden
+                          style={{
+                            width: 10,
+                            height: 10,
+                            borderRadius: 2,
+                            background: entry.color,
+                            display: "inline-block",
+                          }}
+                        />
+                        <span style={{ color: IC.muted }}>{entry.value}</span>
+                      </li>
+                    ))}
+                  </ul>
+                );
+              }}
             />
             <Bar
               yAxisId="units"
@@ -155,7 +192,7 @@ export default function PurchasesVolumeChart({ data }: { data: MonthlyVolumeRow[
               yAxisId="units"
               dataKey="salesCount"
               name="Sales"
-              fill={IC.green}
+              fill={SALES_PINK}
               radius={[3, 3, 0, 0]}
               maxBarSize={24}
             >
@@ -170,7 +207,7 @@ export default function PurchasesVolumeChart({ data }: { data: MonthlyVolumeRow[
               yAxisId="gross"
               dataKey="grossTotal"
               name="Total gross"
-              fill={GROSS_GREEN}
+              fill={IC.green}
               radius={[3, 3, 0, 0]}
               maxBarSize={24}
             >
@@ -185,7 +222,7 @@ export default function PurchasesVolumeChart({ data }: { data: MonthlyVolumeRow[
               yAxisId="gross"
               dataKey="reportedGrossTotal"
               name="Reported Gross"
-              fill={REPORTED_GROSS}
+              fill={REPORTED_GROSS_PURPLE}
               radius={[3, 3, 0, 0]}
               maxBarSize={24}
             >
