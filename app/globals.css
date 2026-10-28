@@ -2991,6 +2991,113 @@ main:has(.da-app) + footer {
   color: var(--da-text);
 }
 
+.pc-inv-note,
+.pc-filter-note,
+.pc-date-error {
+  margin: 0 0 10px;
+  font-size: 13px;
+}
+
+.pc-date-error {
+  color: var(--da-red);
+}
+
+.pc-filter-bar {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--da-line);
+}
+
+.pc-filter-group-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--da-muted);
+  margin-bottom: 6px;
+}
+
+.pc-pill.pc-pill-with-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+}
+
+.pc-pill-with-count .pc-pill-label {
+  min-width: 0;
+}
+
+.pc-filter-count {
+  flex-shrink: 0;
+  margin-left: 8px;
+  padding-left: 8px;
+  border-left: 1px solid var(--da-line);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1;
+  color: var(--da-muted);
+  opacity: 0.85;
+}
+
+.pc-pill.is-soft.is-active .pc-filter-count {
+  border-left-color: rgba(20, 16, 10, 0.28);
+  color: rgba(20, 16, 10, 0.7);
+  opacity: 1;
+}
+
+.pc-inline-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--da-green-dim, rgba(34, 160, 90, 0.15));
+  color: var(--da-green);
+}
+
+.pc-row-best td {
+  background: rgba(34, 160, 90, 0.06);
+}
+
+.pc-row-need-more td:first-child {
+  box-shadow: inset 3px 0 0 var(--da-amber);
+}
+
+.pc-row-too-much td:first-child {
+  box-shadow: inset 3px 0 0 var(--da-red);
+}
+
+.pc-sweet-spot .pc-muted {
+  margin: 0 0 12px;
+}
+
+.pc-sweet-block {
+  margin-top: 10px;
+}
+
+.pc-sweet-stock-label,
+.pc-sweet-avoid-label {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pc-sweet-stock-label {
+  color: var(--da-green);
+}
+
+.pc-sweet-avoid-label {
+  color: var(--da-red);
+}
+
 .pc-kpi-grid-compact {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }

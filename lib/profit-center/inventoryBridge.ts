@@ -54,14 +54,14 @@ export function parseVehYear(veh: string | null | undefined): number | null {
 }
 
 /** Units on lot matching make + model. */
-export function filterModelInventoryUnits(
-  units: InvUnitRow[],
+export function filterModelInventoryUnits<T extends InvUnitRow>(
+  units: T[],
   make: string,
   model: string
-): InvUnitRow[] {
+): T[] {
   const wantMake = norm(make);
   const wantModel = norm(model);
-  const matched: InvUnitRow[] = [];
+  const matched: T[] = [];
 
   for (const u of units) {
     const parsed = parseVehMakeModel(u.veh);

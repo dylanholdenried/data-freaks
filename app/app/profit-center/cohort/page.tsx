@@ -32,6 +32,7 @@ import {
   splitMakeModel,
   type CohortFocus,
 } from "@/lib/profit-center/cohort";
+import { parseDialInFromSearchParams } from "@/lib/profit-center/cohortFilters";
 import SelectAutoGroupEmptyState from "../../SelectAutoGroupEmptyState";
 import PlanNoAccessState from "../../PlanNoAccessState";
 import CohortClient from "../CohortClient";
@@ -120,6 +121,8 @@ export default async function ProfitCenterCohortPage({
   const now = new Date();
   const range = resolveDateRange(preset, { now });
 
+  const initialDialIn = parseDialInFromSearchParams(searchParams);
+
   if (storeIds.length === 0) {
     return (
       <CohortClient
@@ -142,6 +145,7 @@ export default async function ProfitCenterCohortPage({
         departmentName={departmentName}
         inventoryUnits={[]}
         inventorySnapshotDate={null}
+        initialDialIn={initialDialIn}
       />
     );
   }
@@ -160,10 +164,9 @@ export default async function ProfitCenterCohortPage({
       )
       .eq("dealer_group_id", dealerGroupId)
       .maybeSingle(),
-    loadLatestInventoryUnits(
-      supabase,
-      storeId === "all" ? storeIds : [storeId]
-    ),
+    // Always load all accessible stores so model scorecards can show
+    // per-store on-lot even when deals are scoped to one store.
+    loadLatestInventoryUnits(supabase, storeIds),
   ]);
 
   const departments = (deptRes.data ?? []) as Department[];
@@ -284,6 +287,7 @@ export default async function ProfitCenterCohortPage({
       departmentName={departmentName}
       inventoryUnits={inventory.units}
       inventorySnapshotDate={inventory.snapshotDate}
+      initialDialIn={initialDialIn}
     />
   );
 }
