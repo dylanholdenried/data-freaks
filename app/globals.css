@@ -2266,6 +2266,16 @@ main:has(.da-app) + footer {
   padding: 0;
 }
 
+.da-demo-table .da-demo-sort {
+  display: block;
+  width: 100%;
+  text-align: inherit;
+}
+
+.da-demo-table .da-demo-sort:hover {
+  color: var(--da-text);
+}
+
 .da-demo-split {
   display: grid;
   grid-template-columns: 1fr 1fr;

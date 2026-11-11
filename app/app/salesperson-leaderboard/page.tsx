@@ -15,8 +15,10 @@ type Deal = {
   id: string;
   status: string;
   store_id: string;
+  department_id: string;
   sale_date: string;
 };
+type Department = { id: string; name: string };
 type Salesperson = { id: string; name: string; store_id: string };
 type DealSalesperson = {
   deal_id: string;
@@ -80,6 +82,7 @@ export default async function SalespersonLeaderboardPage({
   const emptyProps = {
     stores: [] as Store[],
     deals: [] as Deal[],
+    departments: [] as Department[],
     salespeople: [] as Salesperson[],
     dealSalespeople: [] as DealSalesperson[],
     calendarDays: [] as CalendarDay[],
@@ -97,17 +100,23 @@ export default async function SalespersonLeaderboardPage({
 
   // deal_salespeople is embedded so this page (auto-refreshed every minute)
   // doesn't fan out into chunked `.in("deal_id")` requests.
-  const [dealsRes, spRes, calRes] = await Promise.all([
+  const [dealsRes, deptRes, spRes, calRes] = await Promise.all([
     fetchAllRows<DealWithSplits>((from, to) =>
       supabase
         .from("deals")
-        .select("id,status,store_id,sale_date,deal_salespeople(salesperson_id,share_percent)")
+        .select(
+          "id,status,store_id,department_id,sale_date,deal_salespeople(salesperson_id,share_percent)"
+        )
         .in("store_id", storeIds)
         .gte("sale_date", firstOfYear)
         .lte("sale_date", lastOfMonth)
         .order("id", { ascending: true })
         .range(from, to)
     ),
+    supabase
+      .from("departments")
+      .select("id,name")
+      .in("store_id", storeIds),
     supabase
       .from("salespeople")
       .select("id,name,store_id")
@@ -133,12 +142,14 @@ export default async function SalespersonLeaderboardPage({
     return deal;
   });
   const salespeople = (spRes.data ?? []) as unknown as Salesperson[];
+  const departments = (deptRes.data ?? []) as unknown as Department[];
   const calendarDays = (calRes.data ?? []) as unknown as CalendarDay[];
 
   return (
     <LeaderboardClient
       stores={stores}
       deals={deals}
+      departments={departments}
       salespeople={salespeople}
       dealSalespeople={dealSalespeople}
       calendarDays={calendarDays}
