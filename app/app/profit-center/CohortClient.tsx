@@ -32,6 +32,7 @@ import {
 } from "@/lib/profit-center/cohort";
 import {
   applyCohortDealFilters,
+  buildAcquisitionFilterOptions,
   buildFinanceFilterOptions,
   buildStoreFilterOptions,
   buildTrimFilterOptions,
@@ -55,10 +56,10 @@ import {
   pcFmtPct,
 } from "@/lib/profit-center/format";
 import {
-  filterModelInventoryUnits,
+  filterCohortInventoryUnits,
   inventoryBridgeCue,
   rateInventoryUnits,
-  summarizeModelInventory,
+  summarizeInventoryUnits,
   type RatedInventoryUnit,
   type UnitRating,
 } from "@/lib/profit-center/inventoryBridge";
@@ -147,9 +148,12 @@ type Department = { id: string; name: string; store_id: string };
 type DealSortKey =
   | "store"
   | "stock"
+  | "acquisition"
   | "sale_date"
   | "finance"
   | "year"
+  | "make"
+  | "model"
   | "trim"
   | "odometer"
   | "sale_price"
@@ -210,12 +214,18 @@ function sortValue(
       return storeNames.get(d.store_id) ?? "";
     case "stock":
       return d.stock_number?.trim() || "";
+    case "acquisition":
+      return d.acquisition_source?.trim() || "(Unknown)";
     case "sale_date":
       return d.sale_date;
     case "finance":
       return financeLabel(d.finance_type);
     case "year":
       return d.vehicle_year ?? -Infinity;
+    case "make":
+      return d.vehicle_make?.trim() || "";
+    case "model":
+      return d.vehicle_model?.trim() || "";
     case "trim":
       return d.trim?.trim() || "";
     case "odometer":
@@ -666,7 +676,9 @@ export default function CohortClient({
             ? ["odometer"]
             : focus === "acquisition"
               ? ["acquisition"]
-              : [];
+              : focus === "finance"
+                ? ["finance"]
+                : [];
 
   const recommendations = useMemo(
     () => buildCohortRecommendations(unfilteredCtx, buyBoxSettings, skipDims),
@@ -706,25 +718,25 @@ export default function CohortClient({
     });
   }, [isModelFocus, filteredDeals, trades, buyBoxSettings]);
 
-  const modelInventoryUnits = useMemo(() => {
-    if (!isModelFocus || !make || !model) return [] as InvUnitWithStore[];
-    return filterModelInventoryUnits(inventoryUnits, make, model);
-  }, [isModelFocus, make, model, inventoryUnits]);
-
-  const inventory = useMemo(() => {
-    if (!isModelFocus || !make || !model) return null;
-    return summarizeModelInventory(
-      inventoryUnits,
+  const cohortInventoryUnits = useMemo(() => {
+    return filterCohortInventoryUnits(inventoryUnits, focus, {
       make,
       model,
-      inventorySnapshotDate
-    );
-  }, [isModelFocus, make, model, inventoryUnits, inventorySnapshotDate]);
+      value,
+      cohortDeals: cohortDeals,
+      unitKey: (u) => `${u.store_id}::${u.stk}`,
+    });
+  }, [inventoryUnits, focus, make, model, value, cohortDeals]);
+
+  const inventory = useMemo(
+    () => summarizeInventoryUnits(cohortInventoryUnits, inventorySnapshotDate),
+    [cohortInventoryUnits, inventorySnapshotDate]
+  );
 
   const invCue =
-    inventory && (signal === "buy" || signal === "red")
+    isModelFocus && (signal === "buy" || signal === "red")
       ? inventoryBridgeCue(inventory, signal === "buy")
-      : inventory && inventory.count > 0
+      : inventory.count > 0 && isModelFocus
         ? inventoryBridgeCue(inventory, false)
         : null;
 
@@ -740,7 +752,7 @@ export default function CohortClient({
 
   const onLotStoreOptions = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const u of modelInventoryUnits) {
+    for (const u of cohortInventoryUnits) {
       counts.set(u.store_id, (counts.get(u.store_id) ?? 0) + 1);
     }
     return [...counts.entries()]
@@ -750,12 +762,12 @@ export default function CohortClient({
         count,
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [modelInventoryUnits, storeNames]);
+  }, [cohortInventoryUnits, storeNames]);
 
   const onLotScopedUnits = useMemo(() => {
-    if (onLotStoreId === "all") return modelInventoryUnits;
-    return modelInventoryUnits.filter((u) => u.store_id === onLotStoreId);
-  }, [modelInventoryUnits, onLotStoreId]);
+    if (onLotStoreId === "all") return cohortInventoryUnits;
+    return cohortInventoryUnits.filter((u) => u.store_id === onLotStoreId);
+  }, [cohortInventoryUnits, onLotStoreId]);
 
   const onLotRated = useMemo(
     () => rateInventoryUnits(onLotScopedUnits, salesProfile),
@@ -810,6 +822,10 @@ export default function CohortClient({
     () => buildFinanceFilterOptions(cohortDeals),
     [cohortDeals]
   );
+  const acquisitionFilterOptions = useMemo(
+    () => buildAcquisitionFilterOptions(cohortDeals),
+    [cohortDeals]
+  );
 
   function toggleSort(key: DealSortKey) {
     if (sortKey === key) {
@@ -819,6 +835,9 @@ export default function CohortClient({
       setSortDir(
         key === "store" ||
           key === "stock" ||
+          key === "acquisition" ||
+          key === "make" ||
+          key === "model" ||
           key === "trim" ||
           key === "finance" ||
           key === "sale_date"
@@ -845,7 +864,12 @@ export default function CohortClient({
     return copy;
   }, [filteredDeals, sortKey, sortDir, tradesByDeal, storeNames]);
 
-  const backHref = profitCenterHref({ preset, storeId, departmentName });
+  const backHref = profitCenterHref({
+    preset,
+    storeId,
+    departmentName,
+    tab: focus === "finance" ? "department" : undefined,
+  });
   const storeLabel =
     storeId === "all"
       ? "All stores"
@@ -866,6 +890,7 @@ export default function CohortClient({
       years: [combo.year],
       trims: [],
       financeTypes: [],
+      acquisitions: [],
     }));
   }
 
@@ -1174,17 +1199,45 @@ export default function CohortClient({
               })
             }
           />
-          <FilterChipGroup
-            label="Finance"
-            options={financeFilterOptions}
-            selected={dialIn.financeTypes}
-            onToggle={(v) =>
-              setDialIn((prev) => ({
-                ...prev,
-                financeTypes: toggleInList(prev.financeTypes, v.toLowerCase()),
-              }))
-            }
-          />
+          {focus !== "finance" ? (
+            <FilterChipGroup
+              label="Finance"
+              options={financeFilterOptions}
+              selected={dialIn.financeTypes}
+              onToggle={(v) =>
+                setDialIn((prev) => ({
+                  ...prev,
+                  financeTypes: toggleInList(
+                    prev.financeTypes,
+                    v.toLowerCase()
+                  ),
+                }))
+              }
+            />
+          ) : null}
+          {focus !== "acquisition" ? (
+            <FilterChipGroup
+              label="Acquisition"
+              options={acquisitionFilterOptions}
+              selected={dialIn.acquisitions}
+              onToggle={(v) =>
+                setDialIn((prev) => {
+                  const lower = v.toLowerCase();
+                  const existing = prev.acquisitions.find(
+                    (a) => a.toLowerCase() === lower
+                  );
+                  return {
+                    ...prev,
+                    acquisitions: existing
+                      ? prev.acquisitions.filter(
+                          (a) => a.toLowerCase() !== lower
+                        )
+                      : [...prev.acquisitions, v],
+                  };
+                })
+              }
+            />
+          ) : null}
         </div>
 
         {sortedDeals.length === 0 ? (
@@ -1209,6 +1262,13 @@ export default function CohortClient({
                     onSort={toggleSort}
                   />
                   <SortHeader
+                    label="Acq"
+                    sortKey="acquisition"
+                    activeKey={sortKey}
+                    sortDir={sortDir}
+                    onSort={toggleSort}
+                  />
+                  <SortHeader
                     label="Date"
                     sortKey="sale_date"
                     activeKey={sortKey}
@@ -1225,6 +1285,20 @@ export default function CohortClient({
                   <SortHeader
                     label="Year"
                     sortKey="year"
+                    activeKey={sortKey}
+                    sortDir={sortDir}
+                    onSort={toggleSort}
+                  />
+                  <SortHeader
+                    label="Make"
+                    sortKey="make"
+                    activeKey={sortKey}
+                    sortDir={sortDir}
+                    onSort={toggleSort}
+                  />
+                  <SortHeader
+                    label="Model"
+                    sortKey="model"
                     activeKey={sortKey}
                     sortDir={sortDir}
                     onSort={toggleSort}
@@ -1308,9 +1382,12 @@ export default function CohortClient({
                           {d.stock_number || "Open"}
                         </Link>
                       </td>
+                      <td>{d.acquisition_source?.trim() || "(Unknown)"}</td>
                       <td>{formatSaleDateShort(d.sale_date)}</td>
                       <td>{financeLabel(d.finance_type)}</td>
                       <td>{d.vehicle_year || "—"}</td>
+                      <td>{d.vehicle_make?.trim() || "—"}</td>
+                      <td>{d.vehicle_model?.trim() || "—"}</td>
                       <td>{d.trim?.trim() || "—"}</td>
                       <td className="text-right">{pcFmtMiles(d.odometer)}</td>
                       <td className="text-right">{pcFmt$(d.sale_price)}</td>
@@ -1405,8 +1482,7 @@ export default function CohortClient({
         )}
       </section>
 
-      {isModelFocus && (
-        <section className="pc-panel pc-inv-bridge">
+      <section className="pc-panel pc-inv-bridge">
           <div className="pc-chart-head">
             <div>
               <h3>On lot now</h3>
@@ -1418,11 +1494,18 @@ export default function CohortClient({
                 {" — "}
                 not tied to the sold date range above. Store pills here only
                 filter this table.
+                {focus === "finance"
+                  ? " Matched by lot disposition (Prime/Cash → retail, Subprime → subprime)."
+                  : focus === "acquisition" ||
+                      focus === "trim" ||
+                      focus === "odometer"
+                    ? " Matched to make/model sold in this cohort."
+                    : ""}
               </p>
             </div>
           </div>
 
-          {modelInventoryUnits.length === 0 ? (
+          {cohortInventoryUnits.length === 0 ? (
             <p className="pc-muted">
               {inventorySnapshotDate
                 ? `No matching units on latest snapshot (${inventorySnapshotDate}).`
@@ -1445,7 +1528,7 @@ export default function CohortClient({
                   >
                     <span className="pc-pill-label">All stores</span>
                     <span className="pc-filter-count">
-                      {modelInventoryUnits.length}
+                      {cohortInventoryUnits.length}
                     </span>
                   </button>
                   {onLotStoreOptions.map((s) => (
@@ -1652,7 +1735,6 @@ export default function CohortClient({
             </>
           )}
         </section>
-      )}
 
       <section className="pc-panel pc-dial-in">
         <div className="pc-panel-label">What to stock / what to avoid</div>

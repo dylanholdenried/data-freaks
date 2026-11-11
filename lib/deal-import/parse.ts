@@ -19,6 +19,22 @@ function stringifyCell(value: unknown): string {
   return String(value).trim();
 }
 
+/** Map common export aliases onto canonical DEAL_IMPORT_HEADERS keys. */
+const HEADER_ALIASES: Record<string, DealImportHeader> = {
+  date: "sale_date",
+  "sale date": "sale_date",
+  "trade stock": "trade_stock_number",
+  trade_stock: "trade_stock_number",
+  "trade stock number": "trade_stock_number",
+  "trade vin": "trade_vin",
+  tradevin: "trade_vin",
+};
+
+function canonicalizeHeader(raw: string): string {
+  const key = raw.replace(/^\uFEFF/, "").trim().toLowerCase();
+  return HEADER_ALIASES[key] ?? key;
+}
+
 export function parseDealImportCsv(csvText: string): {
   headers: string[];
   rows: ParsedCsvRow[];
@@ -28,8 +44,8 @@ export function parseDealImportCsv(csvText: string): {
   const parsed = Papa.parse<Record<string, unknown>>(csvText, {
     header: true,
     skipEmptyLines: "greedy",
-    // Case-insensitive headers (Excel often exports MSRP vs msrp); strip BOM
-    transformHeader: (h) => h.replace(/^\uFEFF/, "").trim().toLowerCase(),
+    // Case-insensitive headers (Excel often exports MSRP vs msrp); strip BOM + aliases
+    transformHeader: (h) => canonicalizeHeader(h),
   });
 
   if (parsed.errors.length > 0) {

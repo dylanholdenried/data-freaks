@@ -17,6 +17,7 @@ import {
   DEFAULT_BUY_BOX_SETTINGS,
   settingsFromDbRow,
 } from "@/lib/profit-center/buyBox";
+import { parseProfitCenterTab } from "@/lib/profit-center/cohort";
 import { loadProfitCenterDeals } from "@/lib/profit-center/loadDeals";
 import SelectAutoGroupEmptyState from "../SelectAutoGroupEmptyState";
 import PlanNoAccessState from "../PlanNoAccessState";
@@ -88,6 +89,9 @@ export default async function ProfitCenterPage({
     typeof searchParams.department === "string"
       ? searchParams.department
       : undefined;
+  const initialTab = parseProfitCenterTab(
+    typeof searchParams.tab === "string" ? searchParams.tab : undefined
+  );
 
   const now = new Date();
   const range = resolveDateRange(preset, { now });
@@ -106,6 +110,7 @@ export default async function ProfitCenterPage({
       range={range}
       initialStoreId={storeId}
       initialDepartmentName={departmentParam}
+      initialTab={initialTab}
     />
   );
 
@@ -155,6 +160,7 @@ export default async function ProfitCenterPage({
       range={range}
       initialStoreId={storeId}
       initialDepartmentName={departmentParam}
+      initialTab={initialTab}
     />
   );
 }

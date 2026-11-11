@@ -55,7 +55,8 @@ function Sparkline({
         borderRadius: 10,
         padding: "12px 16px",
         flex: 1,
-        minWidth: 165,
+        minWidth: 0,
+        overflow: "hidden",
       }}
     >
       <div
@@ -64,19 +65,23 @@ function Sparkline({
           fontSize: 11,
           textTransform: "uppercase",
           letterSpacing: 1,
+          overflowWrap: "anywhere",
         }}
       >
         {label}
       </div>
-      <div className="mt-1 flex items-end justify-between gap-2">
-        <div>
+      <div className="mt-1 flex min-w-0 items-end justify-between gap-2">
+        <div className="min-w-0">
           <div
             style={{
               fontFamily: "var(--ic-font-display), 'Barlow Condensed', sans-serif",
-              fontSize: 28,
+              fontSize: "clamp(16px, 2.8vw, 28px)",
               fontWeight: 700,
               lineHeight: 1.1,
               color: IC.text,
+              fontVariantNumeric: "tabular-nums",
+              overflowWrap: "anywhere",
+              wordBreak: "break-word",
             }}
           >
             {fmt(last)}

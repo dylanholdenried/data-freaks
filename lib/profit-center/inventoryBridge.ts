@@ -84,15 +84,11 @@ export function filterModelInventoryUnits<T extends InvUnitRow>(
   return matched;
 }
 
-/** Summarize on-lot units matching make + model. */
-export function summarizeModelInventory(
-  units: InvUnitRow[],
-  make: string,
-  model: string,
+/** Summarize a pre-filtered on-lot unit list. */
+export function summarizeInventoryUnits(
+  matched: InvUnitRow[],
   snapshotDate: string | null = null
 ): InventoryBridgeSummary {
-  const matched = filterModelInventoryUnits(units, make, model);
-
   if (matched.length === 0) {
     return emptyInventoryBridge(snapshotDate);
   }
@@ -114,6 +110,105 @@ export function summarizeModelInventory(
     totalCost,
     snapshotDate,
   };
+}
+
+/** Summarize on-lot units matching make + model. */
+export function summarizeModelInventory(
+  units: InvUnitRow[],
+  make: string,
+  model: string,
+  snapshotDate: string | null = null
+): InventoryBridgeSummary {
+  return summarizeInventoryUnits(
+    filterModelInventoryUnits(units, make, model),
+    snapshotDate
+  );
+}
+
+type CohortInvFocus =
+  | "model"
+  | "acquisition"
+  | "price"
+  | "odometer"
+  | "year"
+  | "trim"
+  | "finance";
+
+/**
+ * Filter latest inventory to the cohort cut:
+ * - model / year / price / finance: direct lot attributes
+ * - acquisition / trim / odometer: units matching make+model sold in the cohort
+ */
+export function filterCohortInventoryUnits<T extends InvUnitRow>(
+  units: T[],
+  focus: CohortInvFocus,
+  opts: {
+    make?: string;
+    model?: string;
+    value?: string;
+    cohortDeals?: { vehicle_make: string; vehicle_model: string }[];
+    unitKey?: (u: T) => string;
+  }
+): T[] {
+  const unitKey =
+    opts.unitKey ??
+    ((u: T) => `${(u as { store_id?: string }).store_id ?? ""}::${u.stk}`);
+
+  switch (focus) {
+    case "model": {
+      if (!opts.make || !opts.model) return [];
+      return filterModelInventoryUnits(units, opts.make, opts.model);
+    }
+    case "year": {
+      const y = opts.value?.trim();
+      if (!y) return [];
+      return units.filter((u) => String(parseVehYear(u.veh) ?? "") === y);
+    }
+    case "price": {
+      const want = opts.value?.trim();
+      if (!want) return [];
+      return units.filter((u) => {
+        const band = priceBandForSalePrice(u.price);
+        return band?.id === want || band?.label === want;
+      });
+    }
+    case "finance": {
+      const ft = (opts.value ?? "").trim().toLowerCase();
+      if (ft === "subprime") {
+        return units.filter((u) => u.disp === "subprime");
+      }
+      if (ft === "prime" || ft === "cash" || ft === "lease") {
+        return units.filter((u) => u.disp === "retail");
+      }
+      return [];
+    }
+    case "acquisition":
+    case "trim":
+    case "odometer":
+    default: {
+      const deals = opts.cohortDeals ?? [];
+      if (deals.length === 0) return [];
+      const pairs = new Map<string, { make: string; model: string }>();
+      for (const d of deals) {
+        const make = d.vehicle_make?.trim() || "";
+        const model = d.vehicle_model?.trim() || "";
+        if (!make && !model) continue;
+        const key = `${make} ${model}`.trim().toLowerCase();
+        if (!pairs.has(key)) pairs.set(key, { make, model });
+      }
+      const out: T[] = [];
+      const seen = new Set<string>();
+      for (const { make, model } of pairs.values()) {
+        for (const u of filterModelInventoryUnits(units, make, model)) {
+          const id = unitKey(u);
+          if (seen.has(id)) continue;
+          seen.add(id);
+          out.push(u);
+        }
+      }
+      return out;
+    }
+  }
 }
 
 function lotHealthScore(u: InvUnitRow): { score: number; reasons: string[] } {

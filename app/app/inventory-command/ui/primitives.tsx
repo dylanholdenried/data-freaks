@@ -108,7 +108,8 @@ export function IcKpi({
         borderRadius: 10,
         padding: "12px 16px",
         flex: 1,
-        minWidth: 130,
+        minWidth: 0,
+        overflow: "hidden",
       }}
     >
       <div
@@ -117,6 +118,7 @@ export function IcKpi({
           fontSize: 11,
           textTransform: "uppercase",
           letterSpacing: 1,
+          overflowWrap: "anywhere",
         }}
       >
         {label}
@@ -124,16 +126,31 @@ export function IcKpi({
       <div
         style={{
           fontFamily: "var(--ic-font-display), 'Barlow Condensed', sans-serif",
-          fontSize: 34,
+          fontSize: "clamp(18px, 3.2vw, 34px)",
           fontWeight: 700,
           lineHeight: 1.15,
           color,
+          fontVariantNumeric: "tabular-nums",
+          minWidth: 0,
+          maxWidth: "100%",
+          overflowWrap: "anywhere",
+          wordBreak: "break-word",
         }}
       >
         {value}
       </div>
       {sub ? (
-        <div style={{ color: IC.muted, fontSize: 12, marginTop: 2 }}>{sub}</div>
+        <div
+          style={{
+            color: IC.muted,
+            fontSize: 12,
+            marginTop: 2,
+            overflowWrap: "anywhere",
+            wordBreak: "break-word",
+          }}
+        >
+          {sub}
+        </div>
       ) : null}
     </div>
   );

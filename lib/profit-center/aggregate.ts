@@ -56,7 +56,33 @@ export type Dimension =
   | "body_style"
   | "truck_class"
   | "department"
-  | "salesperson";
+  | "salesperson"
+  | "finance";
+
+/** Sold-deal finance books used for Department Performance. */
+export const FINANCE_TYPE_KEYS = ["prime", "subprime", "cash"] as const;
+export type FinanceTypeKey = (typeof FINANCE_TYPE_KEYS)[number];
+
+export function financeTypeLabel(key: string): string {
+  switch (key.toLowerCase()) {
+    case "prime":
+      return "Prime";
+    case "subprime":
+      return "Subprime";
+    case "cash":
+      return "Cash";
+    case "lease":
+      return "Lease";
+    case "bulk_upload":
+      return "Bulk upload";
+    default:
+      return key.trim() || "(Unknown)";
+  }
+}
+
+export function isFinanceTypeKey(value: string): value is FinanceTypeKey {
+  return (FINANCE_TYPE_KEYS as readonly string[]).includes(value);
+}
 
 export type RollupRow = {
   key: string;
@@ -160,6 +186,13 @@ function dimensionKey(
         key: s.salesperson_id,
         label: ctx.salespersonNames.get(s.salesperson_id) ?? "Unknown",
       }));
+    }
+    case "finance": {
+      const raw = (deal.finance_type ?? "").trim().toLowerCase();
+      if (!raw) {
+        return [{ key: "(unspecified)", label: "(Unspecified)" }];
+      }
+      return [{ key: raw, label: financeTypeLabel(raw) }];
     }
     default:
       return [{ key: "?", label: "?" }];
@@ -325,8 +358,58 @@ export function aggregateByDimension(
     rows.push(...ordered);
   }
 
+  // Finance books: Prime → Subprime → Cash, then any other types
+  if (dim === "finance") {
+    const byKey = new Map(rows.map((r) => [r.key, r]));
+    const ordered: RollupRow[] = FINANCE_TYPE_KEYS.map((key) => {
+      return byKey.get(key) ?? buildRow(key, financeTypeLabel(key), [], ctx);
+    });
+    const orphans = rows.filter((r) => !isFinanceTypeKey(r.key));
+    orphans.sort((a, b) => b.volume - a.volume || a.label.localeCompare(b.label));
+    rows.length = 0;
+    rows.push(...ordered, ...orphans);
+  }
+
   const total = buildRow("__total__", "Total", ctx.deals, ctx, { isTotal: true });
   return { rows, total };
+}
+
+/**
+ * Department Performance: always emit Prime / Subprime / Cash rows for the
+ * current deal cut. Deals outside those three (lease, bulk_upload, blank)
+ * are counted separately so volume still reconciles.
+ */
+export function aggregateFinanceDepartments(ctx: AggregateContext): {
+  rows: RollupRow[];
+  overall: RollupRow;
+  outsideCount: number;
+  typedVolume: number;
+} {
+  const buckets: Record<FinanceTypeKey, ProfitDeal[]> = {
+    prime: [],
+    subprime: [],
+    cash: [],
+  };
+  let outsideCount = 0;
+
+  for (const d of ctx.deals) {
+    const ft = (d.finance_type ?? "").toLowerCase();
+    if (isFinanceTypeKey(ft)) {
+      buckets[ft].push(d);
+    } else {
+      outsideCount += 1;
+    }
+  }
+
+  const rows = FINANCE_TYPE_KEYS.map((key) =>
+    buildRow(key, financeTypeLabel(key), buckets[key], ctx)
+  );
+  const typedVolume = rows.reduce((sum, r) => sum + r.volume, 0);
+  const overall = buildRow("__total__", "Overall", ctx.deals, ctx, {
+    isTotal: true,
+  });
+
+  return { rows, overall, outsideCount, typedVolume };
 }
 
 export type ProfitFilters = {

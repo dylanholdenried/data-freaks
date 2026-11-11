@@ -99,6 +99,7 @@ const FINANCE_TYPES = [
   { value: "subprime", label: "Subprime" },
   { value: "lease", label: "Lease" },
   { value: "cash", label: "Cash" },
+  { value: "bulk_upload", label: "Bulk Upload" },
 ];
 
 const SEL =

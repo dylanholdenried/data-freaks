@@ -52,6 +52,7 @@ export const FINANCE_TYPE_LABEL: Record<string, string> = {
   subprime: "Subprime",
   cash: "Cash",
   lease: "Lease",
+  bulk_upload: "Bulk Upload",
 };
 
 export function formatFinanceTypeLabel(v: string | null | undefined): string {

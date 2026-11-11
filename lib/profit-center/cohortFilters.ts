@@ -10,6 +10,7 @@ export type CohortDialInFilters = {
   years: number[];
   trims: string[];
   financeTypes: string[];
+  acquisitions: string[];
 };
 
 export type CohortFilterOption = {
@@ -23,7 +24,16 @@ export const EMPTY_DIAL_IN: CohortDialInFilters = {
   years: [],
   trims: [],
   financeTypes: [],
+  acquisitions: [],
 };
+
+/** Empty / missing acquisition_source filter value. */
+export const UNKNOWN_ACQUISITION = "(Unknown)";
+
+export function acquisitionFilterKey(raw: string | null | undefined): string {
+  const t = raw?.trim();
+  return t && t.length > 0 ? t : UNKNOWN_ACQUISITION;
+}
 
 /** Empty trim display / filter value. */
 export const BLANK_TRIM = "(Blank)";
@@ -46,7 +56,8 @@ export function hasActiveDialIn(f: CohortDialInFilters): boolean {
     f.storeIds.length > 0 ||
     f.years.length > 0 ||
     f.trims.length > 0 ||
-    f.financeTypes.length > 0
+    f.financeTypes.length > 0 ||
+    f.acquisitions.length > 0
   );
 }
 
@@ -66,6 +77,10 @@ export function applyCohortDealFilters(
     filters.financeTypes.length > 0
       ? new Set(filters.financeTypes.map((f) => f.toLowerCase()))
       : null;
+  const acquisitionSet =
+    filters.acquisitions.length > 0
+      ? new Set(filters.acquisitions.map((a) => a.toLowerCase()))
+      : null;
 
   return deals.filter((d) => {
     if (storeSet && !storeSet.has(d.store_id)) return false;
@@ -76,6 +91,11 @@ export function applyCohortDealFilters(
     }
     if (financeSet) {
       if (!financeSet.has(financeFilterKey(d.finance_type))) return false;
+    }
+    if (acquisitionSet) {
+      if (!acquisitionSet.has(acquisitionFilterKey(d.acquisition_source).toLowerCase())) {
+        return false;
+      }
     }
     return true;
   });
@@ -164,6 +184,27 @@ export function buildFinanceFilterOptions(
     .sort((a, b) => a.label.localeCompare(b.label));
 }
 
+export function buildAcquisitionFilterOptions(
+  deals: ProfitDeal[]
+): CohortFilterOption[] {
+  const map = new Map<string, { label: string; count: number }>();
+  for (const d of deals) {
+    const label = acquisitionFilterKey(d.acquisition_source);
+    countMapIncrement(map, label.toLowerCase(), label);
+  }
+  return [...map.entries()]
+    .map(([, v]) => ({
+      value: v.label,
+      label: v.label,
+      count: v.count,
+    }))
+    .sort((a, b) => {
+      if (a.label === UNKNOWN_ACQUISITION) return 1;
+      if (b.label === UNKNOWN_ACQUISITION) return -1;
+      return a.label.localeCompare(b.label);
+    });
+}
+
 function parseCsv(raw: string | null | undefined): string[] {
   if (!raw?.trim()) return [];
   return raw
@@ -193,6 +234,7 @@ export function parseDialInFromSearchParams(
     years,
     trims: parseCsv(get("trims")),
     financeTypes: parseCsv(get("finance")).map((f) => f.toLowerCase()),
+    acquisitions: parseCsv(get("acq")),
   };
 }
 
@@ -220,6 +262,11 @@ export function writeDialInToSearchParams(
     q.set("finance", filters.financeTypes.join(","));
   } else {
     q.delete("finance");
+  }
+  if (filters.acquisitions.length > 0) {
+    q.set("acq", filters.acquisitions.join(","));
+  } else {
+    q.delete("acq");
   }
 }
 

@@ -34,13 +34,34 @@ export const DEAL_IMPORT_HEADERS = [
   "trade_acv",
   "trade_allowance",
   "trade_exit_strategy",
+  "trade_stock_number",
+  "trade_vin",
   "notes",
   "msrp",
 ] as const;
 
 export type DealImportHeader = (typeof DEAL_IMPORT_HEADERS)[number];
 
-export const FINANCE_TYPES = ["prime", "subprime", "cash", "lease"] as const;
+export const FINANCE_TYPES = [
+  "prime",
+  "subprime",
+  "cash",
+  "lease",
+  "bulk_upload",
+] as const;
+
+/** Normalize finance_type cell text to a canonical enum value, or null if blank/unknown. */
+export function normalizeFinanceType(
+  raw: string | null | undefined
+): (typeof FINANCE_TYPES)[number] | null {
+  if (raw == null) return null;
+  const cleaned = raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (!cleaned) return null;
+  if ((FINANCE_TYPES as readonly string[]).includes(cleaned)) {
+    return cleaned as (typeof FINANCE_TYPES)[number];
+  }
+  return null;
+}
 export const TRADE_EXIT_STRATEGIES = ["wholesale", "retail", "auction", "other"] as const;
 export const DEAL_IMPORT_STATUSES = ["pending", "closed"] as const;
 
@@ -167,6 +188,8 @@ export const dealImportRowSchema = z
     trade_acv: emptyToUndefined,
     trade_allowance: emptyToUndefined,
     trade_exit_strategy: emptyToUndefined,
+    trade_stock_number: emptyToUndefined,
+    trade_vin: emptyToUndefined,
     notes: emptyToUndefined,
     msrp: optionalNumber("msrp"),
   })
@@ -190,15 +213,13 @@ export const dealImportRowSchema = z
       }
     }
 
-    if (row.finance_type != null) {
-      const ft = row.finance_type.toLowerCase();
-      if (!(FINANCE_TYPES as readonly string[]).includes(ft)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "finance_type must be prime, subprime, cash, or lease",
-          path: ["finance_type"],
-        });
-      }
+    if (row.finance_type != null && normalizeFinanceType(row.finance_type) == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "finance_type must be prime, subprime, cash, lease, or bulk_upload",
+        path: ["finance_type"],
+      });
     }
 
     if (row.has_trade != null) {
@@ -301,6 +322,8 @@ export type NormalizedDealImportRow = {
   trade_acv: number | null;
   trade_allowance: number | null;
   trade_exit_strategy: (typeof TRADE_EXIT_STRATEGIES)[number] | null;
+  trade_stock_number: string | null;
+  trade_vin: string | null;
   notes: string | null;
   msrp: number | null;
 };
@@ -309,11 +332,10 @@ function isClosedComplete(
   parsed: z.infer<typeof dealImportRowSchema>,
   hasTrade: "yes" | "no"
 ): boolean {
-  // color, list_price, front_profit, and trade_exit_strategy are optional for import-as-closed
+  // color, trim, list_price, front_profit, and trade_exit_strategy are optional for import-as-closed
   const requiredStrings = [
     parsed.customer_last_name,
     parsed.vin,
-    parsed.trim,
     parsed.body_style,
     parsed.drivetrain,
     parsed.acquisition_source,
@@ -322,6 +344,7 @@ function isClosedComplete(
     parsed.salesperson_1,
   ];
   if (requiredStrings.some((v) => v == null || v === "")) return false;
+  if (normalizeFinanceType(parsed.finance_type) == null) return false;
 
   if (parsed.odometer == null || parsed.age == null) return false;
   // front_profit may be blank (unknown); still require back_profit + sale_price
@@ -390,17 +413,34 @@ export function toNormalizedDealImportRow(
       parsed.trade_exit_strategy.toLowerCase() as (typeof TRADE_EXIT_STRATEGIES)[number]
     );
 
-  const tradeComplete =
-    hasTrade === "yes" &&
-    parsed.trade_year != null &&
-    /^-?\d+$/.test(parsed.trade_year) &&
-    parsed.trade_make != null &&
-    parsed.trade_model != null &&
+  const tradeVin =
+    hasTrade === "yes" && parsed.trade_vin
+      ? parsed.trade_vin.replace(/[#\s]/g, "").toUpperCase() === "NA"
+        ? null
+        : parsed.trade_vin.trim()
+      : null;
+  const tradeStock =
+    hasTrade === "yes" ? (parsed.trade_stock_number?.trim() || null) : null;
+
+  const tradeYearOk =
+    parsed.trade_year != null && /^-?\d+$/.test(parsed.trade_year);
+  const tradeYmmOk =
+    tradeYearOk && parsed.trade_make != null && parsed.trade_model != null;
+  const tradeMoneyOk =
     parsed.trade_acv != null &&
     Number.isFinite(Number(parsed.trade_acv)) &&
     parsed.trade_allowance != null &&
-    Number.isFinite(Number(parsed.trade_allowance)) &&
-    tradeExitOk;
+    Number.isFinite(Number(parsed.trade_allowance));
+
+  // Insert a trade row whenever has_trade=yes and we have any useful trade fields
+  // (including partial pending trades with ACV/stock but missing YMM).
+  const tradeComplete =
+    hasTrade === "yes" &&
+    tradeExitOk &&
+    (tradeYmmOk ||
+      tradeMoneyOk ||
+      tradeStock != null ||
+      tradeVin != null);
 
   const share2 =
     parsed.salesperson_2 != null && parsed.salesperson_2_share != null
@@ -428,9 +468,7 @@ export function toNormalizedDealImportRow(
     odometer: parsed.odometer ?? null,
     age: parsed.age ?? null,
     acquisition_source: parsed.acquisition_source ?? null,
-    finance_type: parsed.finance_type
-      ? (parsed.finance_type.toLowerCase() as (typeof FINANCE_TYPES)[number])
-      : null,
+    finance_type: normalizeFinanceType(parsed.finance_type),
     finance_manager: parsed.finance_manager ?? null,
     front_profit: parsed.front_profit ?? null,
     back_profit: parsed.back_profit ?? null,
@@ -445,9 +483,7 @@ export function toNormalizedDealImportRow(
     has_trade: hasTrade,
     trade_complete: tradeComplete,
     trade_year:
-      hasTrade === "yes" && parsed.trade_year && /^-?\d+$/.test(parsed.trade_year)
-        ? parseInt(parsed.trade_year, 10)
-        : null,
+      hasTrade === "yes" && tradeYearOk ? parseInt(parsed.trade_year!, 10) : null,
     trade_make: hasTrade === "yes" ? (parsed.trade_make ?? null) : null,
     trade_model: hasTrade === "yes" ? (parsed.trade_model ?? null) : null,
     trade_acv:
@@ -468,6 +504,8 @@ export function toNormalizedDealImportRow(
       )
         ? (parsed.trade_exit_strategy.toLowerCase() as (typeof TRADE_EXIT_STRATEGIES)[number])
         : null,
+    trade_stock_number: tradeStock,
+    trade_vin: tradeVin,
     notes: parsed.notes ?? null,
     msrp: parsed.msrp ?? null,
   };
@@ -507,6 +545,8 @@ export const DEAL_IMPORT_EXAMPLE_ROW: Record<DealImportHeader, string> = {
   trade_acv: "",
   trade_allowance: "",
   trade_exit_strategy: "",
+  trade_stock_number: "",
+  trade_vin: "",
   notes: "",
   msrp: "32000.00",
 };

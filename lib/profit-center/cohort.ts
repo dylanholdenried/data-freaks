@@ -17,7 +17,8 @@ export type CohortFocus =
   | "price"
   | "odometer"
   | "year"
-  | "trim";
+  | "trim"
+  | "finance";
 
 export type CohortParams = {
   focus: CohortFocus;
@@ -164,6 +165,12 @@ export function dealMatchesCohort(
       const trim = deal.trim?.trim() || "(Unknown)";
       return trim === opts.value;
     }
+    case "finance": {
+      const ft = (deal.finance_type ?? "").trim().toLowerCase();
+      const want = (opts.value ?? "").trim().toLowerCase();
+      if (!want) return false;
+      return ft === want;
+    }
     default:
       return false;
   }
@@ -195,6 +202,20 @@ export function cohortTitle(
       return `Year: ${opts.value ?? "—"}`;
     case "trim":
       return `Trim: ${opts.value ?? "—"}`;
+    case "finance": {
+      const raw = (opts.value ?? "").trim().toLowerCase();
+      const label =
+        raw === "prime"
+          ? "Prime"
+          : raw === "subprime"
+            ? "Subprime"
+            : raw === "cash"
+              ? "Cash"
+              : raw === "lease"
+                ? "Lease"
+                : opts.value ?? "—";
+      return `Finance: ${label}`;
+    }
     default:
       return "Cohort";
   }
@@ -223,10 +244,46 @@ export function filtersFromCohortContext(opts: {
 }
 
 /** Sync main PC URL query (preset + store + department). */
+export type ProfitCenterTabId =
+  | "overview"
+  | "buy-box"
+  | "acquisition"
+  | "department"
+  | "stocking"
+  | "deals";
+
+export const PROFIT_CENTER_TABS: {
+  id: ProfitCenterTabId;
+  label: string;
+}[] = [
+  { id: "overview", label: "Overview" },
+  { id: "buy-box", label: "Buy-Box" },
+  { id: "acquisition", label: "Acquisition Source" },
+  { id: "department", label: "Department Performance" },
+  { id: "stocking", label: "Stocking Signals" },
+  { id: "deals", label: "Full Deal Table" },
+];
+
+export function parseProfitCenterTab(
+  raw: string | undefined | null
+): ProfitCenterTabId {
+  if (
+    raw === "buy-box" ||
+    raw === "acquisition" ||
+    raw === "department" ||
+    raw === "stocking" ||
+    raw === "deals"
+  ) {
+    return raw;
+  }
+  return "overview";
+}
+
 export function profitCenterHref(opts: {
   preset: string;
   storeId?: string;
   departmentName?: string;
+  tab?: ProfitCenterTabId;
 }): string {
   const q = new URLSearchParams();
   q.set("preset", opts.preset);
@@ -234,5 +291,6 @@ export function profitCenterHref(opts: {
   if (opts.departmentName && opts.departmentName !== "all") {
     q.set("department", opts.departmentName);
   }
+  if (opts.tab && opts.tab !== "overview") q.set("tab", opts.tab);
   return `/app/profit-center?${q.toString()}`;
 }

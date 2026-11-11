@@ -221,7 +221,8 @@ export default async function DealsPage({
   const initialSalesperson = spParam ?? "";
   const initialFinanceManager = fmParam ?? "";
   const initialFinanceType =
-    ftParam && ["prime", "subprime", "lease", "cash"].includes(ftParam)
+    ftParam &&
+      ["prime", "subprime", "lease", "cash", "bulk_upload"].includes(ftParam)
       ? ftParam
       : "";
   const initialSearch = qParam ?? "";

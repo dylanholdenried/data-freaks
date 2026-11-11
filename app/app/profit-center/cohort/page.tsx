@@ -47,6 +47,7 @@ const FOCUSES = new Set<CohortFocus>([
   "odometer",
   "year",
   "trim",
+  "finance",
 ]);
 
 function parsePreset(raw: string | undefined): DatePreset {

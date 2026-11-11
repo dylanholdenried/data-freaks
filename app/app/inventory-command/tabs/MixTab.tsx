@@ -129,16 +129,30 @@ export default function MixTab({ units }: { units: InvUnitRow[] }) {
                   background: slow ? "#20161A" : "#14201B",
                   borderRadius: 10,
                   padding: "12px 14px",
+                  minWidth: 0,
+                  overflow: "hidden",
                 }}
               >
-                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{u.model}</div>
-                <div className="flex items-end justify-between">
+                <div
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    marginBottom: 4,
+                    overflowWrap: "anywhere",
+                  }}
+                >
+                  {u.model}
+                </div>
+                <div className="flex min-w-0 items-end justify-between gap-2">
                   <div
                     style={{
                       fontFamily: "var(--ic-font-display), 'Barlow Condensed', sans-serif",
-                      fontSize: 32,
+                      fontSize: "clamp(18px, 3vw, 32px)",
                       fontWeight: 700,
                       lineHeight: 1,
+                      minWidth: 0,
+                      overflowWrap: "anywhere",
+                      wordBreak: "break-word",
                     }}
                   >
                     {u.count}

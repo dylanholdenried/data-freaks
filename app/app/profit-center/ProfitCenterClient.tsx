@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState, useCallback, useRef, useEffect } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   aggregateByDimension,
+  aggregateFinanceDepartments,
   buildTradesByDeal,
   filterDeals,
   type Dimension,
@@ -24,53 +25,35 @@ import {
   sliceDealBundleToRange,
   type ProfitCenterDealBundle,
 } from "@/lib/profit-center/dealBundle";
-import { PRICE_BANDS } from "@/lib/profit-center/priceBands";
-import {
-  columnExtent,
-  heatmapStyle,
-  statusRgb,
-  type HeatPolarity,
-} from "@/lib/profit-center/heatmap";
-import { TRUCK_CLASS_LABELS } from "@/lib/profit-center/truckClass";
-import {
-  scoreBuyBox,
-  type BuyBoxSettings,
-  type BuyBoxResult,
-  type ScoredModel,
-} from "@/lib/profit-center/buyBox";
+import { scoreBuyBox, type BuyBoxSettings } from "@/lib/profit-center/buyBox";
 import { cn } from "@/lib/utils";
 import { loadProfitCenterRange } from "./actions";
 import {
-  cohortHref,
   compareHref,
   modelCohortHref,
+  PROFIT_CENTER_TABS,
   profitCenterHref,
   splitMakeModel,
+  type ProfitCenterTabId,
 } from "@/lib/profit-center/cohort";
 import {
   sameMake,
   uniquePreservingPreferredCasing,
 } from "@/lib/profit-center/vehicleIdentity";
 import Link from "next/link";
+import { fmt$, storePillLabel } from "./format";
+import OverviewTab from "./tabs/OverviewTab";
+import BuyBoxTab from "./tabs/BuyBoxTab";
+import AcquisitionTab from "./tabs/AcquisitionTab";
+import DepartmentPerformanceTab from "./tabs/DepartmentPerformanceTab";
+import StockingTab from "./tabs/StockingTab";
+import DealTableTab from "./tabs/DealTableTab";
 
 type Store = { id: string; name: string };
 type Salesperson = { id: string; name: string; store_id: string };
 type Department = { id: string; name: string; store_id: string };
 
 type SortKey = keyof RollupRow;
-
-const DIMENSIONS: { id: Dimension; label: string }[] = [
-  { id: "make", label: "Make" },
-  { id: "model", label: "Model" },
-  { id: "year", label: "Year" },
-  { id: "price", label: "Sale Price" },
-  { id: "odometer", label: "Odometer" },
-  { id: "acquisition", label: "Acquisition" },
-  { id: "body_style", label: "Body Style" },
-  { id: "truck_class", label: "Truck Class" },
-  { id: "department", label: "Department" },
-  { id: "salesperson", label: "Salesperson" },
-];
 
 const EMPTY_FILTERS: ProfitFilters = {
   storeId: "all",
@@ -86,166 +69,6 @@ const EMPTY_FILTERS: ProfitFilters = {
   financeType: "all",
 };
 
-const fmt$ = (v: number | null) => {
-  if (v == null || !Number.isFinite(v)) return "—";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(v);
-};
-
-const fmtN = (v: number | null, digits = 0) => {
-  if (v == null || !Number.isFinite(v)) return "—";
-  return v.toLocaleString("en-US", {
-    maximumFractionDigits: digits,
-    minimumFractionDigits: digits,
-  });
-};
-
-const fmtPct = (v: number | null) => {
-  if (v == null || !Number.isFinite(v)) return "—";
-  return `${v.toFixed(0)}%`;
-};
-
-/** Compact store pill labels (e.g. Jim Butler Centralia → CENTRALIA). */
-function storePillLabel(name: string) {
-  const n = name.trim();
-  const jb = /^jim\s+butler\s+(.+)$/i.exec(n);
-  if (jb) return jb[1].trim().toUpperCase();
-  const parts = n.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return parts[parts.length - 1]!.toUpperCase();
-  return n.toUpperCase();
-}
-
-type ColDef = {
-  key: SortKey;
-  label: string;
-  align?: "left" | "right";
-  format: (row: RollupRow) => string;
-  heat?: HeatPolarity;
-  numeric?: (row: RollupRow) => number | null;
-  salespersonOnly?: boolean;
-};
-
-const COLUMNS: ColDef[] = [
-  { key: "label", label: "Group", align: "left", format: (r) => r.label },
-  {
-    key: "volume",
-    label: "Volume",
-    format: (r) => fmtN(r.volume),
-    heat: "higherBetter",
-    numeric: (r) => r.volume,
-  },
-  {
-    key: "front",
-    label: "Front",
-    format: (r) => fmt$(r.front),
-    heat: "higherBetter",
-    numeric: (r) => r.front,
-  },
-  {
-    key: "back",
-    label: "Back",
-    format: (r) => fmt$(r.back),
-    heat: "higherBetter",
-    numeric: (r) => r.back,
-  },
-  {
-    key: "total",
-    label: "Total",
-    format: (r) => fmt$(r.total),
-    heat: "higherBetter",
-    numeric: (r) => r.total,
-  },
-  {
-    key: "avgFront",
-    label: "Avg Front",
-    format: (r) => fmt$(r.avgFront),
-    heat: "higherBetter",
-    numeric: (r) => r.avgFront,
-  },
-  {
-    key: "avgBack",
-    label: "Avg Back",
-    format: (r) => fmt$(r.avgBack),
-    heat: "higherBetter",
-    numeric: (r) => r.avgBack,
-  },
-  {
-    key: "avgTotal",
-    label: "Avg Total",
-    format: (r) => fmt$(r.avgTotal),
-    heat: "higherBetter",
-    numeric: (r) => r.avgTotal,
-  },
-  {
-    key: "avgAge",
-    label: "Avg Turn",
-    format: (r) => (r.avgAge == null ? "—" : `${fmtN(r.avgAge, 0)}d`),
-    heat: "lowerBetter",
-    numeric: (r) => r.avgAge,
-  },
-  {
-    key: "avgSalePrice",
-    label: "Avg Sale $",
-    format: (r) => fmt$(r.avgSalePrice),
-    heat: "higherBetter",
-    numeric: (r) => r.avgSalePrice,
-  },
-  {
-    key: "trades",
-    label: "Trades",
-    format: (r) => fmtN(r.trades),
-    heat: "higherBetter",
-    numeric: (r) => r.trades,
-  },
-  {
-    key: "tradePct",
-    label: "Trade %",
-    format: (r) => fmtPct(r.tradePct),
-    heat: "higherBetter",
-    numeric: (r) => r.tradePct,
-  },
-  {
-    key: "primePct",
-    label: "Prime %",
-    format: (r) => fmtPct(r.primePct),
-    heat: "higherBetter",
-    numeric: (r) => r.primePct,
-  },
-  {
-    key: "subprimePct",
-    label: "Subprime %",
-    format: (r) => fmtPct(r.subprimePct),
-    heat: "higherBetter",
-    numeric: (r) => r.subprimePct,
-  },
-  {
-    key: "cashPct",
-    label: "Cash %",
-    format: (r) => fmtPct(r.cashPct),
-    heat: "higherBetter",
-    numeric: (r) => r.cashPct,
-  },
-  {
-    key: "avgLostGross",
-    label: "Avg Lost Gross",
-    format: (r) => fmt$(r.avgLostGross),
-    heat: "higherBetter",
-    numeric: (r) => r.avgLostGross,
-    salespersonOnly: true,
-  },
-  {
-    key: "avgTradeHold",
-    label: "Avg Trade Hold",
-    format: (r) => fmt$(r.avgTradeHold),
-    heat: "higherBetter",
-    numeric: (r) => r.avgTradeHold,
-    salespersonOnly: true,
-  },
-];
-
 interface Props {
   stores: Store[];
   departments: Department[];
@@ -259,6 +82,7 @@ interface Props {
   range: DateRange;
   initialStoreId?: string;
   initialDepartmentName?: string;
+  initialTab?: ProfitCenterTabId;
 }
 
 type CachedRangeEntry = ProfitCenterDealBundle & {
@@ -284,13 +108,17 @@ export default function ProfitCenterClient({
   range: initialRange,
   initialStoreId = "all",
   initialDepartmentName = "all",
+  initialTab = "overview",
 }: Props) {
-  const router = useRouter();
   const pathname = usePathname();
 
+  const [tab, setTab] = useState<ProfitCenterTabId>(initialTab);
   const [dimension, setDimension] = useState<Dimension>("make");
   const [sortKey, setSortKey] = useState<SortKey>("volume");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [buyBoxMinVolume, setBuyBoxMinVolume] = useState(
+    buyBoxSettings.minVolume
+  );
   const [filters, setFilters] = useState<ProfitFilters>(() => ({
     ...EMPTY_FILTERS,
     storeId:
@@ -309,7 +137,6 @@ export default function ProfitCenterClient({
   >(initialDealSalespeople);
   const [dateLoading, setDateLoading] = useState(false);
   const [dateError, setDateError] = useState<string | null>(null);
-  const [showNearMiss, setShowNearMiss] = useState(false);
 
   const rangeCacheRef = useRef<Map<DatePreset, CachedRangeEntry>>(
     new Map([
@@ -329,7 +156,11 @@ export default function ProfitCenterClient({
   );
 
   const applyBundle = useCallback(
-    (nextPreset: DatePreset, nextRange: DateRange, bundle: ProfitCenterDealBundle) => {
+    (
+      nextPreset: DatePreset,
+      nextRange: DateRange,
+      bundle: ProfitCenterDealBundle
+    ) => {
       setPreset(nextPreset);
       setRange(nextRange);
       setDeals(bundle.deals);
@@ -343,16 +174,20 @@ export default function ProfitCenterClient({
     []
   );
 
-  // Keep shareable URL in sync for preset + store + department
+  // Keep shareable URL in sync without Next navigation — router.replace
+  // remounts this page (loading.tsx) and resets store/date/department pills.
   useEffect(() => {
     const href = profitCenterHref({
       preset,
       storeId: filters.storeId,
       departmentName: filters.departmentName,
+      tab,
     });
     const next = href.replace("/app/profit-center", pathname);
-    router.replace(next);
-  }, [preset, filters.storeId, filters.departmentName, pathname, router]);
+    const current = `${pathname}${window.location.search}`;
+    if (current === next) return;
+    window.history.replaceState(window.history.state, "", next);
+  }, [preset, filters.storeId, filters.departmentName, tab, pathname]);
 
   const fetchPreset = useCallback(async (targetPreset: DatePreset) => {
     const existing = inflightRef.current.get(targetPreset);
@@ -385,7 +220,6 @@ export default function ProfitCenterClient({
     return promise;
   }, []);
 
-  // Warm All time in the background so narrower presets can slice from it.
   useEffect(() => {
     if (initialPreset === "all_time") return;
     if (rangeCacheRef.current.has("all_time")) return;
@@ -416,6 +250,21 @@ export default function ProfitCenterClient({
     [deals, filters, tradesByDeal, dealSalespeople, departmentNames]
   );
 
+  /** Finance scoreboard ignores financeType filter so all three books stay visible. */
+  const filteredForFinance = useMemo(
+    () =>
+      filterDeals(
+        deals,
+        { ...filters, financeType: "all" },
+        {
+          tradesByDeal,
+          dealSalespeople,
+          departmentNames,
+        }
+      ),
+    [deals, filters, tradesByDeal, dealSalespeople, departmentNames]
+  );
+
   const ctx = useMemo(
     () => ({
       deals: filtered,
@@ -425,6 +274,23 @@ export default function ProfitCenterClient({
       departmentNames,
     }),
     [filtered, tradesByDeal, dealSalespeople, salespersonNames, departmentNames]
+  );
+
+  const financeCtx = useMemo(
+    () => ({
+      deals: filteredForFinance,
+      tradesByDeal,
+      dealSalespeople,
+      salespersonNames,
+      departmentNames,
+    }),
+    [
+      filteredForFinance,
+      tradesByDeal,
+      dealSalespeople,
+      salespersonNames,
+      departmentNames,
+    ]
   );
 
   const { rows, total } = useMemo(
@@ -437,9 +303,19 @@ export default function ProfitCenterClient({
     return aggregateByDimension("model", ctx).rows;
   }, [dimension, rows, ctx]);
 
-  const buyBox = useMemo(
+  const overviewBuyBox = useMemo(
     () => scoreBuyBox(modelRows, buyBoxSettings),
     [modelRows, buyBoxSettings]
+  );
+
+  const tabBuyBoxSettings = useMemo(
+    () => ({ ...buyBoxSettings, minVolume: buyBoxMinVolume }),
+    [buyBoxSettings, buyBoxMinVolume]
+  );
+
+  const tabBuyBox = useMemo(
+    () => scoreBuyBox(modelRows, tabBuyBoxSettings),
+    [modelRows, tabBuyBoxSettings]
   );
 
   const acquisitionRows = useMemo(
@@ -472,6 +348,11 @@ export default function ProfitCenterClient({
     [yearRows, buyBoxSettings]
   );
 
+  const financeDept = useMemo(
+    () => aggregateFinanceDepartments(financeCtx),
+    [financeCtx]
+  );
+
   const cohortCtx = useMemo(
     () => ({
       preset,
@@ -492,7 +373,6 @@ export default function ProfitCenterClient({
   }, [dimension, rows, ctx]);
 
   const sortedRows = useMemo(() => {
-    // Band dimensions ship in fixed bucket order; preserve that when sorting by Group.
     if (
       (dimension === "price" || dimension === "odometer") &&
       sortKey === "label"
@@ -508,30 +388,14 @@ export default function ProfitCenterClient({
           ? av.localeCompare(bv)
           : bv.localeCompare(av);
       }
-      const an = typeof av === "number" ? av : av == null ? -Infinity : Number(av);
-      const bn = typeof bv === "number" ? bv : bv == null ? -Infinity : Number(bv);
+      const an =
+        typeof av === "number" ? av : av == null ? -Infinity : Number(av);
+      const bn =
+        typeof bv === "number" ? bv : bv == null ? -Infinity : Number(bv);
       return sortDir === "asc" ? an - bn : bn - an;
     });
     return copy;
   }, [rows, sortKey, sortDir, dimension]);
-
-  const visibleCols = useMemo(
-    () =>
-      COLUMNS.filter(
-        (c) => !c.salespersonOnly || dimension === "salesperson"
-      ),
-    [dimension]
-  );
-
-  const extents = useMemo(() => {
-    const map = new Map<SortKey, { min: number; max: number }>();
-    for (const col of visibleCols) {
-      if (!col.numeric || !col.heat) continue;
-      const ext = columnExtent(sortedRows.map((r) => col.numeric!(r)));
-      if (ext) map.set(col.key, ext);
-    }
-    return map;
-  }, [sortedRows, visibleCols]);
 
   const deptOptions = useMemo(() => {
     const scoped =
@@ -550,7 +414,9 @@ export default function ProfitCenterClient({
     );
     const models = uniquePreservingPreferredCasing(
       deals
-        .filter((d) => filters.make === "all" || sameMake(d.vehicle_make, filters.make))
+        .filter(
+          (d) => filters.make === "all" || sameMake(d.vehicle_make, filters.make)
+        )
         .map((d) => d.vehicle_model)
     );
     const years = [...new Set(deals.map((d) => String(d.vehicle_year)))].sort(
@@ -613,15 +479,25 @@ export default function ProfitCenterClient({
     }
   }
 
+  function onDimensionChange(d: Dimension) {
+    setDimension(d);
+    if (d === "odometer" || d === "price") {
+      setSortKey("label");
+      setSortDir("asc");
+    } else {
+      setSortKey("volume");
+      setSortDir("desc");
+    }
+  }
+
   const selectedStore =
     filters.storeId === "all"
       ? null
       : stores.find((s) => s.id === filters.storeId) ?? null;
 
-  const title = selectedStore?.name ?? (stores.length > 1 ? "All Stores" : groupName || "Profit Center");
-
-  const maxMakeVol = Math.max(1, ...makeRows.map((r) => r.volume));
-  const makeAgeExtent = columnExtent(makeRows.map((r) => r.avgAge));
+  const title =
+    selectedStore?.name ??
+    (stores.length > 1 ? "All Stores" : groupName || "Profit Center");
 
   const ages = filtered
     .map((d) => d.age)
@@ -641,7 +517,9 @@ export default function ProfitCenterClient({
           <p className="pc-kicker">Acquisition intelligence</p>
           <h1 className="pc-title">{title}</h1>
           <p className="pc-meta">
-            {range.from === "2000-01-01" ? "All time" : `${range.from} → ${range.to}`}
+            {range.from === "2000-01-01"
+              ? "All time"
+              : `${range.from} → ${range.to}`}
             {" · "}
             {filtered.length.toLocaleString()} closed deal
             {filtered.length === 1 ? "" : "s"}
@@ -730,11 +608,7 @@ export default function ProfitCenterClient({
             </button>
           ))}
         </div>
-        {dateError ? (
-          <p className="pc-meta" role="alert" style={{ marginTop: "0.5rem" }}>
-            {dateError}
-          </p>
-        ) : null}
+        {dateError ? <p className="pc-muted">{dateError}</p> : null}
       </section>
 
       {deptOptions.length > 0 && (
@@ -772,706 +646,95 @@ export default function ProfitCenterClient({
         </section>
       )}
 
-      <div className="pc-kpi-grid">
-        <div className="pc-kpi">
-          <div className="pc-kpi-label">Units closed</div>
-          <div className="pc-kpi-value amber">{fmtN(filtered.length)}</div>
-        </div>
-        <div className="pc-kpi">
-          <div className="pc-kpi-label">Total front</div>
-          <div className="pc-kpi-value">{fmt$(total.front)}</div>
-        </div>
-        <div className="pc-kpi">
-          <div className="pc-kpi-label">Total back</div>
-          <div className="pc-kpi-value">{fmt$(total.back)}</div>
-        </div>
-        <div className="pc-kpi">
-          <div className="pc-kpi-label">Avg total gross</div>
-          <div className="pc-kpi-value green">{fmt$(total.avgTotal)}</div>
-        </div>
-        <div className="pc-kpi">
-          <div className="pc-kpi-label">Avg turn</div>
-          <div
-            className={cn(
-              "pc-kpi-value",
-              avgTurn != null && avgTurn > 45 ? "red" : "amber"
-            )}
-          >
-            {avgTurn == null ? "—" : `${fmtN(avgTurn, 0)}d`}
-          </div>
-        </div>
-        <div className="pc-kpi">
-          <div className="pc-kpi-label">Trade %</div>
-          <div className="pc-kpi-value">{fmtPct(tradePct)}</div>
-        </div>
-        <div className="pc-kpi">
-          <div className="pc-kpi-label">Buy signals</div>
-          <div className="pc-kpi-value green">{buyBox.buys.length}</div>
-          <div className="pc-kpi-sub">min {buyBoxSettings.minVolume} deals</div>
-        </div>
-        <div className="pc-kpi">
-          <div className="pc-kpi-label">Red-lights</div>
-          <div className="pc-kpi-value red">{buyBox.reds.length}</div>
-          <div className="pc-kpi-sub">min {buyBoxSettings.minVolume} deals</div>
-        </div>
-      </div>
-
-      <section className="pc-buybox">
-        <div className="pc-buybox-head">
-          <h2>Buy-box &amp; red-lights</h2>
-          <p>
-            Models scored on front profit, back profit, turn (avg age), and trade
-            % — weighted and adjustable by admin. Needs at least{" "}
-            {buyBoxSettings.minVolume} closed deals to rate.
-          </p>
-        </div>
-        <div className="pc-buybox-cols">
-          <div>
-            <div className="pc-buybox-title buy">Buy more</div>
-            {buyBox.buys.length === 0 ? (
-              <p className="pc-muted">
-                No models meet the minimum volume in this cut.
-              </p>
-            ) : (
-              buyBox.buys.map((row) => (
-                <BuyBoxRow
-                  key={row.key}
-                  row={row}
-                  kind="buy"
-                  href={modelHrefFromLabel(row.label)}
-                  compareHref={compareHref({
-                    type: "model",
-                    a: row.label,
-                    ...cohortCtx,
-                  })}
-                />
-              ))
-            )}
-          </div>
-          <div>
-            <div className="pc-buybox-title red">Red-light</div>
-            {buyBox.reds.length === 0 ? (
-              <p className="pc-muted">No red-lights in this cut.</p>
-            ) : (
-              buyBox.reds.map((row) => (
-                <BuyBoxRow
-                  key={row.key}
-                  row={row}
-                  kind="red"
-                  href={modelHrefFromLabel(row.label)}
-                  compareHref={compareHref({
-                    type: "model",
-                    a: row.label,
-                    ...cohortCtx,
-                  })}
-                />
-              ))
-            )}
-          </div>
-        </div>
-        {buyBox.nearMiss.length > 0 && (
-          <div className="pc-near-miss pc-near-miss-collapsed">
-            <button
-              type="button"
-              className="pc-near-miss-toggle"
-              onClick={() => setShowNearMiss((v) => !v)}
-            >
-              {showNearMiss ? "Hide" : "Show"} {buyBox.nearMiss.length} near-miss
-              model{buyBox.nearMiss.length === 1 ? "" : "s"} (under{" "}
-              {buyBoxSettings.minVolume} deals)
-            </button>
-            {showNearMiss &&
-              buyBox.nearMiss.map((row) => (
-                <BuyBoxRow
-                  key={row.key}
-                  row={row}
-                  kind="near"
-                  href={modelHrefFromLabel(row.label)}
-                  compareHref={compareHref({
-                    type: "model",
-                    a: row.label,
-                    ...cohortCtx,
-                  })}
-                />
-              ))}
-          </div>
-        )}
-      </section>
-
-      <AcquisitionSection
-        rows={acquisitionRows}
-        cohortCtx={cohortCtx}
-      />
-
-      <section className="pc-stocking">
-        <div className="pc-buybox-head">
-          <h2>Stocking signals</h2>
-          <p>
-            Automated recommendations by sale price, odometer, and year — stock
-            what makes the bottom line, not just what sells fast.
-          </p>
-        </div>
-        <div className="pc-stocking-grid">
-          <StockingCol
-            title="Sale price"
-            box={priceBox}
-            hrefFor={(row) =>
-              cohortHref({
-                focus: "price",
-                value: row.key,
-                ...cohortCtx,
-              })
-            }
-          />
-          <StockingCol
-            title="Odometer"
-            box={odometerBox}
-            hrefFor={(row) =>
-              cohortHref({
-                focus: "odometer",
-                value: row.key,
-                ...cohortCtx,
-              })
-            }
-          />
-          <StockingCol
-            title="Year"
-            box={yearBox}
-            hrefFor={(row) =>
-              cohortHref({
-                focus: "year",
-                value: row.label,
-                ...cohortCtx,
-              })
-            }
-          />
-        </div>
-      </section>
-
-      <section className="pc-chart">
-        <div className="pc-chart-head">
-          <div>
-            <h3>By make</h3>
-            <p>count vs avg turn — long and slow is the red flag</p>
-          </div>
-        </div>
-        {makeRows.length === 0 ? (
-          <p className="pc-muted">No deals to chart.</p>
-        ) : (
-          makeRows.slice(0, 12).map((row) => {
-            const widthPct = Math.max(8, (row.volume / maxMakeVol) * 100);
-            let t = 0.5;
-            if (makeAgeExtent && row.avgAge != null) {
-              const { min, max } = makeAgeExtent;
-              if (max !== min) {
-                t = 1 - (row.avgAge - min) / (max - min);
-              }
-            }
-            const color = statusRgb(t);
-            return (
-              <div key={row.key} className="pc-bar-row">
-                <div className="pc-bar-label" title={row.label}>
-                  {row.label}
-                </div>
-                <div className="pc-bar-track">
-                  <div
-                    className="pc-bar-fill"
-                    style={{ width: `${widthPct}%`, background: color }}
-                  >
-                    {row.volume}
-                  </div>
-                </div>
-                <div className="pc-bar-stats" style={{ color }}>
-                  {fmtN(row.avgAge, 0)}d avg · {fmt$(row.avgTotal)}
-                </div>
-              </div>
-            );
-          })
-        )}
-      </section>
-
-      <section className="pc-panel space-y-3">
-        <p className="pc-panel-label">More filters</p>
-        <div className="pc-filters">
-          <select
-            value={filters.make}
-            onChange={(e) =>
-              setFilters((f) => ({ ...f, make: e.target.value, model: "all" }))
-            }
-          >
-            <option value="all">All makes</option>
-            {filterOptions.makes.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
-          <select
-            value={filters.model}
-            onChange={(e) =>
-              setFilters((f) => ({ ...f, model: e.target.value }))
-            }
-          >
-            <option value="all">All models</option>
-            {filterOptions.models.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
-          <select
-            value={filters.year}
-            onChange={(e) =>
-              setFilters((f) => ({ ...f, year: e.target.value }))
-            }
-          >
-            <option value="all">All years</option>
-            {filterOptions.years.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
-          <select
-            value={filters.priceBandId}
-            onChange={(e) =>
-              setFilters((f) => ({ ...f, priceBandId: e.target.value }))
-            }
-          >
-            <option value="all">All price points</option>
-            {PRICE_BANDS.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.label}
-              </option>
-            ))}
-          </select>
-          <select
-            value={filters.acquisition}
-            onChange={(e) =>
-              setFilters((f) => ({ ...f, acquisition: e.target.value }))
-            }
-          >
-            <option value="all">All acquisition sources</option>
-            {filterOptions.acquisitions.map((a) => (
-              <option key={a} value={a}>
-                {a}
-              </option>
-            ))}
-          </select>
-          <select
-            value={filters.bodyStyle}
-            onChange={(e) =>
-              setFilters((f) => ({ ...f, bodyStyle: e.target.value }))
-            }
-          >
-            <option value="all">All body styles</option>
-            {filterOptions.bodyStyles.map((b) => (
-              <option key={b} value={b}>
-                {b}
-              </option>
-            ))}
-          </select>
-          <select
-            value={filters.truckClass}
-            onChange={(e) =>
-              setFilters((f) => ({ ...f, truckClass: e.target.value }))
-            }
-          >
-            <option value="all">All truck classes</option>
-            {TRUCK_CLASS_LABELS.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-          <select
-            value={filters.salespersonId}
-            onChange={(e) =>
-              setFilters((f) => ({ ...f, salespersonId: e.target.value }))
-            }
-          >
-            <option value="all">All salespeople</option>
-            {salespeople
-              .slice()
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-          </select>
-          <select
-            value={filters.financeType}
-            onChange={(e) =>
-              setFilters((f) => ({ ...f, financeType: e.target.value }))
-            }
-          >
-            <option value="all">All finance types</option>
-            <option value="prime">Prime</option>
-            <option value="subprime">Subprime</option>
-            <option value="lease">Lease</option>
-            <option value="cash">Cash</option>
-          </select>
-        </div>
-        <button
-          type="button"
-          className="pc-link"
-          onClick={() => setFilters(EMPTY_FILTERS)}
-        >
-          Clear filters
-        </button>
-      </section>
-
-      <div className="pc-tabs">
-        {DIMENSIONS.map((d) => (
+      <div className="pc-tabs" role="tablist" aria-label="Profit Center views">
+        {PROFIT_CENTER_TABS.map((t) => (
           <button
-            key={d.id}
+            key={t.id}
             type="button"
-            onClick={() => {
-              setDimension(d.id);
-              if (d.id === "odometer" || d.id === "price") {
-                setSortKey("label");
-                setSortDir("asc");
-              } else {
-                setSortKey("volume");
-                setSortDir("desc");
-              }
-            }}
-            className={cn("pc-tab", dimension === d.id && "is-active")}
+            role="tab"
+            aria-selected={tab === t.id}
+            onClick={() => setTab(t.id)}
+            className={cn("pc-tab", tab === t.id && "is-active")}
           >
-            {d.label}
+            {t.label}
           </button>
         ))}
       </div>
 
-      <section className="pc-panel" style={{ padding: 0, overflow: "hidden" }}>
-        {filtered.length === 0 ? (
-          <div className="pc-empty">
-            No closed deals in this range
-            {deals.length > 0 ? " match your filters" : ""}. Adjust the date
-            range or clear filters to see results.
-          </div>
-        ) : (
-          <div className="pc-table-wrap">
-            <table className="pc-table">
-              <thead>
-                <tr>
-                  {visibleCols.map((col) => (
-                    <th key={col.key}>
-                      <button
-                        type="button"
-                        className="pc-sort"
-                        onClick={() => toggleSort(col.key)}
-                      >
-                        {col.label}
-                        {sortKey === col.key
-                          ? sortDir === "asc"
-                            ? " ↑"
-                            : " ↓"
-                          : ""}
-                      </button>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {sortedRows.map((row) => (
-                  <tr key={row.key}>
-                    {visibleCols.map((col) => {
-                      const ext = extents.get(col.key);
-                      const style =
-                        col.heat && col.numeric && ext && row.volume > 0
-                          ? heatmapStyle(
-                              col.numeric(row),
-                              ext.min,
-                              ext.max,
-                              col.heat
-                            )
-                          : undefined;
-                      return (
-                        <td
-                          key={col.key}
-                          style={col.key === "label" ? undefined : style}
-                        >
-                          {col.format(row)}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  {visibleCols.map((col) => (
-                    <td key={col.key}>{col.format(total)}</td>
-                  ))}
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        )}
-      </section>
-
-      {dimension === "salesperson" && (
-        <p className="pc-footnote">
-          Avg Lost Gross = sale price − list price (deals marked list-price NA
-          are excluded). Avg Trade Hold = ACV − allowance (averaged per deal,
-          then across deals). Negative values are unfavorable.
-        </p>
-      )}
-    </div>
-  );
-}
-
-function isScored(row: RollupRow | ScoredModel): row is ScoredModel {
-  return "score" in row && typeof (row as ScoredModel).score === "number";
-}
-
-function BuyBoxRow({
-  row,
-  kind,
-  href,
-  compareHref: compare,
-}: {
-  row: RollupRow | ScoredModel;
-  kind: "buy" | "red" | "near";
-  href: string;
-  compareHref: string;
-}) {
-  return (
-    <div className="pc-buybox-row">
-      <div className="pc-buybox-row-main">
-        <b>{row.label}</b>
-        <span>
-          {row.volume} deals · front {fmt$(row.avgFront)} · back{" "}
-          {fmt$(row.avgBack)} · {fmtN(row.avgAge, 0)}d · trade{" "}
-          {fmtPct(row.tradePct)}
-        </span>
-        <div className="pc-buybox-actions">
-          <Link href={href} className="pc-link">
-            View deals
-          </Link>
-          {kind !== "near" && (
-            <Link href={compare} className="pc-link">
-              Compare
-            </Link>
-          )}
-        </div>
-      </div>
-      {isScored(row) && kind !== "near" ? (
-        <div className={cn("pc-buybox-score", kind === "red" ? "red" : "buy")}>
-          {(row.score * 100).toFixed(0)}
-        </div>
-      ) : kind === "near" ? (
-        <div className="pc-buybox-score near">{row.volume}</div>
-      ) : null}
-    </div>
-  );
-}
-
-type CohortCtx = {
-  preset: DatePreset;
-  storeId: string;
-  departmentName: string;
-};
-
-function AcquisitionSection({
-  rows,
-  cohortCtx,
-}: {
-  rows: RollupRow[];
-  cohortCtx: CohortCtx;
-}) {
-  type AcqSort = "label" | "volume" | "avgTotal" | "avgFront" | "avgBack" | "avgAge" | "tradePct";
-  const [sortKey, setSortKey] = useState<AcqSort>("avgTotal");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-
-  const visible = useMemo(
-    () => rows.filter((r) => !r.isTotal && r.volume > 0),
-    [rows]
-  );
-
-  const sorted = useMemo(() => {
-    const copy = [...visible];
-    copy.sort((a, b) => {
-      let av: string | number | null = a[sortKey];
-      let bv: string | number | null = b[sortKey];
-      if (sortKey === "label") {
-        return sortDir === "asc"
-          ? String(av).localeCompare(String(bv))
-          : String(bv).localeCompare(String(av));
-      }
-      const an = typeof av === "number" && Number.isFinite(av) ? av : -Infinity;
-      const bn = typeof bv === "number" && Number.isFinite(bv) ? bv : -Infinity;
-      return sortDir === "asc" ? an - bn : bn - an;
-    });
-    return copy;
-  }, [visible, sortKey, sortDir]);
-
-  function toggle(k: AcqSort) {
-    if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortKey(k);
-      setSortDir(k === "label" ? "asc" : "desc");
-    }
-  }
-
-  return (
-    <section className="pc-stocking">
-      <div className="pc-buybox-head">
-        <h2>Acquisition performance</h2>
-        <p>
-          How each source is performing in this cut — sorted by avg total gross
-          by default.
-        </p>
-      </div>
-      {sorted.length === 0 ? (
-        <p className="pc-muted">No acquisition data in this cut.</p>
-      ) : (
-        <div className="pc-table-wrap">
-          <table className="pc-table">
-            <thead>
-              <tr>
-                <th>
-                  <button type="button" className="pc-sort" onClick={() => toggle("label")}>
-                    Source{sortKey === "label" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-                  </button>
-                </th>
-                <th className="text-right">
-                  <button type="button" className="pc-sort" onClick={() => toggle("volume")}>
-                    Vol{sortKey === "volume" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-                  </button>
-                </th>
-                <th className="text-right">
-                  <button type="button" className="pc-sort" onClick={() => toggle("avgFront")}>
-                    Front{sortKey === "avgFront" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-                  </button>
-                </th>
-                <th className="text-right">
-                  <button type="button" className="pc-sort" onClick={() => toggle("avgBack")}>
-                    Back{sortKey === "avgBack" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-                  </button>
-                </th>
-                <th className="text-right">
-                  <button type="button" className="pc-sort" onClick={() => toggle("avgTotal")}>
-                    Total{sortKey === "avgTotal" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-                  </button>
-                </th>
-                <th className="text-right">
-                  <button type="button" className="pc-sort" onClick={() => toggle("avgAge")}>
-                    Turn{sortKey === "avgAge" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-                  </button>
-                </th>
-                <th className="text-right">
-                  <button type="button" className="pc-sort" onClick={() => toggle("tradePct")}>
-                    Trade %{sortKey === "tradePct" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-                  </button>
-                </th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((row) => (
-                <tr key={row.key}>
-                  <td>{row.label}</td>
-                  <td className="text-right">{row.volume}</td>
-                  <td className="text-right">{fmt$(row.avgFront)}</td>
-                  <td className="text-right">{fmt$(row.avgBack)}</td>
-                  <td className="text-right">{fmt$(row.avgTotal)}</td>
-                  <td className="text-right">
-                    {row.avgAge == null ? "—" : `${fmtN(row.avgAge, 0)}d`}
-                  </td>
-                  <td className="text-right">{fmtPct(row.tradePct)}</td>
-                  <td className="text-right">
-                    <Link
-                      href={cohortHref({
-                        focus: "acquisition",
-                        value: row.label,
-                        ...cohortCtx,
-                      })}
-                      className="pc-link"
-                    >
-                      View deals
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function StockingRow({
-  row,
-  kind,
-  href,
-}: {
-  row: ScoredModel;
-  kind: "buy" | "red";
-  href: string;
-}) {
-  return (
-    <div className="pc-buybox-row">
-      <div className="pc-buybox-row-main">
-        <b>{row.label}</b>
-        <span>
-          {row.volume} deals · front {fmt$(row.avgFront)} · back{" "}
-          {fmt$(row.avgBack)} · {fmtN(row.avgAge, 0)}d · trade{" "}
-          {fmtPct(row.tradePct)}
-        </span>
-        <Link href={href} className="pc-link">
-          View deals
-        </Link>
-      </div>
-      <div className={cn("pc-buybox-score", kind === "red" ? "red" : "buy")}>
-        {(row.score * 100).toFixed(0)}
-      </div>
-    </div>
-  );
-}
-
-function StockingCol({
-  title,
-  box,
-  hrefFor,
-}: {
-  title: string;
-  box: BuyBoxResult;
-  hrefFor: (row: RollupRow) => string;
-}) {
-  return (
-    <div className="pc-stocking-col">
-      <h3>{title}</h3>
-      <div className="pc-buybox-title buy">Lean in</div>
-      {box.buys.length === 0 ? (
-        <p className="pc-muted">No signals yet.</p>
-      ) : (
-        box.buys.slice(0, 3).map((row) => (
-          <StockingRow
-            key={row.key}
-            row={row}
-            kind="buy"
-            href={hrefFor(row)}
+      <div className="min-w-0">
+        {tab === "overview" ? (
+          <OverviewTab
+            total={total}
+            filteredCount={filtered.length}
+            avgTurn={avgTurn}
+            tradePct={tradePct}
+            buyBox={overviewBuyBox}
+            minVolume={buyBoxSettings.minVolume}
+            makeRows={makeRows}
+            financeRows={financeDept.rows}
+            financeTypedVolume={financeDept.typedVolume}
+            onOpenTab={setTab}
           />
-        ))
-      )}
-      <div className="pc-buybox-title red">Caution</div>
-      {box.reds.length === 0 ? (
-        <p className="pc-muted">No cautions.</p>
-      ) : (
-        box.reds.slice(0, 3).map((row) => (
-          <StockingRow
-            key={row.key}
-            row={row}
-            kind="red"
-            href={hrefFor(row)}
+        ) : null}
+
+        {tab === "buy-box" ? (
+          <BuyBoxTab
+            buyBox={tabBuyBox}
+            groupDefaultMin={buyBoxSettings.minVolume}
+            minVolume={buyBoxMinVolume}
+            onMinVolumeChange={setBuyBoxMinVolume}
+            settings={tabBuyBoxSettings}
+            modelHrefFromLabel={modelHrefFromLabel}
+            cohortCtx={cohortCtx}
           />
-        ))
-      )}
+        ) : null}
+
+        {tab === "acquisition" ? (
+          <AcquisitionTab rows={acquisitionRows} cohortCtx={cohortCtx} />
+        ) : null}
+
+        {tab === "department" ? (
+          <DepartmentPerformanceTab
+            rows={financeDept.rows}
+            overall={financeDept.overall}
+            outsideCount={financeDept.outsideCount}
+            typedVolume={financeDept.typedVolume}
+            cohortCtx={cohortCtx}
+          />
+        ) : null}
+
+        {tab === "stocking" ? (
+          <StockingTab
+            priceBox={priceBox}
+            odometerBox={odometerBox}
+            yearBox={yearBox}
+            cohortCtx={cohortCtx}
+          />
+        ) : null}
+
+        {tab === "deals" ? (
+          <DealTableTab
+            filters={filters}
+            setFilters={setFilters}
+            emptyFilters={{
+              ...EMPTY_FILTERS,
+              storeId: filters.storeId,
+              departmentName: filters.departmentName,
+            }}
+            filterOptions={filterOptions}
+            salespeople={salespeople}
+            dimension={dimension}
+            sortKey={sortKey}
+            sortDir={sortDir}
+            toggleSort={toggleSort}
+            onDimensionChange={onDimensionChange}
+            sortedRows={sortedRows}
+            total={total}
+            filteredCount={filtered.length}
+            dealsCount={deals.length}
+          />
+        ) : null}
+      </div>
     </div>
   );
 }
-

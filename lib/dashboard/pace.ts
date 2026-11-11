@@ -278,6 +278,7 @@ export function financeLabel(raw: string | null | undefined): string {
     subprime: "Subprime",
     cash: "Cash",
     lease: "Lease",
+    bulk_upload: "Bulk Upload",
   };
   return map[key] ?? raw.trim().replace(/\b\w/g, (c) => c.toUpperCase());
 }

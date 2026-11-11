@@ -1944,6 +1944,7 @@ export default function UpdatePendingForm({
                 <option value="subprime">Subprime</option>
                 <option value="lease">Lease</option>
                 <option value="cash">Cash</option>
+                <option value="bulk_upload">Bulk Upload</option>
               </select>
             </div>
             <div className="space-y-1">

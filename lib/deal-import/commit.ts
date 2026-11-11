@@ -338,12 +338,14 @@ async function commitDealImportBatchJs(
       if (n.has_trade === "yes" && n.trade_complete) {
         const { error: tradeError } = await supabase.from("trades").insert({
           deal_id: dealId,
+          stock_number: n.trade_stock_number,
           year: n.trade_year,
           make: n.trade_make,
           model: n.trade_model,
           acv: n.trade_acv,
           allowance: n.trade_allowance,
           exit_strategy: n.trade_exit_strategy,
+          vin: n.trade_vin,
         });
         if (tradeError) throw new Error(`Row ${row.row_number}: ${tradeError.message}`);
       }

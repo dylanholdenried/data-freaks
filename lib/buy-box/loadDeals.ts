@@ -96,6 +96,7 @@ export function formatFinanceType(raw: string | null | undefined): string {
   if (v === "subprime") return "Subprime";
   if (v === "cash") return "Cash";
   if (v === "lease") return "Lease";
+  if (v === "bulk_upload") return "Bulk Upload";
   return raw.trim().replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 

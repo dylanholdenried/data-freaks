@@ -79,7 +79,7 @@ function csvWithBlanks(blankHeaders: DealImportHeader[]): string {
 }
 
 const closedNoColorListExit = parseDealImportCsv(
-  csvWithBlanks(["color", "list_price", "trade_exit_strategy", "msrp"])
+  csvWithBlanks(["color", "trim", "list_price", "trade_exit_strategy", "msrp"])
 );
 assert(
   closedNoColorListExit.rows[0].errors.length === 0,
@@ -87,8 +87,9 @@ assert(
 );
 assert(
   closedNoColorListExit.rows[0].normalized?.status === "closed",
-  "blank color + list_price + trade_exit_strategy + msrp (no trade) → still closed"
+  "blank color + trim + list_price + trade_exit_strategy + msrp (no trade) → still closed"
 );
+assert(closedNoColorListExit.rows[0].normalized?.trim == null, "blank trim → null");
 assert(closedNoColorListExit.rows[0].normalized?.color == null, "blank color → null");
 assert(closedNoColorListExit.rows[0].normalized?.list_price == null, "blank list_price → null");
 assert(closedNoColorListExit.rows[0].normalized?.msrp == null, "blank msrp → null");
@@ -122,6 +123,8 @@ tradeRow.trade_model = "Civic";
 tradeRow.trade_acv = "5000";
 tradeRow.trade_allowance = "4000";
 tradeRow.trade_exit_strategy = "";
+tradeRow.trade_stock_number = "TRD-1";
+tradeRow.trade_vin = "1HGBH41JXMN109186";
 const tradeCsv = `${DEAL_IMPORT_HEADERS.join(",")}\n${DEAL_IMPORT_HEADERS.map((h) => {
   const v = tradeRow[h];
   return v.includes(",") ? `"${v}"` : v;
@@ -143,6 +146,28 @@ assert(
   closedTradeNoExitParsed.rows[0].normalized?.trade_exit_strategy == null,
   "blank trade_exit_strategy → null"
 );
+assert(
+  closedTradeNoExitParsed.rows[0].normalized?.trade_stock_number === "TRD-1",
+  "trade_stock_number preserved"
+);
+assert(
+  closedTradeNoExitParsed.rows[0].normalized?.trade_vin === "1HGBH41JXMN109186",
+  "trade_vin preserved"
+);
+
+const aliasCsv = [
+  "Date,customer_last_name,stock_number,department,vehicle_year,vehicle_make,vehicle_model,vin,trim,color,body_style,drivetrain,odometer,age,acquisition_source,finance_type,finance_manager,front_profit,back_profit,sale_price,list_price,salesperson_1,salesperson_1_share,salesperson_2,salesperson_2_share,has_trade,trade_year,trade_make,trade_model,trade_acv,trade_allowance,trade_exit_strategy,Trade Stock,trade VIN,notes,msrp",
+  "8/1/25,Smith,STK-ALIAS,New,2024,Toyota,Camry,4T1BF1FK5EU123456,SE,White,Sedan,FWD,12,5,Auction,bulk_upload,Jane Doe,1200,800,28500,29900,John Sales,100,,,yes,2018,Honda,Civic,5000,4000,,TRD-9,1HGBH41JXMN109186,,32000",
+].join("\n");
+const aliasParsed = parseDealImportCsv(aliasCsv);
+assert(
+  aliasParsed.fileErrors.length === 0,
+  `Date/Trade Stock/trade VIN aliases should parse: ${aliasParsed.fileErrors.join("; ")}`
+);
+assert(aliasParsed.rows[0]?.normalized?.finance_type === "bulk_upload", "bulk_upload finance type");
+assert(aliasParsed.rows[0]?.normalized?.trade_stock_number === "TRD-9", "Trade Stock alias");
+assert(aliasParsed.rows[0]?.normalized?.trade_vin === "1HGBH41JXMN109186", "trade VIN alias");
+assert(aliasParsed.rows[0]?.normalized?.status === "closed", "alias row closed");
 
 const badDate = parseDealImportCsv(
   [
