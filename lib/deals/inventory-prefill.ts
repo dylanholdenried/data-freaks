@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseVehicleParts } from "@/lib/inventory-command/vehicle";
-import { DRIVETRAINS, mapBodyStyle } from "@/lib/vehicle";
+import { mapBodyStyle, normalizeDrivetrain } from "@/lib/vehicle";
 
 export type InventoryPrefill = {
   /** Trimmed stock number used for the lookup. */
@@ -37,17 +37,7 @@ export function inventoryBodyStyle(raw: string | null | undefined): string {
 
 /** Map a VIN-decode drive type onto FWD / RWD / AWD / 4WD. */
 export function catalogDrivetrain(raw: string | null | undefined): string {
-  const s = (raw ?? "").trim().toUpperCase();
-  if (!s) return "";
-  if ((DRIVETRAINS as readonly string[]).includes(s)) return s;
-  if (s.includes("4WD") || s.includes("4X4") || s.includes("4-WHEEL") || s.includes("FOUR")) {
-    return "4WD";
-  }
-  if (s.includes("AWD") || s.includes("ALL")) return "AWD";
-  if (s.includes("RWD") || s.includes("REAR")) return "RWD";
-  if (s.includes("FWD") || s.includes("FRONT")) return "FWD";
-  const first = s.split(/[\s/,]+/)[0] ?? "";
-  return (DRIVETRAINS as readonly string[]).includes(first) ? first : "";
+  return normalizeDrivetrain(raw ?? "");
 }
 
 function escapeIlike(value: string): string {

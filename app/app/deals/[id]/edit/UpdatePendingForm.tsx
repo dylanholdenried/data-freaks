@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CheckCircle2, Info, Loader2, PlusCircle, Trash2, XCircle } from "lucide-react";
-import { COLORS, BODY_STYLES, DRIVETRAINS, decodeVin, VinDecodeError } from "@/lib/vehicle";
+import { COLORS, BODY_STYLES, DRIVETRAINS, decodeVin, normalizeDrivetrain, VinDecodeError } from "@/lib/vehicle";
 import {
   adoptCatalogVehicle,
   catalogFieldsForStored,
@@ -562,7 +562,7 @@ export default function UpdatePendingForm({
       setDisplayModel(applied.modelName);
 
       if (decoded.bodyStyle) setBodyStyle(decoded.bodyStyle);
-      if (decoded.drivetrain) setDrivetrain(decoded.drivetrain);
+      if (decoded.drivetrain) setDrivetrain(normalizeDrivetrain(decoded.drivetrain));
 
       const summaryYear = decoded.year ?? displayYear;
       const summaryParts = [decoded.bodyStyle, decoded.drivetrain, applied.note]
@@ -756,7 +756,9 @@ export default function UpdatePendingForm({
             : t
         )
       );
-      setTradeDecoded((prev) => ({ ...prev, [clientKey]: true }));
+      if (applied.modelId && !applied.makeIsManual) {
+        setTradeDecoded((prev) => ({ ...prev, [clientKey]: true }));
+      }
     } catch (err) {
       const msg =
         err instanceof VinDecodeError

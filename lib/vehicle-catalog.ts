@@ -289,13 +289,15 @@ export async function adoptCatalogVehicle(
   if (resolved.status === "matched") return { ...stored, added: null };
 
   if (resolved.status === "ambiguous") {
+    // Keep the decoded model text so the form isn't blank; user picks the
+    // specific catalog row (e.g. Silverado → Silverado 1500 / 2500 / 3500).
     return {
       makeId: make.id,
       makeName: make.name,
       makeIsManual: false,
       modelId: "",
-      modelName: "",
-      modelIsManual: false,
+      modelName: displayModelName(rawModel),
+      modelIsManual: true,
       added: null,
       note: `${rawModel.trim()} matches more than one model. Pick the model from the list.`,
     };

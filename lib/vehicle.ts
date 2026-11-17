@@ -31,6 +31,21 @@ export function mapBodyStyle(raw: string): string {
   return "";
 }
 
+/** Map NHTSA drive-type strings onto DRIVETRAINS. */
+export function normalizeDrivetrain(raw: string): string {
+  const s = raw.trim().toUpperCase();
+  if (!s) return "";
+  if ((DRIVETRAINS as readonly string[]).includes(s)) return s;
+  if (s.includes("4WD") || s.includes("4X4") || s.includes("4-WHEEL") || s.includes("FOUR")) {
+    return "4WD";
+  }
+  if (s.includes("AWD") || s.includes("ALL")) return "AWD";
+  if (s.includes("RWD") || s.includes("REAR")) return "RWD";
+  if (s.includes("FWD") || s.includes("FRONT")) return "FWD";
+  const first = s.split(/[\s/,]+/)[0] ?? "";
+  return (DRIVETRAINS as readonly string[]).includes(first) ? first : "";
+}
+
 export function normalizeDecodedVehicle(
   normMake: string,
   rawModel: string,
@@ -75,17 +90,20 @@ export type DecodedVehicle = {
 
 export class VinDecodeError extends Error {}
 
-export async function decodeVin(vin: string): Promise<DecodedVehicle> {
-  const res = await fetch(
-    `https://vpic.nhtsa.dot.gov/api/vehicles/decodevin/${encodeURIComponent(vin)}?format=json`
-  );
-  if (!res.ok) {
-    throw new VinDecodeError("Could not decode this VIN — enter details manually.");
-  }
+const VIN_PATTERN = /^[A-HJ-NPR-Z0-9]{17}$/i;
 
-  const json = await res.json();
-  const results: { Variable: string; Value: string | null }[] = json.Results ?? [];
+export function normalizeVin(vin: string): string {
+  return vin.trim().toUpperCase();
+}
 
+export function isValidVin(vin: string): boolean {
+  return VIN_PATTERN.test(normalizeVin(vin));
+}
+
+type NhtsaResultRow = { Variable: string; Value: string | null };
+
+/** Parse NHTSA decodevin Results[] into our DecodedVehicle shape. */
+export function parseNhtsaVinResults(results: NhtsaResultRow[]): DecodedVehicle {
   function get(variable: string): string {
     return results.find((r) => r.Variable === variable)?.Value?.trim() ?? "";
   }
@@ -102,11 +120,68 @@ export async function decodeVin(vin: string): Promise<DecodedVehicle> {
   }
 
   const make = rawMake.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
-  const drivetrain = rawDrive ? rawDrive.split("/")[0].trim() : "";
+  const drivetrain = normalizeDrivetrain(rawDrive);
   const parsedYear = rawYear ? parseInt(rawYear, 10) : null;
   const year = parsedYear && !isNaN(parsedYear) ? parsedYear : null;
 
   const { model, trim, bodyStyle } = normalizeDecodedVehicle(make, rawModel, rawSeries, rawBody);
 
   return { year, make, model, trim, bodyStyle, drivetrain };
+}
+
+/**
+ * Decode a VIN via our same-origin API (server calls NHTSA).
+ * Dealership networks often block *.gov / external hosts in the browser —
+ * the same failure mode that required the /sb Supabase proxy.
+ */
+export async function decodeVin(vin: string): Promise<DecodedVehicle> {
+  const cleaned = normalizeVin(vin);
+  if (!isValidVin(cleaned)) {
+    throw new VinDecodeError("VIN must be 17 characters to decode.");
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`/api/vin/decode?vin=${encodeURIComponent(cleaned)}`, {
+      method: "GET",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new VinDecodeError(
+      "Couldn't reach the VIN decoder — check your internet connection and try again."
+    );
+  }
+
+  let payload: unknown = null;
+  try {
+    payload = await res.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!res.ok) {
+    const message =
+      payload &&
+      typeof payload === "object" &&
+      "error" in payload &&
+      typeof (payload as { error: unknown }).error === "string"
+        ? (payload as { error: string }).error
+        : "Could not decode this VIN — enter details manually.";
+    throw new VinDecodeError(message);
+  }
+
+  if (!payload || typeof payload !== "object") {
+    throw new VinDecodeError("Could not decode this VIN — enter details manually.");
+  }
+
+  const data = payload as Partial<DecodedVehicle>;
+  return {
+    year: typeof data.year === "number" ? data.year : null,
+    make: typeof data.make === "string" ? data.make : "",
+    model: typeof data.model === "string" ? data.model : "",
+    trim: typeof data.trim === "string" ? data.trim : "",
+    bodyStyle: typeof data.bodyStyle === "string" ? data.bodyStyle : "",
+    drivetrain: typeof data.drivetrain === "string" ? data.drivetrain : "",
+  };
 }

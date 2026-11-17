@@ -7,11 +7,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { IC } from "@/lib/inventory-command/midmo";
-import { BODY_STYLES, COLORS, DRIVETRAINS } from "@/lib/vehicle";
+import { BODY_STYLES, COLORS, DRIVETRAINS, normalizeDrivetrain } from "@/lib/vehicle";
 import { resolveCatalogMake, resolveCatalogModel } from "@/lib/vehicle-catalog";
 
 export type VehicleCatalogMake = { id: string; name: string };
 export type VehicleCatalogModel = { id: string; name: string; make_id: string };
+
+export { normalizeDrivetrain };
 
 const inputStyle = {
   background: "#0f141c",
@@ -41,19 +43,6 @@ export function resolveCatalogModelId(
 ): string {
   const resolved = resolveCatalogModel(modelName, makeId, models, trimHint);
   return resolved.status === "matched" ? resolved.model.id : "";
-}
-
-/** Normalize drivetrain from VIN decode into DRIVETRAINS list. */
-export function normalizeDrivetrain(raw: string): string {
-  const s = raw.trim().toUpperCase();
-  if (!s) return "";
-  if ((DRIVETRAINS as readonly string[]).includes(s)) return s;
-  if (s.includes("4WD") || s.includes("4X4") || s.includes("FOUR")) return "4WD";
-  if (s.includes("AWD") || s.includes("ALL")) return "AWD";
-  if (s.includes("RWD") || s.includes("REAR")) return "RWD";
-  if (s.includes("FWD") || s.includes("FRONT")) return "FWD";
-  const first = s.split(/[\s/,]+/)[0] ?? "";
-  return (DRIVETRAINS as readonly string[]).includes(first) ? first : "";
 }
 
 type Props = {

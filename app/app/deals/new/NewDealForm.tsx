@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CheckCircle2, Loader2, PlusCircle, Trash2, XCircle } from "lucide-react";
-import { BODY_STYLES, DRIVETRAINS, decodeVin, isMakeAllowedForDepartment, VinDecodeError } from "@/lib/vehicle";
+import { BODY_STYLES, DRIVETRAINS, decodeVin, isMakeAllowedForDepartment, normalizeDrivetrain, VinDecodeError } from "@/lib/vehicle";
 import {
   classifyStockMatches,
   findStockMatches,
@@ -219,7 +219,7 @@ export default function NewDealForm({
       const applied = await adoptVehicle(d.make, d.model, d.trim);
       applyAdopted(applied);
       if (d.bodyStyle) setBodyStyle(d.bodyStyle);
-      if (d.drivetrain) setDrivetrain(d.drivetrain);
+      if (d.drivetrain) setDrivetrain(normalizeDrivetrain(d.drivetrain));
       setDecoded(Boolean(applied.modelId) && !applied.makeIsManual);
     } catch (err) {
       if (err instanceof VinDecodeError) {
@@ -296,7 +296,11 @@ export default function NewDealForm({
             : t
         )
       );
-      setTradeDecoded((prev) => ({ ...prev, [idx]: true }));
+      // Only lock fields when make/model resolved to catalog IDs — ambiguous
+      // models stay editable so sales can pick Silverado 1500 vs 2500, etc.
+      if (applied.modelId && !applied.makeIsManual) {
+        setTradeDecoded((prev) => ({ ...prev, [idx]: true }));
+      }
     } catch (err) {
       const msg =
         err instanceof VinDecodeError
