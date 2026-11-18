@@ -35,6 +35,7 @@ type InvUnit = {
   vdp: number | null;
   ph: number | null;
   age: number | null;
+  dsr: number | null;
 };
 
 /** Refresh `live_synced_at` on unchanged matches at most this often. */
@@ -63,6 +64,7 @@ type PurchaseOverlayRow = {
   live_vdp: number | null;
   live_photo_count: number | null;
   live_age: number | null;
+  live_dsr: number | null;
   live_synced_at: string | null;
   frozen_mmr: number | null;
   frozen_jd: number | null;
@@ -81,7 +83,8 @@ function liveOverlayUnchanged(p: PurchaseOverlayRow, u: InvUnit): boolean {
     sameNum(p.live_srp, u.srp) &&
     sameNum(p.live_vdp, u.vdp) &&
     sameNum(p.live_photo_count, u.ph) &&
-    sameNum(p.live_age, u.age)
+    sameNum(p.live_age, u.age) &&
+    sameNum(p.live_dsr, u.dsr)
   );
 }
 
@@ -92,7 +95,7 @@ export async function syncAcquireOverlaysForStore(
 ): Promise<{ matched: number; frozen: number }> {
   const { data: units, error: unitsErr } = await supabase
     .from("inv_units")
-    .select("stk, cost, mmr, jd, price, pom, srp, vdp, ph, age")
+    .select("stk, cost, mmr, jd, price, pom, srp, vdp, ph, age, dsr")
     .eq("snapshot_id", snapshotId);
 
   if (unitsErr) {
@@ -109,7 +112,7 @@ export async function syncAcquireOverlaysForStore(
   const { data: purchases, error: purchErr } = await supabase
     .from("acq_purchases")
     .select(
-      "id, stock_number, stage, live_matched, live_cost, live_mmr, live_jd, live_price, live_pom, live_srp, live_vdp, live_photo_count, live_age, live_synced_at, frozen_mmr, frozen_jd, frozen_at"
+      "id, stock_number, stage, live_matched, live_cost, live_mmr, live_jd, live_price, live_pom, live_srp, live_vdp, live_photo_count, live_age, live_dsr, live_synced_at, frozen_mmr, frozen_jd, frozen_at"
     )
     .eq("store_id", storeId);
 
@@ -149,6 +152,7 @@ export async function syncAcquireOverlaysForStore(
           live_vdp: unit.vdp,
           live_photo_count: unit.ph,
           live_age: unit.age,
+          live_dsr: unit.dsr,
           live_synced_at: now,
           // Rematch clears a prior freeze so books go live again
           frozen_mmr: null,

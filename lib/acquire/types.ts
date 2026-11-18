@@ -212,6 +212,12 @@ export type AcqPurchase = {
   /** Adjusted % of market from Inventory Command overlay */
   live_pom: number | null;
   live_photo_count: number | null;
+  /** Live SRP / VDP / age from Inventory Command overlay (when synced). */
+  live_srp?: number | null;
+  live_vdp?: number | null;
+  live_age?: number | null;
+  /** Days since last website price change (from inv_units.dsr). */
+  live_dsr?: number | null;
   live_synced_at: string | null;
   frozen_mmr: number | null;
   frozen_jd: number | null;

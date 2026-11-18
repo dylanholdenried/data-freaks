@@ -80,6 +80,53 @@ export function markup(p: AcqPurchase): number | null {
   return price - cost;
 }
 
+/** Prefer live inventory age when matched; else purchase→sold / days since purchase. */
+export function displayAgeDays(p: AcqPurchase, now = new Date()): number | null {
+  if (p.live_age != null && Number.isFinite(Number(p.live_age))) {
+    return Number(p.live_age);
+  }
+  return headerAgeDays(p, now);
+}
+
+/** Days on the frontline: frontline→sold when exited, else days since frontline date. */
+export function frontlineAgeDays(p: AcqPurchase, now = new Date()): number | null {
+  if (!p.frontline_date) return null;
+  if (isCompletedStage(p.stage as AcqPurchaseStage) && p.sold_date) {
+    return daysBetween(p.frontline_date, p.sold_date);
+  }
+  return daysSince(p.frontline_date, now);
+}
+
+export function reconVariance(p: AcqPurchase): number | null {
+  if (p.recon_cost == null || p.recon_estimate == null) return null;
+  return num(p.recon_cost) - num(p.recon_estimate);
+}
+
+export function mmrDelta(p: AcqPurchase): number | null {
+  const now = currentMmr(p);
+  if (now == null || p.purchase_mmr == null) return null;
+  return now - num(p.purchase_mmr);
+}
+
+export function jdDelta(p: AcqPurchase): number | null {
+  const now = currentJd(p);
+  if (now == null || p.purchase_jd == null) return null;
+  return now - num(p.purchase_jd);
+}
+
+/** Live inventory cost minus purchase price (pack-in / fees gap). */
+export function costMinusPurchase(p: AcqPurchase): number | null {
+  const cost = merchCost(p);
+  if (cost == null || p.purchase_price == null) return null;
+  return cost - num(p.purchase_price);
+}
+
+/** Days since last website price change (Inventory Command dsr). */
+export function daysSincePriceChange(p: AcqPurchase): number | null {
+  if (p.live_dsr == null || !Number.isFinite(Number(p.live_dsr))) return null;
+  return Number(p.live_dsr);
+}
+
 /** Adjusted % of market (IC POM), rounded to nearest whole percent. */
 export function adjPctOfMarket(p: AcqPurchase): number | null {
   if (p.live_pom == null || !Number.isFinite(Number(p.live_pom))) return null;
