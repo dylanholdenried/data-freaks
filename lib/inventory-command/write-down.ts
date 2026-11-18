@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { parseDateOnly } from "./compute";
+import { normalizeDisp, parseDateOnly } from "./compute";
 import type {
+  InvDisposition,
   InvUnitDetailRow,
   WriteDownBbManual,
   WriteDownCohortRow,
@@ -71,6 +72,7 @@ export type WriteDownDisplayRow = {
   age: number | null;
   /** Projected age on Dec 31 of the write-down year. */
   age_on_1231: number | null;
+  disp: InvDisposition;
   cost: number | null;
   bb_avg_wholesale: number | null;
   bb_uploaded: number | null;
@@ -80,6 +82,12 @@ export type WriteDownDisplayRow = {
   manual_entered_on: string | null;
   sold_date: string | null;
 };
+
+export function writeDownDispLabel(disp: InvDisposition | null | undefined): string {
+  if (disp === "subprime") return "Subprime";
+  if (disp === "wholesale") return "Wholesale";
+  return "Prime";
+}
 
 function manualMap(rows: WriteDownBbManual[]): Map<string, WriteDownBbManual> {
   const m = new Map<string, WriteDownBbManual>();
@@ -95,9 +103,7 @@ export function buildActiveWriteDownRows(
 ): WriteDownDisplayRow[] {
   const man = manualMap(manuals);
   return units
-    .filter(
-      (u) => u.disp !== "wholesale" && isWriteDownEligible(u.age, snapshotDate, year)
-    )
+    .filter((u) => isWriteDownEligible(u.age, snapshotDate, year))
     .map((u) => {
       const key = u.stk.trim().toUpperCase();
       const m = man.get(key);
@@ -111,6 +117,7 @@ export function buildActiveWriteDownRows(
         model: u.model,
         age: u.age,
         age_on_1231: ageOnWriteDownTarget(u.age, snapshotDate, year),
+        disp: normalizeDisp(u.disp),
         cost: u.cost,
         bb_avg_wholesale: bb,
         bb_uploaded: uploaded,
@@ -143,6 +150,7 @@ export function buildSoldWriteDownRows(
       model: u.model,
       age: u.age,
       age_on_1231: ageOnWriteDownTarget(u.age, asOf, year),
+      disp: normalizeDisp(u.disp),
       cost: u.cost,
       bb_avg_wholesale: bb,
       bb_uploaded: uploaded,
@@ -163,6 +171,35 @@ export function writeDownTotals(rows: WriteDownDisplayRow[]) {
   };
 }
 
+export type WriteDownDispTotals = {
+  disp: InvDisposition;
+  label: string;
+  units: number;
+  cost: number;
+  writeDown: number;
+};
+
+export function writeDownTotalsByDisp(rows: WriteDownDisplayRow[]): WriteDownDispTotals[] {
+  const order: InvDisposition[] = ["retail", "subprime", "wholesale"];
+  const buckets = new Map<InvDisposition, WriteDownDispTotals>();
+  for (const d of order) {
+    buckets.set(d, {
+      disp: d,
+      label: writeDownDispLabel(d),
+      units: 0,
+      cost: 0,
+      writeDown: 0,
+    });
+  }
+  for (const r of rows) {
+    const b = buckets.get(r.disp) ?? buckets.get("retail")!;
+    b.units += 1;
+    b.cost += r.cost ?? 0;
+    b.writeDown += r.write_down ?? 0;
+  }
+  return order.map((d) => buckets.get(d)!);
+}
+
 /** Upsert eligible units as in_stock; mark prior in_stock units missing from inventory as sold. */
 export async function syncWriteDownCohort(
   supabase: SupabaseClient,
@@ -176,9 +213,7 @@ export async function syncWriteDownCohort(
   const year = opts.year ?? WRITE_DOWN_YEAR;
   const { storeId, snapshotDate, units } = opts;
   const inInventory = new Set(units.map((u) => u.stk.trim().toUpperCase()));
-  const eligible = units.filter(
-    (u) => u.disp !== "wholesale" && isWriteDownEligible(u.age, snapshotDate, year)
-  );
+  const eligible = units.filter((u) => isWriteDownEligible(u.age, snapshotDate, year));
 
   if (eligible.length > 0) {
     const payload = eligible.map((u) => ({
@@ -192,6 +227,7 @@ export async function syncWriteDownCohort(
       age: u.age,
       cost: u.cost,
       bb_avg_wholesale: u.bb_avg_wholesale,
+      disp: normalizeDisp(u.disp),
       first_seen_date: snapshotDate,
       last_seen_date: snapshotDate,
       status: "in_stock" as const,
@@ -278,7 +314,7 @@ export async function loadSoldWriteDownCohort(
   const { data, error } = await supabase
     .from("inv_write_down_cohort")
     .select(
-      "store_id, write_down_year, stk, vin, veh_year, make, model, age, cost, bb_avg_wholesale, first_seen_date, last_seen_date, status, sold_date"
+      "store_id, write_down_year, stk, vin, veh_year, make, model, age, cost, bb_avg_wholesale, disp, first_seen_date, last_seen_date, status, sold_date"
     )
     .eq("store_id", storeId)
     .eq("write_down_year", year)

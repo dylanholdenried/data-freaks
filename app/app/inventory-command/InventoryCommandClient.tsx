@@ -292,7 +292,7 @@ export default function InventoryCommandClient({
             {tab === "write_down_2026" && showWriteDown ? (
               <WriteDown2026Tab
                 storeId={storeId}
-                units={operatingUnits}
+                units={units}
                 snapshotDate={snapshotDate}
                 soldCohort={writeDownSold}
                 manuals={writeDownManuals}

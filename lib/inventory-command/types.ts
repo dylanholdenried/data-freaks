@@ -107,6 +107,7 @@ export type WriteDownCohortRow = {
   age: number | null;
   cost: number | null;
   bb_avg_wholesale: number | null;
+  disp: InvDisposition | null;
   first_seen_date: string;
   last_seen_date: string;
   status: "in_stock" | "sold";

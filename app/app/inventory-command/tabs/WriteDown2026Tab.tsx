@@ -11,7 +11,9 @@ import {
   buildSoldWriteDownRows,
   daysUntilWriteDownTarget,
   WRITE_DOWN_YEAR,
+  writeDownDispLabel,
   writeDownTotals,
+  writeDownTotalsByDisp,
   type WriteDownDisplayRow,
 } from "@/lib/inventory-command/write-down";
 import { setWriteDownBbManualAction } from "../actions";
@@ -219,6 +221,13 @@ function writeDownCols(
       sortValue: (r) => r.model,
     },
     {
+      key: "disp",
+      label: "Disposition",
+      render: (r) =>
+        /\bunits\b/i.test(r.stk) ? "—" : writeDownDispLabel(r.disp),
+      sortValue: (r) => writeDownDispLabel(r.disp),
+    },
+    {
       key: "age",
       label: "Age",
       right: true,
@@ -304,6 +313,8 @@ export default function WriteDown2026Tab({
 
   const activeTotals = useMemo(() => writeDownTotals(active), [active]);
   const soldTotals = useMemo(() => writeDownTotals(sold), [sold]);
+  const activeByDisp = useMemo(() => writeDownTotalsByDisp(active), [active]);
+  const soldByDisp = useMemo(() => writeDownTotalsByDisp(sold), [sold]);
 
   if (!snapshotDate) {
     return (
@@ -325,6 +336,7 @@ export default function WriteDown2026Tab({
     model: null,
     age: null,
     age_on_1231: null,
+    disp: "retail",
     cost: activeTotals.cost,
     bb_avg_wholesale: null,
     bb_uploaded: null,
@@ -340,6 +352,17 @@ export default function WriteDown2026Tab({
     cost: soldTotals.cost,
     write_down: soldTotals.writeDown,
   };
+
+  function dispTotalsNote(
+    byDisp: ReturnType<typeof writeDownTotalsByDisp>
+  ): string {
+    return byDisp
+      .map(
+        (b) =>
+          `${b.label}: ${b.units} · ${fmtMoneyCompact(b.cost)} cost · ${fmtMoneyCompact(b.writeDown)} WD`
+      )
+      .join("  ·  ");
+  }
 
   return (
     <div>
@@ -357,12 +380,27 @@ export default function WriteDown2026Tab({
         <IcKpi label="Sold off list" value={fmtNum(soldTotals.units)} />
       </div>
 
+      <div
+        className="mb-4 grid gap-3"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}
+      >
+        {activeByDisp.map((b) => (
+          <IcKpi
+            key={b.disp}
+            label={`${b.label} (in stock)`}
+            value={`${fmtNum(b.units)} · ${fmtMoneyCompact(b.writeDown)}`}
+            sub={`${fmtMoneyCompact(b.cost)} at cost`}
+            status={b.writeDown > 0 ? "warn" : "neutral"}
+          />
+        ))}
+      </div>
+
       <IcPanel
         title={`${WRITE_DOWN_YEAR} write-down — will be 60+ on Dec 31`}
         note={
           daysLeft >= 0
-            ? `${activeTotals.units} units still in stock · ${daysLeft} days to Dec 31 · write-down = max(0, cost − BB Avg Wholesale) · Missing BB flagged for manual entry`
-            : `${activeTotals.units} units still in stock · past Dec 31 ${WRITE_DOWN_YEAR} · write-down = max(0, cost − BB Avg Wholesale)`
+            ? `${activeTotals.units} units still in stock · ${daysLeft} days to Dec 31 · write-down = max(0, cost − BB Avg Wholesale) · Missing BB flagged for manual entry · ${dispTotalsNote(activeByDisp)}`
+            : `${activeTotals.units} units still in stock · past Dec 31 ${WRITE_DOWN_YEAR} · write-down = max(0, cost − BB Avg Wholesale) · ${dispTotalsNote(activeByDisp)}`
         }
       >
         {active.length === 0 ? (
@@ -388,7 +426,7 @@ export default function WriteDown2026Tab({
 
       <IcPanel
         title="Sold — left write-down list"
-        note={`${soldTotals.units} units sold or otherwise gone from inventory · last known cost & BB · ${fmtMoneyCompact(soldTotals.writeDown)} write-down removed from exposure`}
+        note={`${soldTotals.units} units sold or otherwise gone from inventory · last known cost & BB · ${fmtMoneyCompact(soldTotals.writeDown)} write-down removed from exposure · ${dispTotalsNote(soldByDisp)}`}
       >
         {sold.length === 0 ? (
           <IcEmpty>No write-down units have left inventory yet.</IcEmpty>
