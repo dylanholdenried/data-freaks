@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronRight } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { rollupIdSet } from "@/lib/departments/rollup";
+import { dealMatchesRegistrySearch } from "@/lib/deals/registry-search";
 import { buildDealsRegistryPath, rememberDealsRegistryPath } from "@/lib/deals/registry-url";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -457,13 +458,7 @@ export default function DealsClient({
       if (financeManagerFilter && deal.finance_manager_id !== financeManagerFilter)
         return false;
       if (financeTypeFilter && deal.finance_type !== financeTypeFilter) return false;
-      if (
-        search &&
-        !(deal.stock_number ?? "").toLowerCase().includes(search) &&
-        !(deal.customer_last_name ?? "").toLowerCase().includes(search) &&
-        !(deal.vin ?? "").toLowerCase().includes(search)
-      )
-        return false;
+      if (search && !dealMatchesRegistrySearch(deal, search)) return false;
       return true;
     });
 
@@ -776,7 +771,7 @@ export default function DealsClient({
           type="search"
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
-          placeholder="Search stock #, VIN, or customer last name…"
+          placeholder="Search stock #, VIN, customer, year, make, or model…"
           className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
         />
       </section>

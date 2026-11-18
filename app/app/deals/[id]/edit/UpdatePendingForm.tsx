@@ -1736,8 +1736,30 @@ export default function UpdatePendingForm({
             </div>
           </div>
 
-          {/* Row 2: Make | Model | Odometer */}
-          <div className="grid gap-4 sm:grid-cols-3">
+          {/* Row 2: Year | Make | Model | Odometer */}
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+
+            {/* Year */}
+            <div className="space-y-1">
+              <label className={LBL}>Year</label>
+              <Input
+                type="number"
+                value={displayYear ? String(displayYear) : ""}
+                onChange={(e) => {
+                  const raw = e.target.value.trim();
+                  if (!raw) {
+                    setDisplayYear(0);
+                    return;
+                  }
+                  const n = parseInt(raw, 10);
+                  setDisplayYear(Number.isFinite(n) ? n : 0);
+                }}
+                min={1900}
+                max={2100}
+                disabled={isLocked}
+                className={emptyCls(displayYear ? String(displayYear) : "", isLocked)}
+              />
+            </div>
 
             {/* Make */}
             <div className="space-y-1">
