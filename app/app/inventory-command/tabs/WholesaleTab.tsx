@@ -2,24 +2,15 @@
 
 import { useMemo } from "react";
 import { fmtMoney, fmtMoneyCompact, fmtNum } from "@/lib/inventory-command/format";
-import { IC, mmrWater } from "@/lib/inventory-command/midmo";
+import { ageTone, IC, mmrWater } from "@/lib/inventory-command/midmo";
 import { wholesaleUnits } from "@/lib/inventory-command/compute";
 import type { InvUnitDetailRow } from "@/lib/inventory-command/types";
-import {
-  colAge,
-  colCost,
-  colPhotos,
-  colPrice,
-  colStock,
-  colVeh,
-} from "../ui/columns";
 import { IcEmpty, IcKpi, IcPanel } from "../ui/primitives";
 import { IcTable, type IcCol } from "../ui/IcTable";
 
 export default function WholesaleTab({ units }: { units: InvUnitDetailRow[] }) {
   const wholesale = useMemo(
-    () =>
-      wholesaleUnits(units).sort((a, b) => (b.age ?? 0) - (a.age ?? 0)),
+    () => wholesaleUnits(units).sort((a, b) => (b.age ?? 0) - (a.age ?? 0)),
     [units]
   );
 
@@ -36,28 +27,64 @@ export default function WholesaleTab({ units }: { units: InvUnitDetailRow[] }) {
   }, [wholesale]);
 
   const cols: IcCol<InvUnitDetailRow>[] = [
-    colStock(),
-    colVeh(),
+    {
+      key: "age",
+      label: "Age",
+      color: (u) => ageTone(u.age),
+      render: (u) => u.age ?? "—",
+      sortValue: (u) => u.age,
+    },
+    {
+      key: "stk",
+      label: "Stock #",
+      bold: true,
+      sortValue: (u) => u.stk,
+    },
     {
       key: "vin",
       label: "VIN",
       render: (u) => u.vin ?? "—",
       sortValue: (u) => u.vin,
     },
-    colAge(),
-    colCost(),
-    colPrice(),
+    {
+      key: "year",
+      label: "Year",
+      render: (u) => u.year ?? "—",
+      sortValue: (u) => u.year,
+    },
+    {
+      key: "make",
+      label: "Make",
+      render: (u) => u.make ?? "—",
+      sortValue: (u) => u.make,
+    },
+    {
+      key: "model",
+      label: "Model",
+      render: (u) => u.model ?? "—",
+      sortValue: (u) => u.model,
+    },
+    {
+      key: "odometer",
+      label: "Odometer",
+      render: (u) => (u.odometer == null ? "—" : fmtNum(u.odometer)),
+      sortValue: (u) => u.odometer,
+    },
+    {
+      key: "cost",
+      label: "Cost",
+      render: (u) => fmtMoney(u.cost),
+      sortValue: (u) => u.cost,
+    },
     {
       key: "mmr",
       label: "MMR",
-      right: true,
       render: (u) => fmtMoney(u.mmr),
       sortValue: (u) => u.mmr,
     },
     {
       key: "mmr_water",
       label: "MMR Water",
-      right: true,
       color: (u) => {
         const w = mmrWater(u);
         if (w == null) return IC.muted;
@@ -69,14 +96,6 @@ export default function WholesaleTab({ units }: { units: InvUnitDetailRow[] }) {
       },
       sortValue: (u) => mmrWater(u),
     },
-    {
-      key: "bb_avg_wholesale",
-      label: "BB Avg WS",
-      right: true,
-      render: (u) => fmtMoney(u.bb_avg_wholesale),
-      sortValue: (u) => u.bb_avg_wholesale,
-    },
-    colPhotos(),
   ];
 
   if (wholesale.length === 0) {
@@ -118,6 +137,7 @@ export default function WholesaleTab({ units }: { units: InvUnitDetailRow[] }) {
           defaultDir="desc"
           maxH={560}
           rowKey={(u) => u.stk}
+          align="center"
         />
       </IcPanel>
     </div>

@@ -3,10 +3,14 @@
 import { useMemo, useState } from "react";
 import { IC } from "@/lib/inventory-command/midmo";
 
+export type IcAlign = "left" | "center" | "right";
+
 export type IcCol<T> = {
   key: string;
   label: string;
   right?: boolean;
+  /** Overrides `right` when set. */
+  align?: IcAlign;
   bold?: boolean;
   sortable?: boolean;
   color?: (row: T) => string | undefined;
@@ -15,7 +19,15 @@ export type IcCol<T> = {
   sortValue?: (row: T) => string | number | null | undefined;
 };
 
-function renderCell<T>(c: IcCol<T>, row: T, isFooter: boolean) {
+function colAlign<T>(c: IcCol<T>, fallback: IcAlign = "left"): IcAlign {
+  if (c.align) return c.align;
+  // Table-level center/right wins over legacy per-column `right`.
+  if (fallback !== "left") return fallback;
+  if (c.right) return "right";
+  return "left";
+}
+
+function renderCell<T>(c: IcCol<T>, row: T, isFooter: boolean, fallbackAlign: IcAlign) {
   const raw = (row as unknown as Record<string, unknown>)[c.key];
   const content = c.render ? c.render(row) : raw == null || raw === "" ? "—" : String(raw);
   return (
@@ -23,7 +35,7 @@ function renderCell<T>(c: IcCol<T>, row: T, isFooter: boolean) {
       key={c.key}
       style={{
         padding: "7px 8px",
-        textAlign: c.right ? "right" : "left",
+        textAlign: colAlign(c, fallbackAlign),
         whiteSpace: "nowrap",
         borderBottom: `1px solid ${IC.line}`,
         borderTop: isFooter ? `1px solid ${IC.border}` : undefined,
@@ -47,6 +59,7 @@ export function IcTable<T extends object>({
   onRowClick,
   isRowActive,
   footer,
+  align = "left",
 }: {
   cols: IcCol<T>[];
   rows: T[];
@@ -58,6 +71,8 @@ export function IcTable<T extends object>({
   isRowActive?: (row: T) => boolean;
   /** Pinned summary row (e.g. totals), not sorted. */
   footer?: T;
+  /** Default cell/header alignment when a column does not set `align` / `right`. */
+  align?: IcAlign;
 }) {
   const [sortKey, setSortKey] = useState(defaultSort ?? cols[0]?.key);
   const [dir, setDir] = useState<"asc" | "desc">(defaultDir);
@@ -121,7 +136,7 @@ export function IcTable<T extends object>({
                   onClick={clickable ? () => onHeader(c.key, c.sortable) : undefined}
                   style={{
                     padding: "7px 8px",
-                    textAlign: c.right ? "right" : "left",
+                    textAlign: colAlign(c, align),
                     fontSize: 11,
                     textTransform: "uppercase",
                     letterSpacing: 0.7,
@@ -153,14 +168,14 @@ export function IcTable<T extends object>({
                   boxShadow: active ? `inset 3px 0 0 ${IC.yellow}` : undefined,
                 }}
               >
-                {cols.map((c) => renderCell(c, row, false))}
+                {cols.map((c) => renderCell(c, row, false, align))}
               </tr>
             );
           })}
         </tbody>
         {footer ? (
           <tfoot style={{ position: "sticky", bottom: 0, background: IC.panel, zIndex: 1 }}>
-            <tr>{cols.map((c) => renderCell(c, footer, true))}</tr>
+            <tr>{cols.map((c) => renderCell(c, footer, true, align))}</tr>
           </tfoot>
         ) : null}
       </table>
