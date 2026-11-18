@@ -28,6 +28,14 @@ import {
 import type { DhPurchaseOverlay } from "@/lib/inventory-command/dh-purchases";
 import { ACQ_STAGES, type AcqPurchaseStage } from "@/lib/acquire/types";
 import { countTtlFails } from "@/lib/inventory-command/compute";
+import {
+  isJimButlerStore,
+  loadSoldWriteDownCohort,
+  loadWriteDownManuals,
+  syncWriteDownCohort,
+} from "@/lib/inventory-command/write-down";
+import type { WriteDownBbManual, WriteDownCohortRow } from "@/lib/inventory-command/types";
+import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import PlanNoAccessState from "../PlanNoAccessState";
 import SelectAutoGroupEmptyState from "../SelectAutoGroupEmptyState";
 import InventoryCommandClient from "./InventoryCommandClient";
@@ -208,7 +216,33 @@ export default async function InventoryCommandPage({
     ]);
   }
 
-  const canTagSources = isPlatformStaff(profile.role) && !(await isAppViewOnly(profile.role));
+  const viewOnly = await isAppViewOnly(profile.role);
+  const canTagSources = isPlatformStaff(profile.role) && !viewOnly;
+
+  const initialStoreName = stores.find((s) => s.id === initialStoreId)?.name ?? "";
+  let writeDownSold: WriteDownCohortRow[] = [];
+  let writeDownManuals: WriteDownBbManual[] = [];
+  if (isJimButlerStore(initialStoreName) && snapshotDate && units.length > 0) {
+    try {
+      const service = createSupabaseServiceClient();
+      await syncWriteDownCohort(service, {
+        storeId: initialStoreId,
+        snapshotDate,
+        units,
+      });
+    } catch {
+      // Cohort sync is best-effort; tab still works from live units.
+    }
+    try {
+      [writeDownSold, writeDownManuals] = await Promise.all([
+        loadSoldWriteDownCohort(supabase, initialStoreId),
+        loadWriteDownManuals(supabase, initialStoreId),
+      ]);
+    } catch {
+      writeDownSold = [];
+      writeDownManuals = [];
+    }
+  }
 
   return (
     <InventoryCommandClient
@@ -229,6 +263,9 @@ export default async function InventoryCommandPage({
         soldDeals,
         canTagSources,
       }}
+      writeDownSold={writeDownSold}
+      writeDownManuals={writeDownManuals}
+      canEditWriteDownBb={!viewOnly}
     />
   );
 }

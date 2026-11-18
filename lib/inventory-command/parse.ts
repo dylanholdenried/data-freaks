@@ -36,6 +36,7 @@ export const TEMPLATE_HEADERS = [
   "pt",
   "disp",
   "odometer",
+  "black_book_average_wholesale",
 ] as const;
 
 export type ParsedUnitBase = Omit<InvUnitRow, "d_vdp" | "d_srp" | "d_p" | "d_ph"> &
@@ -134,6 +135,7 @@ function detailFields(opts: {
   siteSrp: unknown;
   siteVdp: unknown;
   bbRetail: unknown;
+  bbAvgWholesale: unknown;
   cost: number | null;
   price: number | null;
   pom: number | null;
@@ -156,12 +158,21 @@ function detailFields(opts: {
     site_srp: toInt(opts.siteSrp),
     site_vdp: toInt(opts.siteVdp),
     bb_retail: toNum(opts.bbRetail),
+    bb_avg_wholesale: toNum(opts.bbAvgWholesale),
     market_price: market,
   };
 }
 
 type VautoDetailCols = Record<
-  "vin" | "odometer" | "ctm" | "ptAlign" | "markup" | "siteSrp" | "siteVdp" | "bbRetail",
+  | "vin"
+  | "odometer"
+  | "ctm"
+  | "ptAlign"
+  | "markup"
+  | "siteSrp"
+  | "siteVdp"
+  | "bbRetail"
+  | "bbAvgWholesale",
   number
 >;
 
@@ -182,6 +193,13 @@ function vautoDetailCols(headers: unknown[]): VautoDetailCols {
     siteSrp: find((h) => isSite(h) && h.endsWith("srp") && !h.includes("%"), 19),
     siteVdp: find((h) => isSite(h) && h.endsWith("vdp") && !h.includes("%"), 20),
     bbRetail: find((h) => h === "black_book_retail", 26),
+    bbAvgWholesale: find(
+      (h) =>
+        h === "black_book_average_wholesale" ||
+        h === "bb_avg_wholesale" ||
+        (h.includes("black_book") && h.includes("average") && h.includes("wholesale")),
+      -1
+    ),
   };
 }
 
@@ -237,6 +255,7 @@ function rowFromVautoCols(
       siteSrp: row[cols.siteSrp],
       siteVdp: row[cols.siteVdp],
       bbRetail: row[cols.bbRetail],
+      bbAvgWholesale: cols.bbAvgWholesale >= 0 ? row[cols.bbAvgWholesale] : null,
       cost,
       price,
       pom,
@@ -314,6 +333,11 @@ function rowFromNamedCsv(
       siteSrp: get(["site_srp"]),
       siteVdp: get(["site_vdp"]),
       bbRetail: get(["black_book_retail", "bb_retail"]),
+      bbAvgWholesale: get([
+        "black_book_average_wholesale",
+        "bb_avg_wholesale",
+        "black_book_avg_wholesale",
+      ]),
       cost,
       price,
       pom,

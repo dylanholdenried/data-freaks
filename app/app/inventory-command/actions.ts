@@ -19,6 +19,7 @@ import {
   toDetailUnits,
 } from "@/lib/inventory-command/inventory-tab-data";
 import type { InvMovement, InvUnitDetailRow } from "@/lib/inventory-command/types";
+import { WRITE_DOWN_YEAR } from "@/lib/inventory-command/write-down";
 
 type Fail = { ok: false; error: string };
 
@@ -156,6 +157,50 @@ export type AllStoresHealthPayload = {
   movements: InvMovement[];
   sold: SoldDeal[];
 };
+
+/** Manual Black Book Average Wholesale for a write-down unit (keeps Missing/Manual flag + entered_on). */
+export async function setWriteDownBbManualAction(input: {
+  storeId: string;
+  stk: string;
+  bbAvgWholesale: number;
+  enteredOn?: string;
+}): Promise<{ ok: true } | Fail> {
+  try {
+    await assertNotImpersonating();
+    const ctx = await requireReader(input.storeId);
+    if (!ctx.ok) return ctx;
+
+    const stk = normStk(input.stk);
+    if (!stk) return { ok: false, error: "Stock number required." };
+    if (!Number.isFinite(input.bbAvgWholesale) || input.bbAvgWholesale < 0) {
+      return { ok: false, error: "Enter a valid Black Book Average Wholesale amount." };
+    }
+
+    const enteredOn =
+      input.enteredOn && /^\d{4}-\d{2}-\d{2}$/.test(input.enteredOn)
+        ? input.enteredOn
+        : new Date().toISOString().slice(0, 10);
+
+    const { error } = await ctx.supabase.from("inv_write_down_bb_manual").upsert(
+      {
+        store_id: input.storeId,
+        write_down_year: WRITE_DOWN_YEAR,
+        stk,
+        bb_avg_wholesale: Math.round(input.bbAvgWholesale * 100) / 100,
+        entered_on: enteredOn,
+        set_by: ctx.user.id,
+        set_at: new Date().toISOString(),
+      },
+      { onConflict: "store_id,write_down_year,stk" }
+    );
+    if (error) return { ok: false, error: error.message };
+
+    revalidatePath("/app/inventory-command");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not save BB value" };
+  }
+}
 
 export async function getAllStoresSourceHealthAction(): Promise<
   { ok: true; data: AllStoresHealthPayload } | Fail

@@ -37,6 +37,7 @@ export type InvUnitDetailFields = {
   site_srp: number | null;
   site_vdp: number | null;
   bb_retail: number | null;
+  bb_avg_wholesale: number | null;
   market_price: number | null;
 };
 
@@ -91,4 +92,31 @@ export type InventoryCommandTab =
   | "pricing"
   | "demand"
   | "mix"
-  | "subprime";
+  | "subprime"
+  | "wholesale"
+  | "write_down_2026";
+
+export type WriteDownCohortRow = {
+  store_id: string;
+  write_down_year: number;
+  stk: string;
+  vin: string | null;
+  veh_year: number | null;
+  make: string | null;
+  model: string | null;
+  age: number | null;
+  cost: number | null;
+  bb_avg_wholesale: number | null;
+  first_seen_date: string;
+  last_seen_date: string;
+  status: "in_stock" | "sold";
+  sold_date: string | null;
+};
+
+export type WriteDownBbManual = {
+  store_id: string;
+  write_down_year: number;
+  stk: string;
+  bb_avg_wholesale: number;
+  entered_on: string;
+};

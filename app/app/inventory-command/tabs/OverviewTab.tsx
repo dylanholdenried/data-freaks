@@ -23,8 +23,9 @@ export default function OverviewTab({
   units: InvUnitRow[];
   snapshotDate: string | null;
 }) {
+  // Caller passes retail + subprime only (wholesale is on its own tab).
   const k = units.length;
-  const retail = units.filter((u) => u.disp !== "subprime");
+  const retail = units.filter((u) => u.disp === "retail");
   const sub = units.filter((u) => u.disp === "subprime");
   const noPrice = retailNoPrice(units);
   const stale7 = retailStale(units, 7);

@@ -7,6 +7,7 @@ import {
   type PrevUnitLite,
 } from "./compute";
 import { parseVautoExport } from "./parse";
+import { isJimButlerStore, syncWriteDownCohort } from "./write-down";
 
 export type IngestResult = {
   snapshotId: string;
@@ -158,6 +159,7 @@ export async function ingestInventoryExport(opts: {
     site_srp: u.site_srp,
     site_vdp: u.site_vdp,
     bb_retail: u.bb_retail,
+    bb_avg_wholesale: u.bb_avg_wholesale,
     market_price: u.market_price,
     raw: u.raw,
   }));
@@ -195,6 +197,19 @@ export async function ingestInventoryExport(opts: {
   if (priceActions.length > 0) {
     const { error } = await supabase.from("inv_price_actions").insert(priceActions);
     if (error) throw new Error(`Price actions insert failed: ${error.message}`);
+  }
+
+  const { data: storeRow } = await supabase
+    .from("stores")
+    .select("name")
+    .eq("id", storeId)
+    .maybeSingle();
+  if (storeRow?.name && isJimButlerStore(storeRow.name)) {
+    await syncWriteDownCohort(supabase, {
+      storeId,
+      snapshotDate,
+      units,
+    });
   }
 
   return {

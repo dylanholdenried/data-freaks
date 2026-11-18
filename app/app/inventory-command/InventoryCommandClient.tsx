@@ -5,6 +5,8 @@ import {
   daysUntilFirstOfNextMonth,
   hotAgeThreshold,
   isHotUnit,
+  nonWholesaleUnits,
+  wholesaleUnits,
 } from "@/lib/inventory-command/compute";
 import { collectDhUnitsForStore } from "@/lib/inventory-command/dh-purchases";
 import type { DhPurchaseOverlay } from "@/lib/inventory-command/dh-purchases";
@@ -29,7 +31,11 @@ import PricingTab from "./tabs/PricingTab";
 import DemandTab from "./tabs/DemandTab";
 import MixTab from "./tabs/MixTab";
 import SubprimeTab from "./tabs/SubprimeTab";
+import WholesaleTab from "./tabs/WholesaleTab";
+import WriteDown2026Tab from "./tabs/WriteDown2026Tab";
 import { IcEmpty, IcFooterNote, IcRoot } from "./ui/primitives";
+import { isJimButlerStore } from "@/lib/inventory-command/write-down";
+import type { WriteDownBbManual, WriteDownCohortRow } from "@/lib/inventory-command/types";
 
 export type StoreOption = { id: string; name: string };
 
@@ -45,9 +51,12 @@ export type InventoryCommandClientProps = {
   latestByStore: Record<string, string | null>;
   dhPurchases?: DhPurchaseOverlay[];
   inventoryTab: InventoryTabData;
+  writeDownSold?: WriteDownCohortRow[];
+  writeDownManuals?: WriteDownBbManual[];
+  canEditWriteDownBb?: boolean;
 };
 
-const TABS: { id: InventoryCommandTab; label: string }[] = [
+const BASE_TABS: { id: InventoryCommandTab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "inventory", label: "Inventory" },
   { id: "dh", label: "DH Purchases" },
@@ -58,6 +67,7 @@ const TABS: { id: InventoryCommandTab; label: string }[] = [
   { id: "demand", label: "Demand" },
   { id: "mix", label: "Mix" },
   { id: "subprime", label: "Subprime" },
+  { id: "wholesale", label: "Wholesale" },
 ];
 
 export default function InventoryCommandClient({
@@ -71,6 +81,9 @@ export default function InventoryCommandClient({
   latestByStore,
   dhPurchases = [],
   inventoryTab,
+  writeDownSold = [],
+  writeDownManuals = [],
+  canEditWriteDownBb = false,
 }: InventoryCommandClientProps) {
   const [storeId, setStoreId] = useState(initialStoreId);
   const [tab, setTab] = useState<InventoryCommandTab>("overview");
@@ -83,28 +96,40 @@ export default function InventoryCommandClient({
   }
 
   const storeName = stores.find((s) => s.id === storeId)?.name ?? "Store";
+  const showWriteDown = isJimButlerStore(storeName);
+  const tabs = useMemo(
+    () =>
+      showWriteDown
+        ? [...BASE_TABS, { id: "write_down_2026" as const, label: "2026 Write Down" }]
+        : BASE_TABS,
+    [showWriteDown]
+  );
   const asOf = snapshotDate ?? latestByStore[storeId] ?? null;
+
+  /** Prime + subprime only — wholesale never mixes into command tabs. */
+  const operatingUnits = useMemo(() => nonWholesaleUnits(units), [units]);
+  const wholesaleOnly = useMemo(() => wholesaleUnits(units), [units]);
 
   const hotCount = useMemo(() => {
     if (!snapshotDate) return 0;
-    return units.filter((u) => isHotUnit(u.age, snapshotDate)).length;
-  }, [units, snapshotDate]);
+    return operatingUnits.filter((u) => isHotUnit(u.age, snapshotDate)).length;
+  }, [operatingUnits, snapshotDate]);
 
   const dhCount = useMemo(
-    () => collectDhUnitsForStore(units, storeId, storeName, dhPurchases).length,
-    [units, storeId, storeName, dhPurchases]
+    () => collectDhUnitsForStore(operatingUnits, storeId, storeName, dhPurchases).length,
+    [operatingUnits, storeId, storeName, dhPurchases]
   );
 
   const untaggedCount = useMemo(() => {
     const manual = manualTagMap(inventoryTab.tags);
-    return units.filter(
+    return operatingUnits.filter(
       (u) => !resolveAcqSource(u.stk, manual, inventoryTab.sourceNames).source
     ).length;
-  }, [units, inventoryTab.tags, inventoryTab.sourceNames]);
+  }, [operatingUnits, inventoryTab.tags, inventoryTab.sourceNames]);
 
   const totalCost = useMemo(
-    () => units.reduce((s, u) => s + (u.cost || 0), 0),
-    [units]
+    () => operatingUnits.reduce((s, u) => s + (u.cost || 0), 0),
+    [operatingUnits]
   );
 
   const threshold = snapshotDate ? hotAgeThreshold(snapshotDate) : null;
@@ -140,7 +165,11 @@ export default function InventoryCommandClient({
           </h1>
           <p className="mt-1 text-sm" style={{ color: IC.muted }}>
             {asOf
-              ? `vAuto export ${formatExportDate(asOf)} · ${fmtNum(units.length)} units · ${fmtMoneyCompact(totalCost)} at cost`
+              ? `vAuto export ${formatExportDate(asOf)} · ${fmtNum(operatingUnits.length)} units · ${fmtMoneyCompact(totalCost)} at cost${
+                  wholesaleOnly.length > 0
+                    ? ` · ${fmtNum(wholesaleOnly.length)} wholesale`
+                    : ""
+                }`
               : "No snapshot yet"}
           </p>
         </div>
@@ -175,7 +204,7 @@ export default function InventoryCommandClient({
       </div>
 
       <div className="mb-5 flex flex-wrap gap-1.5">
-        {TABS.map((t) => {
+        {tabs.map((t) => {
           const active = tab === t.id;
           const label =
             t.id === "hot"
@@ -184,7 +213,9 @@ export default function InventoryCommandClient({
                 ? `DH Purchases (${dhCount})`
                 : t.id === "inventory" && untaggedCount > 0
                   ? `Inventory (${untaggedCount} untagged)`
-                  : t.label;
+                  : t.id === "wholesale" && wholesaleOnly.length > 0
+                    ? `Wholesale (${wholesaleOnly.length})`
+                    : t.label;
           return (
             <button
               key={t.id}
@@ -218,11 +249,11 @@ export default function InventoryCommandClient({
         ) : (
           <>
             {tab === "overview" ? (
-              <OverviewTab units={units} snapshotDate={snapshotDate} />
+              <OverviewTab units={operatingUnits} snapshotDate={snapshotDate} />
             ) : null}
             {tab === "inventory" && snapshotDate ? (
               <InventoryTab
-                units={units}
+                units={operatingUnits}
                 storeId={storeId}
                 storeName={storeName}
                 storeCount={stores.length}
@@ -232,7 +263,7 @@ export default function InventoryCommandClient({
             ) : null}
             {tab === "dh" ? (
               <DhPurchasesTab
-                units={units}
+                units={operatingUnits}
                 storeId={storeId}
                 storeName={storeName}
                 purchases={dhPurchases}
@@ -241,20 +272,33 @@ export default function InventoryCommandClient({
             {tab === "trends" ? (
               <TrendsTab
                 history={metricsHistory}
-                units={units}
+                units={operatingUnits}
                 movements={movements}
                 priceActions={priceActions}
                 snapshotDate={snapshotDate}
               />
             ) : null}
             {tab === "hot" ? (
-              <HotListTab units={units} snapshotDate={snapshotDate} />
+              <HotListTab units={operatingUnits} snapshotDate={snapshotDate} />
             ) : null}
-            {tab === "merchandising" ? <MerchandisingTab units={units} /> : null}
-            {tab === "pricing" ? <PricingTab units={units} /> : null}
-            {tab === "demand" ? <DemandTab units={units} /> : null}
-            {tab === "mix" ? <MixTab units={units} /> : null}
-            {tab === "subprime" ? <SubprimeTab units={units} /> : null}
+            {tab === "merchandising" ? (
+              <MerchandisingTab units={operatingUnits} />
+            ) : null}
+            {tab === "pricing" ? <PricingTab units={operatingUnits} /> : null}
+            {tab === "demand" ? <DemandTab units={operatingUnits} /> : null}
+            {tab === "mix" ? <MixTab units={operatingUnits} /> : null}
+            {tab === "subprime" ? <SubprimeTab units={operatingUnits} /> : null}
+            {tab === "wholesale" ? <WholesaleTab units={units} /> : null}
+            {tab === "write_down_2026" && showWriteDown ? (
+              <WriteDown2026Tab
+                storeId={storeId}
+                units={operatingUnits}
+                snapshotDate={snapshotDate}
+                soldCohort={writeDownSold}
+                manuals={writeDownManuals}
+                canEdit={canEditWriteDownBb}
+              />
+            ) : null}
           </>
         )}
       </div>

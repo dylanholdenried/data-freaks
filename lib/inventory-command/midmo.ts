@@ -169,30 +169,36 @@ export function formatExportDate(iso: string | null): string {
 }
 
 export function retailNoPrice(units: InvUnitRow[]): InvUnitRow[] {
-  return units.filter((u) => u.disp !== "subprime" && u.price == null);
+  return units.filter((u) => u.disp === "retail" && u.price == null);
 }
 
 export function retailStale(units: InvUnitRow[], days = STALE_DAYS): InvUnitRow[] {
-  return units.filter((u) => u.disp !== "subprime" && (u.dsr ?? -1) >= days);
+  return units.filter((u) => u.disp === "retail" && (u.dsr ?? -1) >= days);
 }
 
 export function ttlFailUnits(units: InvUnitRow[]): InvUnitRow[] {
-  return units.filter(isTtlFail);
+  return units.filter((u) => u.disp !== "wholesale" && isTtlFail(u));
 }
 
 export function hotUnits(units: InvUnitRow[], snapshotDate: string): InvUnitRow[] {
-  return units.filter((u) => isHotUnit(u.age, snapshotDate));
+  return units.filter((u) => u.disp !== "wholesale" && isHotUnit(u.age, snapshotDate));
 }
 
 export function seenButSkipped(units: InvUnitRow[]): InvUnitRow[] {
   return units
-    .filter((u) => (u.age ?? 0) >= 7 && (u.srp ?? 0) >= 300 && (u.vr ?? 99) < 1)
+    .filter(
+      (u) =>
+        u.disp !== "wholesale" &&
+        (u.age ?? 0) >= 7 &&
+        (u.srp ?? 0) >= 300 &&
+        (u.vr ?? 99) < 1
+    )
     .sort((a, b) => (b.srp ?? 0) - (a.srp ?? 0));
 }
 
 export function withSrpPerDay(units: InvUnitRow[]): Array<InvUnitRow & { spd: number }> {
   return units
-    .filter((u) => (u.age ?? 0) >= 7)
+    .filter((u) => u.disp !== "wholesale" && (u.age ?? 0) >= 7)
     .map((u) => ({
       ...u,
       spd: +(Math.max(u.srp ?? 0, 0) / Math.max(u.age ?? 1, 1)).toFixed(1),
@@ -205,11 +211,14 @@ export function hottestDemand(units: InvUnitRow[], limit = 40): Array<InvUnitRow
 }
 
 export function mostClicks(units: InvUnitRow[], limit = 40): InvUnitRow[] {
-  return [...units].sort((a, b) => (b.vdp ?? 0) - (a.vdp ?? 0)).slice(0, limit);
+  return [...units]
+    .filter((u) => u.disp !== "wholesale")
+    .sort((a, b) => (b.vdp ?? 0) - (a.vdp ?? 0))
+    .slice(0, limit);
 }
 
 export function overMarketUnits(units: InvUnitRow[]): InvUnitRow[] {
-  return units.filter((u) => u.disp !== "subprime" && (u.pom ?? 0) > OVER_MARKET_POM);
+  return units.filter((u) => u.disp === "retail" && (u.pom ?? 0) > OVER_MARKET_POM);
 }
 
 export function buildToShort(unitsInStock: number): string {

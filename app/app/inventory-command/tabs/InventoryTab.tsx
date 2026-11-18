@@ -14,6 +14,7 @@ import {
   type TaggedMovement,
   type TaggedUnit,
 } from "@/lib/inventory-command/acq-source";
+import { nonWholesaleUnits } from "@/lib/inventory-command/compute";
 import { FULL_PHOTO_COUNT } from "@/lib/inventory-command/config";
 import { fmtMoney, fmtMoneyCompact, fmtNum, fmtPct } from "@/lib/inventory-command/format";
 import { AGE_BUCKETS, ageBucket, IC, type AgeBucket } from "@/lib/inventory-command/midmo";
@@ -234,7 +235,7 @@ export default function InventoryTab({
           s.id === storeId ? manual : manualTagMap(s.tags);
         asOfByStore[s.id] = s.snapshotDate;
         allUnits.push(
-          ...tagUnits(s.units, {
+          ...tagUnits(nonWholesaleUnits(s.units), {
             storeId: s.id,
             storeName: s.name,
             snapshotDate: s.snapshotDate,
@@ -584,10 +585,9 @@ export default function InventoryTab({
             style={selectStyle}
             aria-label="Filter by disposition"
           >
-            <option value="all">All dispositions</option>
+            <option value="all">All (prime + subprime)</option>
             <option value="retail">Retail</option>
             <option value="subprime">Subprime</option>
-            <option value="wholesale">Wholesale</option>
           </select>
           <select
             value={photoFilter}

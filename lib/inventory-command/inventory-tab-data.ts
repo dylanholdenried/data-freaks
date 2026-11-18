@@ -9,7 +9,7 @@ import type { InvMovement, InvUnitDetailRow } from "./types";
 
 export const INV_UNIT_DETAIL_SELECT =
   "stk,veh,body,age,ph,cost,price,pom,dsr,srp,vdp,vr,mmr,jd,pt,disp,d_vdp,d_srp,d_p,d_ph," +
-  "vin,year,make,model,trim,odometer,ctm_pct,pt_align,markup,site_srp,site_vdp,bb_retail,market_price";
+  "vin,year,make,model,trim,odometer,ctm_pct,pt_align,markup,site_srp,site_vdp,bb_retail,bb_avg_wholesale,market_price";
 
 /** Sold-results lookback; the UI toggles 30 / 60 / 90 within this. */
 export const SOLD_LOOKBACK_DAYS = 90;

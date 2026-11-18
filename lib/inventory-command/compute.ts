@@ -40,6 +40,24 @@ export function normalizeDisp(raw: unknown): InvDisposition {
   return "retail";
 }
 
+/** Prime retail disposition (not subprime, not wholesale). */
+export function isRetailUnit(u: Pick<InvUnitRow, "disp">): boolean {
+  return u.disp === "retail";
+}
+
+export function isWholesaleUnit(u: Pick<InvUnitRow, "disp">): boolean {
+  return u.disp === "wholesale";
+}
+
+/** Retail + subprime — the Inventory Command operating set (excludes wholesale). */
+export function nonWholesaleUnits<T extends Pick<InvUnitRow, "disp">>(units: T[]): T[] {
+  return units.filter((u) => u.disp !== "wholesale");
+}
+
+export function wholesaleUnits<T extends Pick<InvUnitRow, "disp">>(units: T[]): T[] {
+  return units.filter((u) => u.disp === "wholesale");
+}
+
 export function parseDateOnly(iso: string): Date {
   const [y, m, d] = iso.split("-").map((n) => parseInt(n, 10));
   return new Date(Date.UTC(y, m - 1, d));
@@ -126,11 +144,6 @@ export function computeDailyMetrics(
   snapshotDate: string,
   units: InvUnitRow[]
 ): InvDailyMetrics {
-  const n = units.length;
-  const ages = units.map((u) => u.age).filter((a): a is number => a != null);
-  const avgAge =
-    ages.length > 0 ? Math.round((ages.reduce((s, a) => s + a, 0) / ages.length) * 10) / 10 : null;
-
   let over60 = 0;
   let over90 = 0;
   let full = 0;
@@ -143,7 +156,11 @@ export function computeDailyMetrics(
   let subprime = 0;
   let ttlFail = 0;
 
-  for (const u of units) {
+  // Operational metrics are retail + subprime only — wholesale stays out of MidMo command KPIs.
+  const operating = nonWholesaleUnits(units);
+  const nOperating = operating.length;
+
+  for (const u of operating) {
     if ((u.age ?? 0) >= 60) over60 += 1;
     if ((u.age ?? 0) >= 90) over90 += 1;
     if ((u.ph ?? 0) >= FULL_PHOTO_COUNT) full += 1;
@@ -151,7 +168,7 @@ export function computeDailyMetrics(
     if (isTtlFail(u)) ttlFail += 1;
     if (u.disp === "subprime") {
       subprime += 1;
-    } else if (u.disp !== "wholesale") {
+    } else {
       retail += 1;
       const dsr = u.dsr ?? 0;
       if (dsr >= STALE_DAYS) stale += 1;
@@ -163,11 +180,17 @@ export function computeDailyMetrics(
     }
   }
 
+  const agesOp = operating.map((u) => u.age).filter((a): a is number => a != null);
+  const avgAgeOp =
+    agesOp.length > 0
+      ? Math.round((agesOp.reduce((s, a) => s + a, 0) / agesOp.length) * 10) / 10
+      : null;
+
   return {
     store_id: storeId,
     snapshot_date: snapshotDate,
-    units: n,
-    avg_age: avgAge,
+    units: nOperating,
+    avg_age: avgAgeOp,
     over60,
     over90,
     full_photos: full,
